@@ -89,6 +89,75 @@ const char* drumNames[NUM_DRUM_VOICES] = {
 };
 
 // ========================================
+// Display and Menu System
+// ========================================
+
+enum DisplayState
+{
+    DISPLAY_DEFAULT,
+    DISPLAY_CONFIG_MENU,
+    DISPLAY_CONFIG_EDIT
+};
+
+enum ConfigOption
+{
+    CONFIG_BPM,
+    CONFIG_OUT3_DIVISION,
+    CONFIG_BACK,
+    NUM_CONFIG_OPTIONS
+};
+
+const char* configOptionNames[NUM_CONFIG_OPTIONS] = {
+    "BPM",
+    "OUT3 div",
+    "Back"
+};
+
+enum Out3Division
+{
+    DIV_1_16,  // 1/16 note
+    DIV_1_8,   // 1/8 note
+    DIV_1_4,   // 1/4 note (quarter)
+    DIV_1_2,   // 1/2 note (half)
+    DIV_1,     // 1 bar (4 beats)
+    DIV_2,     // 2 bars
+    DIV_4,     // 4 bars
+    NUM_OUT3_DIVISIONS
+};
+
+const char* out3DivisionNames[NUM_OUT3_DIVISIONS] = {
+    "1/16",
+    "1/8",
+    "1/4",
+    "1/2",
+    "1",
+    "2",
+    "4"
+};
+
+DisplayState currentDisplayState = DISPLAY_DEFAULT;
+ConfigOption currentConfigOption = CONFIG_BPM;
+Out3Division currentOut3Division = DIV_1_4; // Default to quarter notes
+uint32_t lastEncoderActivity = 0;
+const uint32_t MENU_TIMEOUT_MS = 10000; // 10 seconds
+
+// ========================================
+// Persistent Storage
+// ========================================
+
+#define SETTINGS_MAGIC 0x54484D53 // "THMS" magic number for validation
+
+struct PersistentSettings
+{
+    uint32_t magic;           // Magic number to validate settings
+    float bpm;                // BPM setting
+    uint8_t out3Division;     // OUT3 division setting
+    uint8_t reserved[24];     // Reserved for future use (total 32 bytes)
+};
+
+PersistentSettings settings;
+
+// ========================================
 // Per-Voice Groove Timing System
 // ========================================
 
@@ -755,6 +824,81 @@ void TriggerGate24ppqn() { gate24ppqn = true; gate24ppqnCounter = 0; }
 void TriggerGate16th() { gate16th = true; gate16thCounter = 0; }
 void TriggerGateQuarter() { gateQuarter = true; gateQuarterCounter = 0; }
 void TriggerGateReset() { gateReset = true; gateResetCounter = 0; }
+
+// Check if OUT3 should trigger based on division setting
+bool ShouldTriggerOut3(uint8_t step, uint8_t bar)
+{
+    uint16_t totalStep = (bar * 16) + step; // Total 16th notes since start
+
+    switch(currentOut3Division)
+    {
+        case DIV_1_16: return true;                    // Every 16th note
+        case DIV_1_8:  return (step % 2) == 0;         // Every 8th note
+        case DIV_1_4:  return (step % 4) == 0;         // Every quarter note
+        case DIV_1_2:  return (step % 8) == 0;         // Every half note
+        case DIV_1:    return step == 0;               // Every bar
+        case DIV_2:    return (totalStep % 32) == 0;   // Every 2 bars
+        case DIV_4:    return (totalStep % 64) == 0;   // Every 4 bars
+        default:       return (step % 4) == 0;         // Default to quarter
+    }
+}
+
+// Save settings to persistent storage
+void SaveSettings()
+{
+    settings.magic = SETTINGS_MAGIC;
+    settings.bpm = bpm;
+    settings.out3Division = (uint8_t)currentOut3Division;
+
+    // Write to QSPI flash
+    size_t size = sizeof(PersistentSettings);
+    uint32_t addr = 0x90000000; // QSPI memory-mapped base address
+    hw.seed.qspi.Erase(addr, addr + size);
+    hw.seed.qspi.Write(addr, size, (uint8_t*)&settings);
+}
+
+// Load settings from persistent storage
+void LoadSettings()
+{
+    // Read from QSPI flash using memory-mapped access
+    uint32_t addr = 0x90000000; // QSPI memory-mapped base address
+    PersistentSettings* flash_settings = (PersistentSettings*)addr;
+
+    // Copy from flash to RAM
+    memcpy(&settings, flash_settings, sizeof(PersistentSettings));
+
+    // Validate magic number
+    if(settings.magic == SETTINGS_MAGIC)
+    {
+        // Valid settings found, apply them
+        bpm = settings.bpm;
+
+        // Validate BPM range
+        if(bpm < 20.0f || bpm > 300.0f)
+        {
+            bpm = 120.0f; // Reset to default if out of range
+        }
+
+        // Validate OUT3 division
+        if(settings.out3Division >= NUM_OUT3_DIVISIONS)
+        {
+            currentOut3Division = DIV_1_4; // Reset to default
+        }
+        else
+        {
+            currentOut3Division = (Out3Division)settings.out3Division;
+        }
+    }
+    else
+    {
+        // No valid settings found, use defaults
+        bpm = 120.0f;
+        currentOut3Division = DIV_1_4;
+
+        // Save defaults
+        SaveSettings();
+    }
+}
 
 // Send a MIDI note for drum trigger
 void TriggerDrum(DrumVoice voice, uint8_t velocity = 100)
@@ -1547,12 +1691,8 @@ void HandleMidiMessage(MidiEvent m)
                             // Signal main loop to process patterns (same as internal clock)
                             trigger16thNote = true;
                             lastBeatSample = globalSampleCounter; // Record beat time for look-ahead
-                        }
 
-                        // Trigger quarter note gate on every 24th clock
-                        if(midiClockCounter % CLOCKS_PER_QUARTER == 0)
-                        {
-                            TriggerGateQuarter();
+                            // OUT3 gate will be triggered in ProcessClock() based on division setting
                         }
                     }
                     break;
@@ -1602,54 +1742,139 @@ void UpdateDisplay()
 
     std::string str;
     char*       cstr;
+    char        buffer[30];
 
-    // BPM, Mode, and Status on one line
-    hw.display.SetCursor(0, 0);
-    char topLine[30];
-    sprintf(topLine, "BPM:%d %s %s",
-            (int)bpm,
-            externalClockMode ? "EXT" : "INT",
-            isRunning ? "RUN" : "STOP");
-    hw.display.WriteString(topLine, Font_6x8, true);
-
-    // Pattern info
-    if(isRunning)
+    switch(currentDisplayState)
     {
-        hw.display.SetCursor(0, 10);
-        char patStr[20];
-        sprintf(patStr, "Ptn: K%d C%d H%d", currentKickPattern, currentClapPattern, currentHatPattern);
-        hw.display.WriteString(patStr, Font_6x8, true);
-    }
+        case DISPLAY_DEFAULT:
+            // BPM, Mode, Status, and Bar:Beat counter on one line
+            hw.display.SetCursor(0, 0);
+            if(isRunning)
+            {
+                int bar = (currentStep / 16) % 8 + 1;  // 1-8
+                int beat = (currentStep % 16) / 4 + 1; // 1-4
+                sprintf(buffer, "BPM:%d %s %s %d:%d",
+                        (int)bpm,
+                        externalClockMode ? "EXT" : "INT",
+                        isRunning ? "RUN" : "STOP",
+                        bar, beat);
+            }
+            else
+            {
+                sprintf(buffer, "BPM:%d %s %s",
+                        (int)bpm,
+                        externalClockMode ? "EXT" : "INT",
+                        isRunning ? "RUN" : "STOP");
+            }
+            hw.display.WriteString(buffer, Font_6x8, true);
 
-    // Groove pattern display
-    hw.display.SetCursor(0, 20);
-    str = "Groove: ";
-    str += groovePatternNames[currentGroovePattern];
-    cstr = &str[0];
-    hw.display.WriteString(cstr, Font_6x8, true);
+            // Pattern info
+            if(isRunning)
+            {
+                hw.display.SetCursor(0, 10);
+                sprintf(buffer, "Ptn: K%d C%d H%d", currentKickPattern, currentClapPattern, currentHatPattern);
+                hw.display.WriteString(buffer, Font_6x8, true);
+            }
 
-    // Debug: Show groove amounts for kick, snare, and hihats
-    hw.display.SetCursor(0, 30);
-    char grooveAmtStr[30];
-    sprintf(grooveAmtStr, "K:%d S:%d H1:%d H2:%d",
-            (int)(grooveAmount[KICK] * 100),
-            (int)(grooveAmount[SNARE] * 100),
-            (int)(grooveAmount[HIHAT1_CLOSED] * 100),
-            (int)(grooveAmount[HIHAT2_CLOSED] * 100));
-    hw.display.WriteString(grooveAmtStr, Font_6x8, true);
+            // Groove pattern display
+            hw.display.SetCursor(0, 20);
+            str = "Groove: ";
+            str += groovePatternNames[currentGroovePattern];
+            cstr = &str[0];
+            hw.display.WriteString(cstr, Font_6x8, true);
 
-    // Debug: Show groove amount and offset for hi-hat
-    if(isRunning)
-    {
-        hw.display.SetCursor(0, 40);
-        int32_t hatOffset = CalculateGrooveOffset(HIHAT1_CLOSED, currentStep);
-        int8_t patternValue = groovePatterns[currentGroovePattern][currentStep % 16];
-        char offsetStr[30];
-        sprintf(offsetStr, "S:%2d P:%+4d O:%+4d",
-                currentStep,
-                (int)patternValue,
-                (int)(hatOffset * 1000 / hw.AudioSampleRate()));
-        hw.display.WriteString(offsetStr, Font_6x8, true);
+            // Debug: Show groove amount and offset for hi-hat
+            if(isRunning)
+            {
+                hw.display.SetCursor(0, 30);
+                int32_t hatOffset = CalculateGrooveOffset(HIHAT1_CLOSED, currentStep);
+                int8_t patternValue = groovePatterns[currentGroovePattern][currentStep % 16];
+                sprintf(buffer, "S:%2d P:%+4d O:%+4d",
+                        currentStep,
+                        (int)patternValue,
+                        (int)(hatOffset * 1000 / hw.AudioSampleRate()));
+                hw.display.WriteString(buffer, Font_6x8, true);
+            }
+            break;
+
+        case DISPLAY_CONFIG_MENU:
+            // Show config menu with values (arrow on config name)
+            hw.display.SetCursor(0, 0);
+            hw.display.WriteString("=== CONFIG ===", Font_6x8, true);
+
+            for(int i = 0; i < NUM_CONFIG_OPTIONS; i++)
+            {
+                hw.display.SetCursor(0, 10 + i * 10);
+
+                if(i == CONFIG_BPM)
+                {
+                    sprintf(buffer, ">%-11s%d",
+                            (i == currentConfigOption) ? configOptionNames[i] : "",
+                            (int)bpm);
+                    if(i != currentConfigOption)
+                    {
+                        sprintf(buffer, " %-11s%d", configOptionNames[i], (int)bpm);
+                    }
+                }
+                else if(i == CONFIG_OUT3_DIVISION)
+                {
+                    sprintf(buffer, ">%-11s%s",
+                            (i == currentConfigOption) ? configOptionNames[i] : "",
+                            out3DivisionNames[currentOut3Division]);
+                    if(i != currentConfigOption)
+                    {
+                        sprintf(buffer, " %-11s%s", configOptionNames[i], out3DivisionNames[currentOut3Division]);
+                    }
+                }
+                else // CONFIG_BACK
+                {
+                    sprintf(buffer, "%s%s",
+                            (i == currentConfigOption) ? ">" : " ",
+                            configOptionNames[i]);
+                }
+
+                hw.display.WriteString(buffer, Font_6x8, true);
+            }
+            break;
+
+        case DISPLAY_CONFIG_EDIT:
+            // Show config menu with values (arrow on value being edited)
+            hw.display.SetCursor(0, 0);
+            hw.display.WriteString("=== CONFIG ===", Font_6x8, true);
+
+            for(int i = 0; i < NUM_CONFIG_OPTIONS; i++)
+            {
+                hw.display.SetCursor(0, 10 + i * 10);
+
+                if(i == CONFIG_BPM)
+                {
+                    sprintf(buffer, " %-10s%s%d",
+                            configOptionNames[i],
+                            (i == currentConfigOption) ? ">" : " ",
+                            (int)bpm);
+                }
+                else if(i == CONFIG_OUT3_DIVISION)
+                {
+                    sprintf(buffer, " %-10s%s%s",
+                            configOptionNames[i],
+                            (i == currentConfigOption) ? ">" : " ",
+                            out3DivisionNames[currentOut3Division]);
+                }
+                else // CONFIG_BACK
+                {
+                    sprintf(buffer, " %s", configOptionNames[i]);
+                }
+
+                hw.display.WriteString(buffer, Font_6x8, true);
+            }
+
+            // Show hint at bottom
+            if(externalClockMode && currentConfigOption == CONFIG_BPM)
+            {
+                hw.display.SetCursor(0, 50);
+                hw.display.WriteString("(External Clock)", Font_6x8, true);
+            }
+            break;
     }
 
     hw.display.Update();
@@ -1660,25 +1885,103 @@ void ProcessControls()
     hw.ProcessDigitalControls();
     hw.ProcessAnalogControls();
 
-    // Encoder for BPM control
     int32_t inc = hw.encoder.Increment();
-    if(inc != 0 && !externalClockMode)
-    {
-        bpm += inc * 0.5f; // Increment by 0.5 BPM
-        bpm = fclamp(bpm, 20.0f, 300.0f); // Limit BPM range
-        UpdateClockFrequency();
-    }
+    bool buttonPressed = hw.encoder.RisingEdge();
+    uint32_t now = System::GetNow();
 
-    // Encoder button for start/stop
-    if(hw.encoder.RisingEdge())
+    // Handle encoder based on display state
+    switch(currentDisplayState)
     {
-        ToggleRunState();
+        case DISPLAY_DEFAULT:
+            // In default mode, encoder rotation enters config menu
+            if(inc != 0)
+            {
+                currentDisplayState = DISPLAY_CONFIG_MENU;
+                currentConfigOption = CONFIG_BPM;
+                lastEncoderActivity = now;
+            }
+            // Encoder button toggles run/stop
+            else if(buttonPressed)
+            {
+                ToggleRunState();
+            }
+            break;
+
+        case DISPLAY_CONFIG_MENU:
+            // In config menu, encoder rotates through options
+            if(inc != 0)
+            {
+                int option = (int)currentConfigOption + inc;
+                if(option < 0) option = NUM_CONFIG_OPTIONS - 1;
+                if(option >= NUM_CONFIG_OPTIONS) option = 0;
+                currentConfigOption = (ConfigOption)option;
+                lastEncoderActivity = now;
+            }
+            // Encoder button selects option
+            else if(buttonPressed)
+            {
+                if(currentConfigOption == CONFIG_BACK)
+                {
+                    // Back to default display
+                    currentDisplayState = DISPLAY_DEFAULT;
+                }
+                else
+                {
+                    // Enter edit mode for selected config
+                    currentDisplayState = DISPLAY_CONFIG_EDIT;
+                }
+                lastEncoderActivity = now;
+            }
+            // Timeout check (only in config menu, not in edit mode)
+            else if(now - lastEncoderActivity > MENU_TIMEOUT_MS)
+            {
+                currentDisplayState = DISPLAY_DEFAULT;
+            }
+            break;
+
+        case DISPLAY_CONFIG_EDIT:
+            // In edit mode, encoder changes value
+            if(inc != 0)
+            {
+                switch(currentConfigOption)
+                {
+                    case CONFIG_BPM:
+                        if(!externalClockMode)
+                        {
+                            bpm += inc * 0.5f;
+                            bpm = fclamp(bpm, 20.0f, 300.0f);
+                            UpdateClockFrequency();
+                        }
+                        break;
+
+                    case CONFIG_OUT3_DIVISION:
+                        {
+                            int div = (int)currentOut3Division + inc;
+                            if(div < 0) div = NUM_OUT3_DIVISIONS - 1;
+                            if(div >= NUM_OUT3_DIVISIONS) div = 0;
+                            currentOut3Division = (Out3Division)div;
+                        }
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+            // Encoder button confirms and returns to config menu
+            else if(buttonPressed)
+            {
+                // Save settings to persistent storage
+                SaveSettings();
+
+                currentDisplayState = DISPLAY_CONFIG_MENU;
+                lastEncoderActivity = now;
+            }
+            break;
     }
 
     // Check for external clock timeout
     if(externalClockMode)
     {
-        uint32_t now = System::GetNow();
         if(now - lastMidiClockTime > midiClockTimeout)
         {
             // No external clock received recently, switch to internal
@@ -1701,6 +2004,12 @@ void ProcessClock()
         // Trigger 16th note gate
         TriggerGate16th();
 
+        // Trigger OUT3 gate based on division setting
+        if(ShouldTriggerOut3(currentStep, barCounter))
+        {
+            TriggerGateQuarter();
+        }
+
         // Process drum patterns on each 16th note
         ProcessDrumPatterns();
 
@@ -1711,12 +2020,6 @@ void ProcessClock()
             SendMidiClock();
             TriggerGate24ppqn();
             midiClockCounter++;
-
-            // Trigger quarter note gate on every 24th clock
-            if(midiClockCounter % CLOCKS_PER_QUARTER == 0)
-            {
-                TriggerGateQuarter();
-            }
         }
     }
 
@@ -1741,6 +2044,9 @@ int main(void)
     // Initialize hardware
     hw.Init();
     float samplerate = hw.AudioSampleRate();
+
+    // Load saved settings from persistent storage
+    LoadSettings();
 
     // Initialize clock metro
     clockMetro.Init(1.0f, samplerate);
