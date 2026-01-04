@@ -89,6 +89,254 @@ const char* drumNames[NUM_DRUM_VOICES] = {
 };
 
 // ========================================
+// Per-Voice Groove Timing System
+// ========================================
+
+// Groove configuration for each voice
+struct GrooveConfig
+{
+    float groovePercent;    // Offset as % of 16th note (-100.0 to +100.0)
+    int32_t offsetSamples;  // Calculated sample offset
+    static const int32_t MAX_OFFSET_MS = 10; // Maximum offset in milliseconds
+
+    void Init()
+    {
+        groovePercent = 0.0f;
+        offsetSamples = 0;
+    }
+
+    // Calculate sample offset from percentage and current tempo
+    // Call whenever BPM changes or groove percentage changes
+    void UpdateOffset(float currentBPM, float sampleRate)
+    {
+        // Calculate 16th note duration in samples
+        float samplesPerSixteenth = sampleRate * 15.0f / currentBPM;
+
+        // Calculate offset in samples from percentage
+        float offsetFloat = (groovePercent / 100.0f) * samplesPerSixteenth;
+
+        // Clamp to ±10ms maximum
+        int32_t maxOffsetSamples = (int32_t)(MAX_OFFSET_MS * sampleRate / 1000.0f);
+        offsetSamples = (int32_t)fclamp(offsetFloat,
+                                        (float)-maxOffsetSamples,
+                                        (float)maxOffsetSamples);
+    }
+};
+
+// MIDI trigger queue entry
+struct MidiTrigger
+{
+    DrumVoice voice;
+    uint8_t velocity;
+    uint64_t fireSample;     // Absolute sample counter when to fire
+    bool active;
+
+    void Init()
+    {
+        active = false;
+        fireSample = 0;
+        voice = KICK;
+        velocity = 0;
+    }
+};
+
+// Global groove configuration array
+GrooveConfig voiceGroove[NUM_DRUM_VOICES];
+
+// Ring buffer for scheduled triggers
+const uint8_t TRIGGER_QUEUE_SIZE = 32; // Support up to 32 queued triggers
+MidiTrigger triggerQueue[TRIGGER_QUEUE_SIZE];
+uint8_t triggerQueueHead = 0;
+uint8_t triggerQueueTail = 0;
+
+// Global sample counter (sample-accurate timing)
+volatile uint64_t globalSampleCounter = 0;
+volatile uint64_t lastBeatSample = 0; // Sample time when last beat occurred
+
+// ========================================
+// Groove Pattern System (32 patterns from Korg Drumlogue)
+// ========================================
+// Timing offsets per step (16 steps per bar) as percentage of 16th note duration
+// Positive = delayed/laid back, Negative = early/pushed
+// Velocity is percentage multiplier (100 = normal, 120 = louder, 80 = softer)
+
+const int8_t groovePatterns[32][16] = {
+    // 0: Swing16 - Classic 16th note swing
+    {0, 80, 0, 80, 0, 80, 0, 80, 0, 80, 0, 80, 0, 80, 0, 80},
+    // 1: Swing8 - 8th note swing
+    {0, 0, 90, 0, 0, 0, 90, 0, 0, 0, 90, 0, 0, 0, 90, 0},
+    // 2: Swing6 - Triplet swing
+    {0, 0, 70, 0, 0, 70, 0, 0, 70, 0, 0, 70, 0, 0, 70, 0},
+    // 3: Conga1 - Latin 2-3 clave feel
+    {0, 0, -12, 30, 0, 0, -18, 0, 0, -12, 30, 0, -18, 0, 0, 18},
+    // 4: Conga2 - 3-2 reverse clave
+    {0, 0, -18, 0, 0, -12, 30, 0, -18, 0, 0, 18, 0, 0, -12, 30},
+    // 5: Bongo1 - Alternating high/low
+    {0, 18, -12, 18, 0, 18, -12, 18, 0, 18, -12, 18, 0, 18, -12, 18},
+    // 6: Bongo2 - Galloping rhythm
+    {0, 0, 20, -10, 0, 0, 20, -10, 0, 0, 20, -10, 0, 0, 20, -10},
+    // 7: Cabasa1 - Rushed shuffle
+    {0, -12, -18, -12, 0, -12, -18, -12, 0, -12, -18, -12, 0, -12, -18, -12},
+    // 8: Cabasa2 - Lazy shuffle
+    {0, 15, 20, 15, 0, 15, 20, 15, 0, 15, 20, 15, 0, 15, 20, 15},
+    // 9: Claves1 - Son clave
+    {0, 0, 0, -18, 0, 0, -24, 0, 0, -18, 0, 0, 0, -24, 0, 0},
+    // 10: Claves2 - Rumba clave
+    {0, 0, 0, -20, 0, 0, -25, 0, 0, 0, -20, 0, 0, 0, -25, 0},
+    // 11: Cowbell - Driving, ahead of beat
+    {0, -12, 0, -12, 0, -12, 0, -12, 0, -12, 0, -12, 0, -12, 0, -12},
+    // 12: Agogo1 - Brazilian call-response
+    {0, 0, -18, 12, 0, 0, -18, 12, 0, 0, -18, 12, 0, 0, -18, 12},
+    // 13: Agogo2 - Samba pattern
+    {0, -15, 0, 20, 0, -15, 0, 20, 0, -15, 0, 20, 0, -15, 0, 20},
+    // 14: Tambourine - Offbeats delayed
+    {0, 24, 0, 24, 0, 24, 0, 24, 0, 24, 0, 24, 0, 24, 0, 24},
+    // 15: Finger1 - Bold swing
+    {0, 60, 0, 60, 0, 60, 0, 60, 0, 60, 0, 60, 0, 60, 0, 50},
+    // 16: Finger2 - Subtle swing
+    {0, 35, 0, 35, 0, 35, 0, 35, 0, 35, 0, 35, 0, 35, 0, 30},
+    // 17: Lofi1 - Drunk drummer
+    {0, 48, 36, 48, 24, 48, 36, 48, 24, 48, 36, 48, 24, 48, 36, 48},
+    // 18: Lofi2 - Tape flutter
+    {-5, 40, -10, 45, 5, 35, -8, 42, -3, 38, -12, 44, 8, 36, -6, 40},
+    // 19: Baile1 - Baile funk dotted
+    {0, 0, -18, 0, 0, -18, 0, 12, 0, 0, -18, 0, 0, -18, 0, 12},
+    // 20: Baile2 - Funk swing
+    {0, 0, 50, 0, 0, 0, 50, -10, 0, 0, 50, 0, 0, 0, 50, -10},
+    // 21: OvalGroove - Elliptical breathing
+    {0, -18, -30, -18, 12, 24, 30, 24, 0, -18, -30, -18, 12, 24, 30, 24},
+    // 22: Afrobeat - Fela-style polyrhythm
+    {0, 0, 0, 25, 0, -15, 0, 30, 0, 0, -10, 25, 0, 0, 0, 28},
+    // 23: HipHop1 - J Dilla-inspired swing
+    {0, 45, 0, 40, 0, 50, 0, 38, 0, 48, 0, 42, 0, 47, 0, 40},
+    // 24: HipHop2 - MPC swing
+    {0, 55, 0, 55, 0, 55, 0, 55, 0, 55, 0, 55, 0, 55, 0, 55},
+    // 25: Techno - Driving forward momentum
+    {-8, -8, -8, -8, -8, -8, -8, -8, -8, -8, -8, -8, -8, -8, -8, -8},
+    // 26: House - Classic 4/4 shuffle
+    {0, 20, 0, 20, 0, 20, 0, 20, 0, 20, 0, 20, 0, 20, 0, 20},
+    // 27: Broken - UK garage 2-step
+    {0, 0, 40, 0, 0, 0, -15, 35, 0, 0, 45, 0, 0, -10, 0, 38},
+    // 28: DnB - Jungle breaks
+    {0, -20, 60, -25, 0, -18, 65, -22, 0, -20, 62, -24, 0, -19, 64, -23},
+    // 29: Syncopation - Last 16th anticipated
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -50},
+    // 30: Crescendo - Progressive acceleration
+    {48, 42, 36, 30, 24, 18, 12, 6, 0, -6, -12, -18, -24, -30, -36, -42},
+    // 31: Decrescendo - Progressive deceleration
+    {-42, -36, -30, -24, -18, -12, -6, 0, 6, 12, 18, 24, 30, 36, 42, 48}
+};
+
+// Velocity patterns (percentage of base velocity: 100 = normal, 120 = +20%, 80 = -20%)
+const int8_t velocityPatterns[32][16] = {
+    // 0: Swing16 - Emphasize swung notes
+    {100, 110, 100, 110, 100, 110, 100, 110, 100, 110, 100, 110, 100, 110, 100, 110},
+    // 1: Swing8 - Strong offbeats
+    {100, 100, 115, 100, 100, 100, 115, 100, 100, 100, 115, 100, 100, 100, 115, 100},
+    // 2: Swing6 - Triplet accents
+    {105, 95, 110, 105, 95, 110, 105, 95, 110, 105, 95, 110, 105, 95, 110, 105},
+    // 3: Conga1 - Clave accents
+    {100, 100, 90, 115, 100, 100, 85, 100, 100, 90, 115, 100, 85, 100, 100, 110},
+    // 4: Conga2 - Reverse clave accents
+    {100, 100, 85, 100, 100, 90, 115, 100, 85, 100, 100, 110, 100, 100, 90, 115},
+    // 5: Bongo1 - High/low dynamics
+    {100, 115, 85, 115, 100, 115, 85, 115, 100, 115, 85, 115, 100, 115, 85, 115},
+    // 6: Bongo2 - Gallop accents
+    {105, 95, 115, 90, 105, 95, 115, 90, 105, 95, 115, 90, 105, 95, 115, 90},
+    // 7: Cabasa1 - Even shuffle
+    {100, 95, 90, 95, 100, 95, 90, 95, 100, 95, 90, 95, 100, 95, 90, 95},
+    // 8: Cabasa2 - Lazy feel
+    {100, 105, 110, 105, 100, 105, 110, 105, 100, 105, 110, 105, 100, 105, 110, 105},
+    // 9: Claves1 - Son clave dynamics
+    {105, 100, 100, 90, 100, 100, 85, 100, 100, 90, 100, 100, 100, 85, 100, 100},
+    // 10: Claves2 - Rumba accents
+    {105, 100, 100, 88, 100, 100, 83, 100, 100, 100, 88, 100, 100, 100, 83, 100},
+    // 11: Cowbell - Driving pulse
+    {110, 105, 110, 105, 110, 105, 110, 105, 110, 105, 110, 105, 110, 105, 110, 105},
+    // 12: Agogo1 - Call and response
+    {100, 100, 90, 110, 100, 100, 90, 110, 100, 100, 90, 110, 100, 100, 90, 110},
+    // 13: Agogo2 - Samba bounce
+    {105, 95, 100, 115, 105, 95, 100, 115, 105, 95, 100, 115, 105, 95, 100, 115},
+    // 14: Tambourine - Offbeat accents
+    {100, 110, 100, 110, 100, 110, 100, 110, 100, 110, 100, 110, 100, 110, 100, 110},
+    // 15: Finger1 - Bold accents
+    {100, 120, 100, 120, 100, 120, 100, 120, 100, 120, 100, 120, 100, 120, 100, 115},
+    // 16: Finger2 - Subtle variations
+    {100, 108, 100, 108, 100, 108, 100, 108, 100, 108, 100, 108, 100, 108, 100, 105},
+    // 17: Lofi1 - Random variations
+    {95, 115, 105, 110, 92, 112, 108, 116, 98, 114, 102, 118, 96, 113, 106, 117},
+    // 18: Lofi2 - Tape compression
+    {88, 118, 85, 120, 92, 112, 87, 117, 90, 115, 83, 119, 94, 110, 86, 116},
+    // 19: Baile1 - Funk ghost notes
+    {100, 100, 85, 100, 100, 85, 100, 110, 100, 100, 85, 100, 100, 85, 100, 110},
+    // 20: Baile2 - Pocket groove
+    {100, 100, 115, 100, 100, 100, 115, 90, 100, 100, 115, 100, 100, 100, 115, 90},
+    // 21: OvalGroove - Wave dynamics
+    {100, 95, 85, 90, 105, 115, 120, 115, 100, 95, 85, 90, 105, 115, 120, 115},
+    // 22: Afrobeat - Polyrhythmic accents
+    {105, 100, 100, 115, 100, 90, 100, 118, 105, 100, 92, 115, 100, 100, 100, 116},
+    // 23: HipHop1 - J Dilla dynamics
+    {100, 108, 100, 105, 100, 112, 100, 103, 100, 110, 100, 106, 100, 109, 100, 104},
+    // 24: HipHop2 - MPC punch
+    {100, 115, 100, 115, 100, 115, 100, 115, 100, 115, 100, 115, 100, 115, 100, 120},
+    // 25: Techno - Machine precision
+    {105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105},
+    // 26: House - 4/4 bounce
+    {105, 110, 105, 110, 105, 110, 105, 110, 105, 110, 105, 110, 105, 110, 105, 110},
+    // 27: Broken - UK dynamics
+    {100, 100, 115, 100, 100, 100, 90, 112, 100, 100, 118, 100, 100, 88, 100, 114},
+    // 28: DnB - Amen breaks
+    {105, 90, 120, 88, 105, 92, 122, 87, 105, 90, 121, 89, 105, 91, 123, 88},
+    // 29: Syncopation - Build to anticipation
+    {95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 110, 85},
+    // 30: Crescendo - Growing intensity
+    {80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 127, 127, 127, 127},
+    // 31: Decrescendo - Fading intensity
+    {127, 127, 127, 127, 124, 120, 116, 112, 108, 104, 100, 96, 92, 88, 84, 80}
+};
+
+// Groove pattern names for display
+const char* groovePatternNames[32] = {
+    "Swing16",      // 0
+    "Swing8",       // 1
+    "Swing6",       // 2
+    "Conga1",       // 3
+    "Conga2",       // 4
+    "Bongo1",       // 5
+    "Bongo2",       // 6
+    "Cabasa1",      // 7
+    "Cabasa2",      // 8
+    "Claves1",      // 9
+    "Claves2",      // 10
+    "Cowbell",      // 11
+    "Agogo1",       // 12
+    "Agogo2",       // 13
+    "Tambourine",   // 14
+    "Finger1",      // 15
+    "Finger2",      // 16
+    "Lofi1",        // 17
+    "Lofi2",        // 18
+    "Baile1",       // 19
+    "Baile2",       // 20
+    "OvalGroove",   // 21
+    "Afrobeat",     // 22
+    "HipHop1",      // 23
+    "HipHop2",      // 24
+    "Techno",       // 25
+    "House",        // 26
+    "Broken",       // 27
+    "DnB",          // 28
+    "Syncopation",  // 29
+    "Crescendo",    // 30
+    "Decrescendo"   // 31
+};
+
+// Current groove state
+uint8_t currentGroovePattern = 0;  // Index into groovePatterns (0-31)
+float grooveAmount[NUM_DRUM_VOICES]; // Per-voice timing groove amount (0.0 - 0.75, max 75%)
+float grooveVelocityAmount[NUM_DRUM_VOICES]; // Per-voice velocity groove amount (0.0 - 0.75, max 75%)
+
+// ========================================
 // Generative Drum Pattern System
 // ========================================
 // Patterns are 32-step (16th notes = 2 bars in 4/4)
@@ -521,6 +769,181 @@ void TriggerDrum(DrumVoice voice, uint8_t velocity = 100)
     // Note: We don't send Note Off for drums, they're self-decaying
 }
 
+// ========================================
+// Groove Timing Queue Management
+// ========================================
+
+// Initialize the trigger queue
+void InitTriggerQueue()
+{
+    for(int i = 0; i < TRIGGER_QUEUE_SIZE; i++)
+    {
+        triggerQueue[i].Init();
+    }
+    triggerQueueHead = 0;
+    triggerQueueTail = 0;
+}
+
+// Randomize groove pattern and per-voice amounts
+void RandomizeGroove()
+{
+    // Random groove pattern (0-31)
+    uint32_t seed = System::GetUs();
+    currentGroovePattern = seed % 32;
+
+    // Random timing and velocity amounts for each voice (0.0 - 0.75, max 75%)
+    for(int i = 0; i < NUM_DRUM_VOICES; i++)
+    {
+        seed = System::GetUs() ^ (i * 54321); // Unique seed per voice
+        grooveAmount[i] = (float)(seed % 76) / 100.0f; // 0-75% timing
+
+        seed = System::GetUs() ^ (i * 98765); // Different seed for velocity
+        grooveVelocityAmount[i] = (float)(seed % 76) / 100.0f; // 0-75% velocity
+    }
+}
+
+// Calculate groove offset in samples for a specific voice and step
+int32_t CalculateGrooveOffset(DrumVoice voice, uint8_t step)
+{
+    // Get step within 16-step pattern (handle 32-step patterns)
+    uint8_t patternStep = step % 16;
+
+    // Get base offset percentage from pattern
+    int8_t baseOffsetPercent = groovePatterns[currentGroovePattern][patternStep];
+
+    // Scale by voice amount
+    float scaledOffsetPercent = (float)baseOffsetPercent * grooveAmount[voice];
+
+    // Convert to samples based on current BPM
+    float samplesPerSixteenth = hw.AudioSampleRate() * 15.0f / bpm;
+    float offsetFloat = (scaledOffsetPercent / 100.0f) * samplesPerSixteenth;
+
+    // No clamping - groove amount percentage is the only limit
+    return (int32_t)offsetFloat;
+}
+
+// Calculate velocity with groove pattern applied
+uint8_t CalculateGrooveVelocity(DrumVoice voice, uint8_t baseVelocity, uint8_t step)
+{
+    // Get step within 16-step pattern
+    uint8_t patternStep = step % 16;
+
+    // Get velocity multiplier from pattern (100 = normal, 120 = +20%, 80 = -20%)
+    int8_t velocityPercent = velocityPatterns[currentGroovePattern][patternStep];
+
+    // Apply pattern and voice velocity groove amount (separate from timing amount)
+    // Full groove amount = full velocity variation, zero groove = no velocity variation
+    float velocityMultiplier = 100.0f + ((velocityPercent - 100.0f) * grooveVelocityAmount[voice]);
+
+    // Calculate final velocity
+    float finalVelocity = (float)baseVelocity * (velocityMultiplier / 100.0f);
+
+    // Clamp to MIDI range 1-127
+    if(finalVelocity < 1.0f) finalVelocity = 1.0f;
+    if(finalVelocity > 127.0f) finalVelocity = 127.0f;
+
+    return (uint8_t)finalVelocity;
+}
+
+// Helper: Schedule drum with groove timing AND velocity applied
+void ScheduleDrumTriggerWithGroove(DrumVoice voice, uint8_t baseVelocity, uint8_t step, uint64_t nextBeatSample)
+{
+    uint8_t velocity = CalculateGrooveVelocity(voice, baseVelocity, step);
+    int32_t offset = CalculateGrooveOffset(voice, step);
+    uint64_t fireSample = nextBeatSample + offset;
+
+    // If fire time is in the past or very close (within 48 samples), fire immediately
+    if(fireSample <= globalSampleCounter || fireSample <= globalSampleCounter + 48)
+    {
+        TriggerDrum(voice, velocity);
+        return;
+    }
+
+    // Find next available queue slot
+    uint8_t nextHead = (triggerQueueHead + 1) % TRIGGER_QUEUE_SIZE;
+
+    // Check for queue overflow
+    if(nextHead == triggerQueueTail)
+    {
+        // Queue full - fire immediately as fallback
+        TriggerDrum(voice, velocity);
+        return;
+    }
+
+    // Add to queue
+    triggerQueue[triggerQueueHead].voice = voice;
+    triggerQueue[triggerQueueHead].velocity = velocity;
+    triggerQueue[triggerQueueHead].fireSample = fireSample;
+    triggerQueue[triggerQueueHead].active = true;
+
+    triggerQueueHead = nextHead;
+}
+
+// Schedule a drum trigger at an absolute sample time (with look-ahead support)
+void ScheduleDrumTrigger(DrumVoice voice, uint8_t velocity, uint64_t fireSample)
+{
+    // If fire time is in the past or very close (within 48 samples), fire immediately
+    if(fireSample <= globalSampleCounter || fireSample <= globalSampleCounter + 48)
+    {
+        TriggerDrum(voice, velocity);
+        return;
+    }
+
+    // Find next available queue slot
+    uint8_t nextHead = (triggerQueueHead + 1) % TRIGGER_QUEUE_SIZE;
+
+    // Check for queue overflow
+    if(nextHead == triggerQueueTail)
+    {
+        // Queue full - fire immediately as fallback
+        TriggerDrum(voice, velocity);
+        return;
+    }
+
+    // Add to queue
+    triggerQueue[triggerQueueHead].voice = voice;
+    triggerQueue[triggerQueueHead].velocity = velocity;
+    triggerQueue[triggerQueueHead].fireSample = fireSample;
+    triggerQueue[triggerQueueHead].active = true;
+
+    triggerQueueHead = nextHead;
+}
+
+// Process trigger queue in audio callback (sample-accurate)
+void ProcessTriggerQueue()
+{
+    // Check all queue entries (triggers may not be time-ordered)
+    uint8_t checkCount = 0;
+    uint8_t currentIndex = triggerQueueTail;
+
+    while(currentIndex != triggerQueueHead && checkCount < TRIGGER_QUEUE_SIZE)
+    {
+        MidiTrigger* trigger = &triggerQueue[currentIndex];
+
+        if(trigger->active && globalSampleCounter >= trigger->fireSample)
+        {
+            // Fire the trigger
+            TriggerDrum(trigger->voice, trigger->velocity);
+
+            // Mark as processed
+            trigger->active = false;
+
+            // If this is the tail entry, advance tail
+            if(currentIndex == triggerQueueTail)
+            {
+                // Advance tail past all inactive entries
+                while(triggerQueueTail != triggerQueueHead && !triggerQueue[triggerQueueTail].active)
+                {
+                    triggerQueueTail = (triggerQueueTail + 1) % TRIGGER_QUEUE_SIZE;
+                }
+            }
+        }
+
+        currentIndex = (currentIndex + 1) % TRIGGER_QUEUE_SIZE;
+        checkCount++;
+    }
+}
+
 // Check if a step should trigger in a pattern
 bool IsStepActive(uint32_t pattern, uint8_t step)
 {
@@ -812,8 +1235,22 @@ void ProcessDrumPatterns()
     if(!isRunning)
         return;
 
+    // Calculate when the NEXT beat will occur (look-ahead scheduling)
+    float samplesPerSixteenth = hw.AudioSampleRate() * 15.0f / bpm;
+    uint64_t nextBeatSample = lastBeatSample + (uint64_t)samplesPerSixteenth;
+
     // Calculate total step within 8-bar cycle (0-127)
     uint8_t totalStep = (barCounter * 32) + currentStep;
+
+    // Randomize groove at start of new 8-bar cycle (25% probability)
+    if(barCounter == 0 && currentStep == 0)
+    {
+        uint32_t seed = System::GetUs();
+        if((seed % 100) < 25) // 25% chance
+        {
+            RandomizeGroove();
+        }
+    }
 
     // Schedule fill at the start of the 7th-8th bar (barCounter == 3, step == 0)
     if(barCounter == 3 && currentStep == 0)
@@ -834,31 +1271,31 @@ void ProcessDrumPatterns()
         {
             // Half-bar fills (8 steps)
             if(IsStepActive8(kickFillsHalf[fillKickIdx], fillStep))
-                TriggerDrum(KICK, 120); // Louder for fills
+                ScheduleDrumTriggerWithGroove(KICK, 120, currentStep, nextBeatSample); // Louder for fills
 
             if(IsStepActive8(clapFillsHalf[fillClapIdx], fillStep))
-                TriggerDrum(CLAP, 115);
+                ScheduleDrumTriggerWithGroove(CLAP, 115, currentStep, nextBeatSample);
 
             if(IsStepActive8(hatClosedFillsHalf[fillHatIdx], fillStep))
-                TriggerDrum(HIHAT1_CLOSED, 100);
+                ScheduleDrumTriggerWithGroove(HIHAT1_CLOSED, 100, currentStep, nextBeatSample);
 
             if(IsStepActive8(hatOpenFillsHalf[fillHatIdx], fillStep))
-                TriggerDrum(HIHAT1_OPEN, 110);
+                ScheduleDrumTriggerWithGroove(HIHAT1_OPEN, 110, currentStep, nextBeatSample);
         }
         else
         {
             // Whole-bar fills (16 steps)
             if(IsStepActive16(kickFillsWhole[fillKickIdx], fillStep))
-                TriggerDrum(KICK, 120); // Louder for fills
+                ScheduleDrumTriggerWithGroove(KICK, 120, currentStep, nextBeatSample); // Louder for fills
 
             if(IsStepActive16(clapFillsWhole[fillClapIdx], fillStep))
-                TriggerDrum(CLAP, 115);
+                ScheduleDrumTriggerWithGroove(CLAP, 115, currentStep, nextBeatSample);
 
             if(IsStepActive16(hatClosedFillsWhole[fillHatIdx], fillStep))
-                TriggerDrum(HIHAT1_CLOSED, 100);
+                ScheduleDrumTriggerWithGroove(HIHAT1_CLOSED, 100, currentStep, nextBeatSample);
 
             if(IsStepActive16(hatOpenFillsWhole[fillHatIdx], fillStep))
-                TriggerDrum(HIHAT1_OPEN, 110);
+                ScheduleDrumTriggerWithGroove(HIHAT1_OPEN, 110, currentStep, nextBeatSample);
         }
     }
     else
@@ -866,23 +1303,23 @@ void ProcessDrumPatterns()
         // Normal patterns
         if(IsStepActive(kickPatterns[currentKickPattern], currentStep))
         {
-            TriggerDrum(KICK, 110); // Kick slightly louder
+            ScheduleDrumTriggerWithGroove(KICK, 110, currentStep, nextBeatSample); // Kick slightly louder
         }
 
         if(IsStepActive(clapPatterns[currentClapPattern], currentStep))
         {
-            TriggerDrum(CLAP, 100);
+            ScheduleDrumTriggerWithGroove(CLAP, 100, currentStep, nextBeatSample);
         }
 
         // Check both closed and open hi-hat patterns
         if(IsStepActive(hatClosedPatterns[currentHatPattern], currentStep))
         {
-            TriggerDrum(HIHAT1_CLOSED, 70); // Closed hi-hat subtle
+            ScheduleDrumTriggerWithGroove(HIHAT1_CLOSED, 70, currentStep, nextBeatSample); // Closed hi-hat subtle
         }
 
         if(IsStepActive(hatOpenPatterns[currentHatPattern], currentStep))
         {
-            TriggerDrum(HIHAT1_OPEN, 100); // Open hi-hat emphasized
+            ScheduleDrumTriggerWithGroove(HIHAT1_OPEN, 100, currentStep, nextBeatSample); // Open hi-hat emphasized
         }
     }
 
@@ -896,7 +1333,7 @@ void ProcessDrumPatterns()
             uint8_t voiceStep = currentStep % voice->patternLength;
             if(IsStepActive(voice->pattern, voiceStep))
             {
-                TriggerDrum(voice->voice, 95); // Standard velocity for generative voices
+                ScheduleDrumTriggerWithGroove(voice->voice, 95, currentStep, nextBeatSample); // Standard velocity for generative voices
             }
         }
     }
@@ -937,12 +1374,19 @@ void AudioCallback(AudioHandle::InputBuffer  in,
 {
     for(size_t i = 0; i < size; i++)
     {
+        // Process scheduled MIDI triggers (sample-accurate groove timing)
+        ProcessTriggerQueue();
+
+        // Increment global sample counter
+        globalSampleCounter++;
+
         // Process Metro for timing (only in internal clock mode)
         if(!externalClockMode && isRunning)
         {
             if(clockMetro.Process())
             {
                 trigger16thNote = true; // Signal main loop to process patterns
+                lastBeatSample = globalSampleCounter; // Record exact sample time of beat
             }
         }
 
@@ -990,6 +1434,12 @@ void UpdateClockFrequency()
     // Frequency = (BPM * 4) / 60
     float sixteenthNotesPerSecond = (bpm * 4.0f) / 60.0f;
     clockMetro.SetFreq(sixteenthNotesPerSecond);
+
+    // Update groove offsets when BPM changes
+    for(int i = 0; i < NUM_DRUM_VOICES; i++)
+    {
+        voiceGroove[i].UpdateOffset(bpm, hw.AudioSampleRate());
+    }
 }
 
 void SendMidiClock()
@@ -1038,6 +1488,21 @@ void ToggleRunState()
             System::Delay(1); // Small delay for different seed
             turingMachine2.Init(System::GetUs() ^ 0xA5A5A5A5); // Different seed
 
+            // Initialize groove configurations
+            for(int i = 0; i < NUM_DRUM_VOICES; i++)
+            {
+                voiceGroove[i].Init();
+                voiceGroove[i].UpdateOffset(bpm, hw.AudioSampleRate());
+            }
+
+            // Randomize groove at start
+            RandomizeGroove();
+
+            // Initialize trigger queue
+            InitTriggerQueue();
+            globalSampleCounter = 0;
+            lastBeatSample = 0;
+
             // Trigger first step immediately to avoid missing first downbeat
             trigger16thNote = true;
         }
@@ -1079,8 +1544,9 @@ void HandleMidiMessage(MidiEvent m)
                             gateHighCounter = 0;
                             TriggerGate16th();
 
-                            // Process drum patterns on each 16th note
-                            ProcessDrumPatterns();
+                            // Signal main loop to process patterns (same as internal clock)
+                            trigger16thNote = true;
+                            lastBeatSample = globalSampleCounter; // Record beat time for look-ahead
                         }
 
                         // Trigger quarter note gate on every 24th clock
@@ -1137,46 +1603,53 @@ void UpdateDisplay()
     std::string str;
     char*       cstr;
 
-    // Title
+    // BPM, Mode, and Status on one line
     hw.display.SetCursor(0, 0);
-    str = "Themis Clock";
-    cstr = &str[0];
-    hw.display.WriteString(cstr, Font_7x10, true);
-
-    // BPM display
-    hw.display.SetCursor(0, 20);
-    str = "BPM: ";
-    char bpmNum[10];
-    sprintf(bpmNum, "%d", (int)bpm);
-    str += bpmNum;
-    cstr = &str[0];
-    hw.display.WriteString(cstr, Font_7x10, true);
-
-    // Status
-    hw.display.SetCursor(0, 35);
-    if(externalClockMode)
-    {
-        str = "Mode: EXT";
-    }
-    else
-    {
-        str = "Mode: INT";
-    }
-    cstr = &str[0];
-    hw.display.WriteString(cstr, Font_7x10, true);
-
-    hw.display.SetCursor(0, 50);
-    str = isRunning ? "RUNNING" : "STOPPED";
-    cstr = &str[0];
-    hw.display.WriteString(cstr, Font_7x10, true);
+    char topLine[30];
+    sprintf(topLine, "BPM:%d %s %s",
+            (int)bpm,
+            externalClockMode ? "EXT" : "INT",
+            isRunning ? "RUN" : "STOP");
+    hw.display.WriteString(topLine, Font_6x8, true);
 
     // Pattern info
     if(isRunning)
     {
-        hw.display.SetCursor(70, 50);
+        hw.display.SetCursor(0, 10);
         char patStr[20];
-        sprintf(patStr, "K%d C%d H%d", currentKickPattern, currentClapPattern, currentHatPattern);
+        sprintf(patStr, "Ptn: K%d C%d H%d", currentKickPattern, currentClapPattern, currentHatPattern);
         hw.display.WriteString(patStr, Font_6x8, true);
+    }
+
+    // Groove pattern display
+    hw.display.SetCursor(0, 20);
+    str = "Groove: ";
+    str += groovePatternNames[currentGroovePattern];
+    cstr = &str[0];
+    hw.display.WriteString(cstr, Font_6x8, true);
+
+    // Debug: Show groove amounts for kick, snare, and hihats
+    hw.display.SetCursor(0, 30);
+    char grooveAmtStr[30];
+    sprintf(grooveAmtStr, "K:%d S:%d H1:%d H2:%d",
+            (int)(grooveAmount[KICK] * 100),
+            (int)(grooveAmount[SNARE] * 100),
+            (int)(grooveAmount[HIHAT1_CLOSED] * 100),
+            (int)(grooveAmount[HIHAT2_CLOSED] * 100));
+    hw.display.WriteString(grooveAmtStr, Font_6x8, true);
+
+    // Debug: Show groove amount and offset for hi-hat
+    if(isRunning)
+    {
+        hw.display.SetCursor(0, 40);
+        int32_t hatOffset = CalculateGrooveOffset(HIHAT1_CLOSED, currentStep);
+        int8_t patternValue = groovePatterns[currentGroovePattern][currentStep % 16];
+        char offsetStr[30];
+        sprintf(offsetStr, "S:%2d P:%+4d O:%+4d",
+                currentStep,
+                (int)patternValue,
+                (int)(hatOffset * 1000 / hw.AudioSampleRate()));
+        hw.display.WriteString(offsetStr, Font_6x8, true);
     }
 
     hw.display.Update();
