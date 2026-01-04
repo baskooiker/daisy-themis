@@ -319,14 +319,15 @@ struct VoiceConfig
     InteractionStyle interaction;
     DrumVoice       interactionPartner; // Voice to interact with (if any)
     uint32_t        pattern; // Generated pattern
+    uint8_t         patternLength; // Pattern length (12, 13, 15, 17, 18, or 32 for polyrhythms)
     bool            active;  // Is this voice active in current section
 };
 
 // Rhythm generation functions (extensible - add new generators here)
-uint32_t GenerateSyncopated(uint32_t seed, DensityLevel density);
-uint32_t GenerateStraight(uint32_t seed, DensityLevel density);
-uint32_t GenerateEuclidean(uint32_t seed, DensityLevel density);
-uint32_t GenerateAntiEuclidean(uint32_t seed, DensityLevel density);
+uint32_t GenerateSyncopated(uint32_t seed, DensityLevel density, uint8_t length);
+uint32_t GenerateStraight(uint32_t seed, DensityLevel density, uint8_t length);
+uint32_t GenerateEuclidean(uint32_t seed, DensityLevel density, uint8_t length);
+uint32_t GenerateAntiEuclidean(uint32_t seed, DensityLevel density, uint8_t length);
 
 // Interaction processing functions (extensible - add new processors here)
 void ProcessInteractionNone(VoiceConfig* voice1, VoiceConfig* voice2);
@@ -340,11 +341,11 @@ void GenerateVoicePatterns();
 
 // Voice configurations for remaining drum elements
 VoiceConfig generativeVoices[5] = {
-    {DRUM1, RHYTHM_EUCLIDEAN, DENSITY_MEDIUM, INTERACTION_DIVIDED, DRUM2, 0, true},
-    {DRUM2, RHYTHM_EUCLIDEAN, DENSITY_MEDIUM, INTERACTION_DIVIDED, DRUM1, 0, true},
-    {MULTI, RHYTHM_SYNCOPATED, DENSITY_LOW, INTERACTION_NONE, MULTI, 0, true},
-    {SNARE, RHYTHM_STRAIGHT, DENSITY_MEDIUM, INTERACTION_ALTERNATE_BAR, HIHAT2_CLOSED, 0, true},
-    {HIHAT2_CLOSED, RHYTHM_STRAIGHT, DENSITY_HIGH, INTERACTION_ALTERNATE_BAR, SNARE, 0, true}
+    {DRUM1, RHYTHM_EUCLIDEAN, DENSITY_MEDIUM, INTERACTION_DIVIDED, DRUM2, 0, 32, true},
+    {DRUM2, RHYTHM_EUCLIDEAN, DENSITY_MEDIUM, INTERACTION_DIVIDED, DRUM1, 0, 32, true},
+    {MULTI, RHYTHM_SYNCOPATED, DENSITY_LOW, INTERACTION_NONE, MULTI, 0, 32, true},
+    {SNARE, RHYTHM_STRAIGHT, DENSITY_MEDIUM, INTERACTION_ALTERNATE_BAR, HIHAT2_CLOSED, 0, 32, true},
+    {HIHAT2_CLOSED, RHYTHM_STRAIGHT, DENSITY_HIGH, INTERACTION_ALTERNATE_BAR, SNARE, 0, 32, true}
 };
 
 // ========================================
@@ -593,50 +594,49 @@ void RandomizePatterns()
 // ========================================
 
 // Generate syncopated rhythm (off-beat emphasis)
-uint32_t GenerateSyncopated(uint32_t seed, DensityLevel density)
+uint32_t GenerateSyncopated(uint32_t seed, DensityLevel density, uint8_t length)
 {
     uint32_t pattern = 0;
-    int hitCount = (density == DENSITY_LOW) ? 4 : (density == DENSITY_MEDIUM) ? 8 : 12;
+    int hitCount = (density == DENSITY_LOW) ? (length / 8) : (density == DENSITY_MEDIUM) ? (length / 4) : (length / 3);
 
     // Emphasize off-beat positions (odd steps)
     for(int i = 0; i < hitCount; i++)
     {
-        int pos = ((seed >> (i * 2)) % 16) * 2 + 1; // Force odd positions
-        if(pos < 32) pattern |= (1 << pos);
+        int pos = ((seed >> (i * 2)) % (length / 2)) * 2 + 1; // Force odd positions
+        if(pos < length) pattern |= (1 << pos);
     }
     return pattern;
 }
 
 // Generate straight rhythm (on-beat emphasis)
-uint32_t GenerateStraight(uint32_t seed, DensityLevel density)
+uint32_t GenerateStraight(uint32_t seed, DensityLevel density, uint8_t length)
 {
     uint32_t pattern = 0;
-    int hitCount = (density == DENSITY_LOW) ? 4 : (density == DENSITY_MEDIUM) ? 8 : 16;
+    int hitCount = (density == DENSITY_LOW) ? (length / 8) : (density == DENSITY_MEDIUM) ? (length / 4) : (length / 2);
 
-    // Emphasize on-beat positions (even steps, especially 0,4,8,12,16,20,24,28)
+    // Emphasize on-beat positions (even steps)
     for(int i = 0; i < hitCount; i++)
     {
-        int pos = ((seed >> (i * 2)) % 16) * 2; // Force even positions
-        if(pos < 32) pattern |= (1 << pos);
+        int pos = ((seed >> (i * 2)) % (length / 2)) * 2; // Force even positions
+        if(pos < length) pattern |= (1 << pos);
     }
     return pattern;
 }
 
 // Generate Euclidean rhythm (evenly spaced hits)
-uint32_t GenerateEuclidean(uint32_t seed, DensityLevel density)
+uint32_t GenerateEuclidean(uint32_t seed, DensityLevel density, uint8_t length)
 {
     uint32_t pattern = 0;
-    int hitCount = (density == DENSITY_LOW) ? 3 : (density == DENSITY_MEDIUM) ? 5 : 8;
-    int steps = 32;
+    int hitCount = (density == DENSITY_LOW) ? (length / 10) : (density == DENSITY_MEDIUM) ? (length / 5) : (length / 2);
 
     // Bjorklund's algorithm for Euclidean rhythms
     int bucket = 0;
-    for(int i = 0; i < steps; i++)
+    for(int i = 0; i < length; i++)
     {
         bucket += hitCount;
-        if(bucket >= steps)
+        if(bucket >= length)
         {
-            bucket -= steps;
+            bucket -= length;
             pattern |= (1 << i);
         }
     }
@@ -644,22 +644,25 @@ uint32_t GenerateEuclidean(uint32_t seed, DensityLevel density)
 }
 
 // Generate anti-Euclidean rhythm (clustered hits)
-uint32_t GenerateAntiEuclidean(uint32_t seed, DensityLevel density)
+uint32_t GenerateAntiEuclidean(uint32_t seed, DensityLevel density, uint8_t length)
 {
     uint32_t pattern = 0;
-    int hitCount = (density == DENSITY_LOW) ? 4 : (density == DENSITY_MEDIUM) ? 8 : 12;
+    int hitCount = (density == DENSITY_LOW) ? (length / 8) : (density == DENSITY_MEDIUM) ? (length / 4) : (length / 3);
 
     // Create clusters of hits
     int clustersCount = (seed % 3) + 2; // 2-4 clusters
     int hitsPerCluster = hitCount / clustersCount;
+    if(hitsPerCluster < 1) hitsPerCluster = 1;
 
     for(int c = 0; c < clustersCount; c++)
     {
-        int clusterStart = ((seed >> (c * 4)) % (32 - hitsPerCluster));
+        int maxStart = length - hitsPerCluster;
+        if(maxStart < 0) maxStart = 0;
+        int clusterStart = ((seed >> (c * 4)) % (maxStart + 1));
         for(int h = 0; h < hitsPerCluster; h++)
         {
             int pos = clusterStart + h;
-            if(pos < 32) pattern |= (1 << pos);
+            if(pos < length) pattern |= (1 << pos);
         }
     }
     return pattern;
@@ -751,29 +754,44 @@ void ProcessInteractionAlternateTwo(VoiceConfig* voice1, VoiceConfig* voice2)
 // Generate patterns for all generative voices
 void GenerateVoicePatterns()
 {
+    // Odd lengths for polyrhythms
+    const uint8_t oddLengths[] = {12, 13, 15, 17, 18};
+
     // Generate base patterns for each voice
     for(int i = 0; i < 5; i++)
     {
         VoiceConfig* voice = &generativeVoices[i];
         uint32_t seed = generationSeed ^ (i * 12345); // Unique seed per voice
 
+        // Randomly choose pattern length (15% chance of polyrhythm)
+        if((seed % 100) < 15)
+        {
+            // Choose one of the odd lengths
+            voice->patternLength = oddLengths[(seed >> 8) % 5];
+        }
+        else
+        {
+            // Standard 32-step pattern
+            voice->patternLength = 32;
+        }
+
         // Generate pattern based on rhythm style
         switch(voice->rhythmStyle)
         {
             case RHYTHM_SYNCOPATED:
-                voice->pattern = GenerateSyncopated(seed, voice->density);
+                voice->pattern = GenerateSyncopated(seed, voice->density, voice->patternLength);
                 break;
             case RHYTHM_STRAIGHT:
-                voice->pattern = GenerateStraight(seed, voice->density);
+                voice->pattern = GenerateStraight(seed, voice->density, voice->patternLength);
                 break;
             case RHYTHM_EUCLIDEAN:
-                voice->pattern = GenerateEuclidean(seed, voice->density);
+                voice->pattern = GenerateEuclidean(seed, voice->density, voice->patternLength);
                 break;
             case RHYTHM_ANTI_EUCLIDEAN:
-                voice->pattern = GenerateAntiEuclidean(seed, voice->density);
+                voice->pattern = GenerateAntiEuclidean(seed, voice->density, voice->patternLength);
                 break;
             default:
-                voice->pattern = GenerateEuclidean(seed, voice->density);
+                voice->pattern = GenerateEuclidean(seed, voice->density, voice->patternLength);
                 break;
         }
     }
@@ -868,13 +886,18 @@ void ProcessDrumPatterns()
         }
     }
 
-    // Process generative voices
+    // Process generative voices (with polyrhythm support)
     for(int i = 0; i < 5; i++)
     {
         VoiceConfig* voice = &generativeVoices[i];
-        if(voice->active && IsStepActive(voice->pattern, currentStep))
+        if(voice->active)
         {
-            TriggerDrum(voice->voice, 95); // Standard velocity for generative voices
+            // Use modulo to loop shorter patterns (polyrhythms)
+            uint8_t voiceStep = currentStep % voice->patternLength;
+            if(IsStepActive(voice->pattern, voiceStep))
+            {
+                TriggerDrum(voice->voice, 95); // Standard velocity for generative voices
+            }
         }
     }
 
