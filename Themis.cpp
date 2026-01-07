@@ -20,14 +20,16 @@ uint32_t gateHighCounter = 0;
 const uint32_t GATE_PULSE_MS = 10; // Gate pulse width in milliseconds
 
 // Audio output gate states
-bool gate24ppqn = false;    // Audio Out 1: 24 PPQN
-bool gate16th = false;      // Audio Out 2: 16th notes
-bool gateQuarter = false;   // Audio Out 3: Quarter notes
+bool gate24ppqn = false;    // (unused - was Audio Out 1)
+bool gate16th = false;      // Audio Out 1: 16th notes
+bool gate2 = false;         // Audio Out 2: Configurable division
+bool gateQuarter = false;   // Audio Out 3: Configurable division
 bool gateReset = false;     // Audio Out 4: Reset pulse
 
 // Gate pulse counters (in audio samples)
 uint32_t gate24ppqnCounter = 0;
 uint32_t gate16thCounter = 0;
+uint32_t gate2Counter = 0;
 uint32_t gateQuarterCounter = 0;
 uint32_t gateResetCounter = 0;
 
@@ -57,6 +59,7 @@ enum DrumVoice
     HIHAT2_CLOSED,
     HIHAT2_OPEN,
     CLAP,
+    ANALOG,  // CV/Gate output voice (not MIDI)
     NUM_DRUM_VOICES
 };
 
@@ -71,7 +74,8 @@ const uint8_t drumNotes[NUM_DRUM_VOICES] = {
     51, // HIHAT1_OPEN (dis)
     42, // HIHAT2_CLOSED (FIS)
     44, // HIHAT2_OPEN (GIS)
-    39  // CLAP (DIS)
+    39, // CLAP (DIS)
+    60  // ANALOG (note value for CV conversion, middle C = 2.5V)
 };
 
 // Drum voice names for display
@@ -85,7 +89,8 @@ const char* drumNames[NUM_DRUM_VOICES] = {
     "HH1O",
     "HH2C",
     "HH2O",
-    "Clap"
+    "Clap",
+    "Anlg"
 };
 
 // ========================================
@@ -96,24 +101,31 @@ enum DisplayState
 {
     DISPLAY_DEFAULT,
     DISPLAY_CONFIG_MENU,
-    DISPLAY_CONFIG_EDIT
+    DISPLAY_CONFIG_EDIT,
+    DISPLAY_PATTERN_INFO
 };
 
 enum ConfigOption
 {
     CONFIG_BPM,
+    CONFIG_OUT2_DIVISION,
     CONFIG_OUT3_DIVISION,
+    CONFIG_FREEZE,
+    CONFIG_PATTERN_INFO,
     CONFIG_BACK,
     NUM_CONFIG_OPTIONS
 };
 
 const char* configOptionNames[NUM_CONFIG_OPTIONS] = {
     "BPM",
+    "OUT2 div",
     "OUT3 div",
+    "Freeze",
+    "Pattern info",
     "Back"
 };
 
-enum Out3Division
+enum OutDivision
 {
     DIV_1_16,  // 1/16 note
     DIV_1_8,   // 1/8 note
@@ -122,10 +134,10 @@ enum Out3Division
     DIV_1,     // 1 bar (4 beats)
     DIV_2,     // 2 bars
     DIV_4,     // 4 bars
-    NUM_OUT3_DIVISIONS
+    NUM_OUT_DIVISIONS
 };
 
-const char* out3DivisionNames[NUM_OUT3_DIVISIONS] = {
+const char* outDivisionNames[NUM_OUT_DIVISIONS] = {
     "1/16",
     "1/8",
     "1/4",
@@ -137,7 +149,10 @@ const char* out3DivisionNames[NUM_OUT3_DIVISIONS] = {
 
 DisplayState currentDisplayState = DISPLAY_DEFAULT;
 ConfigOption currentConfigOption = CONFIG_BPM;
-Out3Division currentOut3Division = DIV_1_4; // Default to quarter notes
+OutDivision currentOut2Division = DIV_1_8; // Default to 8th notes
+OutDivision currentOut3Division = DIV_1_4; // Default to quarter notes
+bool freezeEnabled = false; // When true, patterns/personalities don't randomize
+int patternInfoScroll = 0; // Scroll offset for pattern info display
 uint32_t lastEncoderActivity = 0;
 const uint32_t MENU_TIMEOUT_MS = 10000; // 10 seconds
 
@@ -151,8 +166,10 @@ struct PersistentSettings
 {
     uint32_t magic;           // Magic number to validate settings
     float bpm;                // BPM setting
+    uint8_t out2Division;     // OUT2 division setting
     uint8_t out3Division;     // OUT3 division setting
-    uint8_t reserved[24];     // Reserved for future use (total 32 bytes)
+    uint8_t freezeEnabled;    // Freeze pattern/personality randomization
+    uint8_t reserved[22];     // Reserved for future use (total 32 bytes)
 };
 
 PersistentSettings settings;
@@ -403,7 +420,7 @@ const char* groovePatternNames[32] = {
 // Current groove state
 uint8_t currentGroovePattern = 0;  // Index into groovePatterns (0-31)
 float grooveAmount[NUM_DRUM_VOICES]; // Per-voice timing groove amount (0.0 - 0.75, max 75%)
-float grooveVelocityAmount[NUM_DRUM_VOICES]; // Per-voice velocity groove amount (0.0 - 0.75, max 75%)
+float grooveVelocityAmount[NUM_DRUM_VOICES]; // Per-voice velocity groove amount (0.0 - 1.0, max 100%)
 
 // ========================================
 // Generative Drum Pattern System
@@ -604,6 +621,7 @@ enum RhythmStyle
     RHYTHM_STRAIGHT,        // On-beat emphasis
     RHYTHM_EUCLIDEAN,       // Evenly spaced hits
     RHYTHM_ANTI_EUCLIDEAN,  // Clustered/grouped hits
+    RHYTHM_FOLLOW_KICK,     // Follows kick drum pattern
     NUM_RHYTHM_STYLES
 };
 
@@ -654,15 +672,17 @@ void ProcessInteractionAlternateHalf(VoiceConfig* voice1, VoiceConfig* voice2);
 void ProcessInteractionAlternateTwo(VoiceConfig* voice1, VoiceConfig* voice2);
 
 // Pattern generation
+void RandomizeVoicePersonalities();
 void GenerateVoicePatterns();
 
 // Voice configurations for remaining drum elements
-VoiceConfig generativeVoices[5] = {
+VoiceConfig generativeVoices[6] = {
     {DRUM1, RHYTHM_EUCLIDEAN, DENSITY_MEDIUM, INTERACTION_DIVIDED, DRUM2, 0, 32, true},
     {DRUM2, RHYTHM_EUCLIDEAN, DENSITY_MEDIUM, INTERACTION_DIVIDED, DRUM1, 0, 32, true},
     {MULTI, RHYTHM_SYNCOPATED, DENSITY_LOW, INTERACTION_NONE, MULTI, 0, 32, true},
     {SNARE, RHYTHM_STRAIGHT, DENSITY_MEDIUM, INTERACTION_ALTERNATE_BAR, HIHAT2_CLOSED, 0, 32, true},
-    {HIHAT2_CLOSED, RHYTHM_STRAIGHT, DENSITY_HIGH, INTERACTION_ALTERNATE_BAR, SNARE, 0, 32, true}
+    {HIHAT2_CLOSED, RHYTHM_STRAIGHT, DENSITY_HIGH, INTERACTION_NONE, HIHAT2_CLOSED, 0, 32, true},
+    {ANALOG, RHYTHM_FOLLOW_KICK, DENSITY_HIGH, INTERACTION_NONE, ANALOG, 0, 32, true} // CV/Gate output
 };
 
 // ========================================
@@ -795,9 +815,11 @@ struct TuringMachine
     }
 };
 
-// Two Turing Machine instances
-TuringMachine turingMachine1;
-TuringMachine turingMachine2;
+// Analog voice CV/Gate state
+uint8_t analogVoiceVelocity = 100; // MIDI velocity for CV conversion (0-127 = 0-5V)
+bool analogGateHigh = false;
+uint32_t analogGateCounter = 0;
+const uint32_t ANALOG_GATE_SAMPLES = 480; // 10ms gate pulse at 48kHz
 
 // Pattern state
 uint8_t  currentKickPattern = 0;
@@ -806,7 +828,10 @@ uint8_t  currentHatPattern = 0;
 uint8_t  currentStep = 0; // Current step in pattern (0-31)
 uint32_t barCounter = 0;  // Count 2-bar phrases for pattern rotation
 uint32_t patternChangeInterval = 4; // Change patterns every N 2-bar phrases (4 = 8 bars)
+uint32_t personalityChangeInterval = 4; // Change voice personalities every N 8-bar cycles (4 = 32 bars)
+uint32_t cycleCounter = 0; // Count 8-bar cycles for personality changes
 uint32_t generationSeed = 0; // Seed for pattern generation
+DrumVoice fundamentalBeatVoice = CLAP; // Which voice plays fundamental beat patterns (CLAP or SNARE)
 
 // Fill state
 bool     fillActive = false;
@@ -822,8 +847,27 @@ volatile bool trigger16thNote = false;
 // Trigger a gate pulse on an output
 void TriggerGate24ppqn() { gate24ppqn = true; gate24ppqnCounter = 0; }
 void TriggerGate16th() { gate16th = true; gate16thCounter = 0; }
+void TriggerGate2() { gate2 = true; gate2Counter = 0; }
 void TriggerGateQuarter() { gateQuarter = true; gateQuarterCounter = 0; }
 void TriggerGateReset() { gateReset = true; gateResetCounter = 0; }
+
+// Check if OUT2 should trigger based on division setting
+bool ShouldTriggerOut2(uint8_t step, uint8_t bar)
+{
+    uint16_t totalStep = (bar * 16) + step; // Total 16th notes since start
+
+    switch(currentOut2Division)
+    {
+        case DIV_1_16: return true;                    // Every 16th note
+        case DIV_1_8:  return (step % 2) == 0;         // Every 8th note
+        case DIV_1_4:  return (step % 4) == 0;         // Every quarter note
+        case DIV_1_2:  return (step % 8) == 0;         // Every half note
+        case DIV_1:    return (step == 0);             // Every bar (16 steps)
+        case DIV_2:    return (totalStep % 32) == 0;   // Every 2 bars
+        case DIV_4:    return (totalStep % 64) == 0;   // Every 4 bars
+        default: return false;
+    }
+}
 
 // Check if OUT3 should trigger based on division setting
 bool ShouldTriggerOut3(uint8_t step, uint8_t bar)
@@ -848,7 +892,9 @@ void SaveSettings()
 {
     settings.magic = SETTINGS_MAGIC;
     settings.bpm = bpm;
+    settings.out2Division = (uint8_t)currentOut2Division;
     settings.out3Division = (uint8_t)currentOut3Division;
+    settings.freezeEnabled = freezeEnabled ? 1 : 0;
 
     // Write to QSPI flash
     size_t size = sizeof(PersistentSettings);
@@ -879,21 +925,36 @@ void LoadSettings()
             bpm = 120.0f; // Reset to default if out of range
         }
 
+        // Validate OUT2 division
+        if(settings.out2Division >= NUM_OUT_DIVISIONS)
+        {
+            currentOut2Division = DIV_1_8; // Reset to default
+        }
+        else
+        {
+            currentOut2Division = (OutDivision)settings.out2Division;
+        }
+
         // Validate OUT3 division
-        if(settings.out3Division >= NUM_OUT3_DIVISIONS)
+        if(settings.out3Division >= NUM_OUT_DIVISIONS)
         {
             currentOut3Division = DIV_1_4; // Reset to default
         }
         else
         {
-            currentOut3Division = (Out3Division)settings.out3Division;
+            currentOut3Division = (OutDivision)settings.out3Division;
         }
+
+        // Load freeze setting
+        freezeEnabled = (settings.freezeEnabled != 0);
     }
     else
     {
         // No valid settings found, use defaults
         bpm = 120.0f;
+        currentOut2Division = DIV_1_8;
         currentOut3Division = DIV_1_4;
+        freezeEnabled = false;
 
         // Save defaults
         SaveSettings();
@@ -935,14 +996,25 @@ void RandomizeGroove()
     uint32_t seed = System::GetUs();
     currentGroovePattern = seed % 32;
 
-    // Random timing and velocity amounts for each voice (0.0 - 0.75, max 75%)
+    // Random timing and velocity amounts for each voice
+    // Kick drum: 0-35% (reduced to avoid too heavy bass timing variation)
+    // Other voices: 0-75%
     for(int i = 0; i < NUM_DRUM_VOICES; i++)
     {
         seed = System::GetUs() ^ (i * 54321); // Unique seed per voice
-        grooveAmount[i] = (float)(seed % 76) / 100.0f; // 0-75% timing
+
+        // Kick drum gets lower max groove to avoid excessive timing variation
+        if(i == KICK)
+        {
+            grooveAmount[i] = (float)(seed % 36) / 100.0f; // 0-35% timing for kick
+        }
+        else
+        {
+            grooveAmount[i] = (float)(seed % 76) / 100.0f; // 0-75% timing for others
+        }
 
         seed = System::GetUs() ^ (i * 98765); // Different seed for velocity
-        grooveVelocityAmount[i] = (float)(seed % 76) / 100.0f; // 0-75% velocity
+        grooveVelocityAmount[i] = (float)(seed % 101) / 100.0f; // 0-100% velocity
     }
 }
 
@@ -1164,13 +1236,31 @@ void RandomizePatterns()
 uint32_t GenerateSyncopated(uint32_t seed, DensityLevel density, uint8_t length)
 {
     uint32_t pattern = 0;
-    int hitCount = (density == DENSITY_LOW) ? (length / 8) : (density == DENSITY_MEDIUM) ? (length / 4) : (length / 3);
 
-    // Emphasize off-beat positions (odd steps)
-    for(int i = 0; i < hitCount; i++)
+    if(density == DENSITY_HIGH)
     {
-        int pos = ((seed >> (i * 2)) % (length / 2)) * 2 + 1; // Force odd positions
-        if(pos < length) pattern |= (1 << pos);
+        // For high density, start with all positions filled and remove a few
+        for(int i = 0; i < length; i++)
+        {
+            pattern |= (1 << i);
+        }
+        // Remove ~12.5% of hits randomly (to get ~87.5% density)
+        int removeCount = length / 8;
+        for(int i = 0; i < removeCount; i++)
+        {
+            int pos = ((seed >> (i * 3)) % length);
+            pattern &= ~(1 << pos); // Remove this hit
+        }
+    }
+    else
+    {
+        int hitCount = (density == DENSITY_LOW) ? (length / 8) : (length / 2);
+        // Emphasize off-beat positions (odd steps)
+        for(int i = 0; i < hitCount; i++)
+        {
+            int pos = ((seed >> (i * 2)) % (length / 2)) * 2 + 1; // Force odd positions
+            if(pos < length) pattern |= (1 << pos);
+        }
     }
     return pattern;
 }
@@ -1179,13 +1269,31 @@ uint32_t GenerateSyncopated(uint32_t seed, DensityLevel density, uint8_t length)
 uint32_t GenerateStraight(uint32_t seed, DensityLevel density, uint8_t length)
 {
     uint32_t pattern = 0;
-    int hitCount = (density == DENSITY_LOW) ? (length / 8) : (density == DENSITY_MEDIUM) ? (length / 4) : (length / 2);
 
-    // Emphasize on-beat positions (even steps)
-    for(int i = 0; i < hitCount; i++)
+    if(density == DENSITY_HIGH)
     {
-        int pos = ((seed >> (i * 2)) % (length / 2)) * 2; // Force even positions
-        if(pos < length) pattern |= (1 << pos);
+        // For high density, start with all positions filled and remove a few
+        for(int i = 0; i < length; i++)
+        {
+            pattern |= (1 << i);
+        }
+        // Remove ~12.5% of hits randomly (to get ~87.5% density)
+        int removeCount = length / 8;
+        for(int i = 0; i < removeCount; i++)
+        {
+            int pos = ((seed >> (i * 3)) % length);
+            pattern &= ~(1 << pos); // Remove this hit
+        }
+    }
+    else
+    {
+        int hitCount = (density == DENSITY_LOW) ? (length / 8) : (length / 2);
+        // Emphasize on-beat positions (even steps)
+        for(int i = 0; i < hitCount; i++)
+        {
+            int pos = ((seed >> (i * 2)) % (length / 2)) * 2; // Force even positions
+            if(pos < length) pattern |= (1 << pos);
+        }
     }
     return pattern;
 }
@@ -1194,9 +1302,9 @@ uint32_t GenerateStraight(uint32_t seed, DensityLevel density, uint8_t length)
 uint32_t GenerateEuclidean(uint32_t seed, DensityLevel density, uint8_t length)
 {
     uint32_t pattern = 0;
-    int hitCount = (density == DENSITY_LOW) ? (length / 10) : (density == DENSITY_MEDIUM) ? (length / 5) : (length / 2);
+    int hitCount = (density == DENSITY_LOW) ? (length / 8) : (density == DENSITY_MEDIUM) ? (length / 2) : ((length * 7) / 8);
 
-    // Bjorklund's algorithm for Euclidean rhythms
+    // Bjorklund's algorithm for Euclidean rhythms works correctly even for high density
     int bucket = 0;
     for(int i = 0; i < length; i++)
     {
@@ -1214,22 +1322,51 @@ uint32_t GenerateEuclidean(uint32_t seed, DensityLevel density, uint8_t length)
 uint32_t GenerateAntiEuclidean(uint32_t seed, DensityLevel density, uint8_t length)
 {
     uint32_t pattern = 0;
-    int hitCount = (density == DENSITY_LOW) ? (length / 8) : (density == DENSITY_MEDIUM) ? (length / 4) : (length / 3);
 
-    // Create clusters of hits
-    int clustersCount = (seed % 3) + 2; // 2-4 clusters
-    int hitsPerCluster = hitCount / clustersCount;
-    if(hitsPerCluster < 1) hitsPerCluster = 1;
-
-    for(int c = 0; c < clustersCount; c++)
+    if(density == DENSITY_HIGH)
     {
-        int maxStart = length - hitsPerCluster;
-        if(maxStart < 0) maxStart = 0;
-        int clusterStart = ((seed >> (c * 4)) % (maxStart + 1));
-        for(int h = 0; h < hitsPerCluster; h++)
+        // For high density, start with all positions filled and remove a few in clusters
+        for(int i = 0; i < length; i++)
         {
-            int pos = clusterStart + h;
-            if(pos < length) pattern |= (1 << pos);
+            pattern |= (1 << i);
+        }
+        // Remove ~12.5% of hits in clusters (to get ~87.5% density)
+        int removeCount = length / 8;
+        int clustersCount = (seed % 2) + 1; // 1-2 silence clusters
+        int removesPerCluster = removeCount / clustersCount;
+        if(removesPerCluster < 1) removesPerCluster = 1;
+
+        for(int c = 0; c < clustersCount; c++)
+        {
+            int maxStart = length - removesPerCluster;
+            if(maxStart < 0) maxStart = 0;
+            int clusterStart = ((seed >> (c * 4)) % (maxStart + 1));
+            for(int h = 0; h < removesPerCluster; h++)
+            {
+                int pos = (clusterStart + h) % length;
+                pattern &= ~(1 << pos); // Remove this hit
+            }
+        }
+    }
+    else
+    {
+        int hitCount = (density == DENSITY_LOW) ? (length / 8) : (length / 2);
+
+        // Create clusters of hits
+        int clustersCount = (seed % 3) + 2; // 2-4 clusters
+        int hitsPerCluster = hitCount / clustersCount;
+        if(hitsPerCluster < 1) hitsPerCluster = 1;
+
+        for(int c = 0; c < clustersCount; c++)
+        {
+            int maxStart = length - hitsPerCluster;
+            if(maxStart < 0) maxStart = 0;
+            int clusterStart = ((seed >> (c * 4)) % (maxStart + 1));
+            for(int h = 0; h < hitsPerCluster; h++)
+            {
+                int pos = clusterStart + h;
+                if(pos < length) pattern |= (1 << pos);
+            }
         }
     }
     return pattern;
@@ -1318,6 +1455,113 @@ void ProcessInteractionAlternateTwo(VoiceConfig* voice1, VoiceConfig* voice2)
     }
 }
 
+// Randomize voice personalities (rhythm style, density, interactions)
+void RandomizeVoicePersonalities()
+{
+    uint32_t seed = System::GetUs();
+
+    // Randomly assign fundamental beat role to either CLAP or SNARE
+    fundamentalBeatVoice = ((seed % 2) == 0) ? CLAP : SNARE;
+
+    // The other voice becomes a generative voice (at index 3)
+    DrumVoice generativeBackbeatVoice = (fundamentalBeatVoice == CLAP) ? SNARE : CLAP;
+    generativeVoices[3].voice = generativeBackbeatVoice;
+
+    // Randomize rhythm styles for all voices
+    RhythmStyle styles[] = {RHYTHM_SYNCOPATED, RHYTHM_STRAIGHT, RHYTHM_EUCLIDEAN, RHYTHM_ANTI_EUCLIDEAN, RHYTHM_FOLLOW_KICK};
+    for(int i = 0; i < 6; i++)
+    {
+        seed = System::GetUs() ^ (i * 11111);
+        generativeVoices[i].rhythmStyle = styles[seed % 5];
+    }
+
+    // Reset all interactions to NONE first
+    for(int i = 0; i < 6; i++)
+    {
+        generativeVoices[i].interaction = INTERACTION_NONE;
+        generativeVoices[i].interactionPartner = generativeVoices[i].voice;
+    }
+
+    // Pick alternating pair (50% probability)
+    seed = System::GetUs();
+    int alternatePair[2] = {-1, -1};
+    if((seed % 100) < 50)
+    {
+        alternatePair[0] = (seed >> 8) % 6;
+        alternatePair[1] = ((seed >> 16) % 5);
+        if(alternatePair[1] >= alternatePair[0]) alternatePair[1]++; // Ensure different voice
+
+        // Choose which alternate style
+        InteractionStyle alternateStyles[] = {INTERACTION_ALTERNATE_BAR, INTERACTION_ALTERNATE_HALF, INTERACTION_ALTERNATE_TWO};
+        InteractionStyle altStyle = alternateStyles[(seed >> 20) % 3];
+
+        generativeVoices[alternatePair[0]].interaction = altStyle;
+        generativeVoices[alternatePair[0]].interactionPartner = generativeVoices[alternatePair[1]].voice;
+        generativeVoices[alternatePair[1]].interaction = altStyle;
+        generativeVoices[alternatePair[1]].interactionPartner = generativeVoices[alternatePair[0]].voice;
+    }
+
+    // Pick divided pair (50% probability), ensuring no overlap with alternate pair
+    seed = System::GetUs();
+    if((seed % 100) < 50)
+    {
+        int voice1 = -1, voice2 = -1;
+        int attempts = 0;
+
+        // Find first voice not in alternate pair
+        do {
+            seed = System::GetUs() ^ (attempts * 7777);
+            voice1 = (seed >> 8) % 6;
+            attempts++;
+        } while((voice1 == alternatePair[0] || voice1 == alternatePair[1]) && attempts < 10);
+
+        // Find second voice not in alternate pair and different from voice1
+        attempts = 0;
+        do {
+            seed = System::GetUs() ^ (attempts * 9999);
+            voice2 = (seed >> 8) % 6;
+            attempts++;
+        } while((voice2 == voice1 || voice2 == alternatePair[0] || voice2 == alternatePair[1]) && attempts < 10);
+
+        // Only apply if we found valid voices
+        if(voice1 != -1 && voice2 != -1 && voice1 != voice2)
+        {
+            generativeVoices[voice1].interaction = INTERACTION_DIVIDED;
+            generativeVoices[voice1].interactionPartner = generativeVoices[voice2].voice;
+            generativeVoices[voice2].interaction = INTERACTION_DIVIDED;
+            generativeVoices[voice2].interactionPartner = generativeVoices[voice1].voice;
+        }
+    }
+
+    // Randomize densities ensuring at least one of each type
+    DensityLevel densities[6];
+    densities[0] = DENSITY_LOW;
+    densities[1] = DENSITY_MEDIUM;
+    densities[2] = DENSITY_HIGH;
+
+    // Randomly fill the remaining 3 slots
+    seed = System::GetUs();
+    densities[3] = (DensityLevel)((seed >> 8) % 3);
+    densities[4] = (DensityLevel)((seed >> 16) % 3);
+    densities[5] = (DensityLevel)((seed >> 24) % 3);
+
+    // Shuffle the density array
+    for(int i = 5; i > 0; i--)
+    {
+        seed = System::GetUs();
+        int j = seed % (i + 1);
+        DensityLevel temp = densities[i];
+        densities[i] = densities[j];
+        densities[j] = temp;
+    }
+
+    // Assign shuffled densities to voices
+    for(int i = 0; i < 6; i++)
+    {
+        generativeVoices[i].density = densities[i];
+    }
+}
+
 // Generate patterns for all generative voices
 void GenerateVoicePatterns()
 {
@@ -1325,13 +1569,19 @@ void GenerateVoicePatterns()
     const uint8_t oddLengths[] = {12, 13, 15, 17, 18};
 
     // Generate base patterns for each voice
-    for(int i = 0; i < 5; i++)
+    for(int i = 0; i < 6; i++)
     {
+
         VoiceConfig* voice = &generativeVoices[i];
         uint32_t seed = generationSeed ^ (i * 12345); // Unique seed per voice
 
+        // Follow kick always uses 32-step pattern length to match kick patterns
+        if(voice->rhythmStyle == RHYTHM_FOLLOW_KICK)
+        {
+            voice->patternLength = 32;
+        }
         // Randomly choose pattern length (15% chance of polyrhythm)
-        if((seed % 100) < 15)
+        else if((seed % 100) < 15)
         {
             // Choose one of the odd lengths
             voice->patternLength = oddLengths[(seed >> 8) % 5];
@@ -1357,20 +1607,58 @@ void GenerateVoicePatterns()
             case RHYTHM_ANTI_EUCLIDEAN:
                 voice->pattern = GenerateAntiEuclidean(seed, voice->density, voice->patternLength);
                 break;
+            case RHYTHM_FOLLOW_KICK:
+                voice->pattern = kickPatterns[currentKickPattern];
+                break;
             default:
                 voice->pattern = GenerateEuclidean(seed, voice->density, voice->patternLength);
                 break;
         }
     }
 
-    // Process interactions between voice pairs
-    // DRUM1 & DRUM2 (divided)
-    if(generativeVoices[0].interaction == INTERACTION_DIVIDED)
-        ProcessInteractionDivided(&generativeVoices[0], &generativeVoices[1]);
+    // Process interactions between voice pairs (dynamically based on current config)
+    for(int i = 0; i < 6; i++)
+    {
+        VoiceConfig* voice = &generativeVoices[i];
+        if(voice->interaction == INTERACTION_NONE)
+            continue;
 
-    // SNARE & HIHAT2_CLOSED (alternate bar)
-    if(generativeVoices[3].interaction == INTERACTION_ALTERNATE_BAR)
-        ProcessInteractionAlternateBar(&generativeVoices[3], &generativeVoices[4]);
+        // Find the partner voice
+        VoiceConfig* partner = nullptr;
+        for(int j = 0; j < 6; j++)
+        {
+            if(generativeVoices[j].voice == voice->interactionPartner)
+            {
+                partner = &generativeVoices[j];
+                break;
+            }
+        }
+
+        if(partner == nullptr)
+            continue;
+
+        // Process interaction (only once per pair)
+        if(i < (partner - generativeVoices)) // Process only if this voice comes first in array
+        {
+            switch(voice->interaction)
+            {
+                case INTERACTION_DIVIDED:
+                    ProcessInteractionDivided(voice, partner);
+                    break;
+                case INTERACTION_ALTERNATE_BAR:
+                    ProcessInteractionAlternateBar(voice, partner);
+                    break;
+                case INTERACTION_ALTERNATE_HALF:
+                    ProcessInteractionAlternateHalf(voice, partner);
+                    break;
+                case INTERACTION_ALTERNATE_TWO:
+                    ProcessInteractionAlternateTwo(voice, partner);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
 }
 
 // Process drum patterns on each 16th note
@@ -1418,7 +1706,7 @@ void ProcessDrumPatterns()
                 ScheduleDrumTriggerWithGroove(KICK, 120, currentStep, nextBeatSample); // Louder for fills
 
             if(IsStepActive8(clapFillsHalf[fillClapIdx], fillStep))
-                ScheduleDrumTriggerWithGroove(CLAP, 115, currentStep, nextBeatSample);
+                ScheduleDrumTriggerWithGroove(fundamentalBeatVoice, 115, currentStep, nextBeatSample);
 
             if(IsStepActive8(hatClosedFillsHalf[fillHatIdx], fillStep))
                 ScheduleDrumTriggerWithGroove(HIHAT1_CLOSED, 100, currentStep, nextBeatSample);
@@ -1433,7 +1721,7 @@ void ProcessDrumPatterns()
                 ScheduleDrumTriggerWithGroove(KICK, 120, currentStep, nextBeatSample); // Louder for fills
 
             if(IsStepActive16(clapFillsWhole[fillClapIdx], fillStep))
-                ScheduleDrumTriggerWithGroove(CLAP, 115, currentStep, nextBeatSample);
+                ScheduleDrumTriggerWithGroove(fundamentalBeatVoice, 115, currentStep, nextBeatSample);
 
             if(IsStepActive16(hatClosedFillsWhole[fillHatIdx], fillStep))
                 ScheduleDrumTriggerWithGroove(HIHAT1_CLOSED, 100, currentStep, nextBeatSample);
@@ -1452,7 +1740,7 @@ void ProcessDrumPatterns()
 
         if(IsStepActive(clapPatterns[currentClapPattern], currentStep))
         {
-            ScheduleDrumTriggerWithGroove(CLAP, 100, currentStep, nextBeatSample);
+            ScheduleDrumTriggerWithGroove(fundamentalBeatVoice, 100, currentStep, nextBeatSample);
         }
 
         // Check both closed and open hi-hat patterns
@@ -1468,7 +1756,7 @@ void ProcessDrumPatterns()
     }
 
     // Process generative voices (with polyrhythm support)
-    for(int i = 0; i < 5; i++)
+    for(int i = 0; i < 6; i++)
     {
         VoiceConfig* voice = &generativeVoices[i];
         if(voice->active)
@@ -1477,22 +1765,29 @@ void ProcessDrumPatterns()
             uint8_t voiceStep = currentStep % voice->patternLength;
             if(IsStepActive(voice->pattern, voiceStep))
             {
-                ScheduleDrumTriggerWithGroove(voice->voice, 95, currentStep, nextBeatSample); // Standard velocity for generative voices
+                if(voice->voice == ANALOG)
+                {
+                    // Analog voice: Trigger gate and set CV
+                    analogGateHigh = true;
+                    analogGateCounter = 0;
+                    // Get velocity for CV (groove-modulated, 0-127)
+                    analogVoiceVelocity = CalculateGrooveVelocity(ANALOG, 100, currentStep); // Base velocity 100
+                }
+                else
+                {
+                    // Regular MIDI voice
+                    ScheduleDrumTriggerWithGroove(voice->voice, 95, currentStep, nextBeatSample);
+                }
             }
         }
     }
 
-    // Process Turing Machines (evolving CV sequencers)
-    turingMachine1.Process();
-    turingMachine2.Process();
-
-    // Output Turing Machine CV values to DAC
-    // DaisyPatch has 2 CV outputs via seed.dac
-    // Convert 0.0-1.0 to 0-4095 for 12-bit DAC
-    uint16_t cv1 = (uint16_t)(turingMachine1.GetCV() * 4095.0f);
-    uint16_t cv2 = (uint16_t)(turingMachine2.GetCV() * 4095.0f);
+    // Output Analog voice CV
+    // CV OUT 1: Convert MIDI velocity to 0-5V (velocity 0 = 0V, velocity 127 = 5V)
+    float cvVoltage = (float)analogVoiceVelocity / 127.0f * 5.0f;
+    if(cvVoltage > 5.0f) cvVoltage = 5.0f;
+    uint16_t cv1 = (uint16_t)(cvVoltage / 5.0f * 4095.0f);
     hw.seed.dac.WriteValue(DacHandle::Channel::ONE, cv1);
-    hw.seed.dac.WriteValue(DacHandle::Channel::TWO, cv2);
 
     // Advance step
     currentStep++;
@@ -1501,12 +1796,26 @@ void ProcessDrumPatterns()
         currentStep = 0;
         barCounter++; // Counts 2-bar phrases
 
-        // Auto-randomize patterns after interval
+        // Auto-randomize patterns after interval (every 8 bars)
         if(barCounter >= patternChangeInterval)
         {
-            RandomizePatterns();
+            if(!freezeEnabled)
+            {
+                RandomizePatterns();
+            }
             barCounter = 0;
             fillActive = false; // Reset fill for next cycle
+            cycleCounter++; // Count 8-bar cycles
+
+            // Randomize voice personalities after longer interval (every 32 bars)
+            if(cycleCounter >= personalityChangeInterval)
+            {
+                if(!freezeEnabled)
+                {
+                    RandomizeVoicePersonalities();
+                }
+                cycleCounter = 0;
+            }
         }
     }
 }
@@ -1535,11 +1844,11 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         }
 
         // Update gate pulse counters and turn off gates after pulse width
-        if(gate24ppqn)
+        if(analogGateHigh)
         {
-            gate24ppqnCounter++;
-            if(gate24ppqnCounter >= GATE_PULSE_SAMPLES)
-                gate24ppqn = false;
+            analogGateCounter++;
+            if(analogGateCounter >= ANALOG_GATE_SAMPLES)
+                analogGateHigh = false;
         }
 
         if(gate16th)
@@ -1547,6 +1856,13 @@ void AudioCallback(AudioHandle::InputBuffer  in,
             gate16thCounter++;
             if(gate16thCounter >= GATE_PULSE_SAMPLES)
                 gate16th = false;
+        }
+
+        if(gate2)
+        {
+            gate2Counter++;
+            if(gate2Counter >= GATE_PULSE_SAMPLES)
+                gate2 = false;
         }
 
         if(gateQuarter)
@@ -1564,10 +1880,10 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         }
 
         // Output gate signals (5V = 1.0f, 0V = 0.0f for CV outputs)
-        out[0][i] = gate24ppqn ? 1.0f : 0.0f;    // Out 1: 24 PPQN
-        out[1][i] = gate16th ? 1.0f : 0.0f;      // Out 2: 16th notes
-        out[2][i] = gateQuarter ? 1.0f : 0.0f;   // Out 3: Quarter notes
-        out[3][i] = gateReset ? 1.0f : 0.0f;     // Out 4: Reset pulse
+        out[0][i] = gate16th ? 1.0f : 0.0f;       // Out 1: 16th notes
+        out[1][i] = gate2 ? 1.0f : 0.0f;          // Out 2: Configurable division
+        out[2][i] = gateQuarter ? 1.0f : 0.0f;    // Out 3: Configurable division
+        out[3][i] = gateReset ? 1.0f : 0.0f;      // Out 4: Reset pulse
     }
 }
 
@@ -1623,14 +1939,11 @@ void ToggleRunState()
             TriggerGateReset(); // Trigger reset pulse on start
             currentStep = 0;    // Reset pattern position
             barCounter = 0;     // Reset bar counter
+            cycleCounter = 0;   // Reset cycle counter
             midiClockCounter = 0; // Reset MIDI clock counter
             generationSeed = System::GetUs(); // Initialize seed
+            RandomizeVoicePersonalities(); // Randomize voice personalities at start
             GenerateVoicePatterns(); // Generate initial patterns
-
-            // Initialize Turing Machines with different seeds
-            turingMachine1.Init(System::GetUs());
-            System::Delay(1); // Small delay for different seed
-            turingMachine2.Init(System::GetUs() ^ 0xA5A5A5A5); // Different seed
 
             // Initialize groove configurations
             for(int i = 0; i < NUM_DRUM_VOICES; i++)
@@ -1707,6 +2020,7 @@ void HandleMidiMessage(MidiEvent m)
                     TriggerGateReset(); // Trigger reset pulse on external start
                     currentStep = 0;    // Reset pattern position
                     barCounter = 0;     // Reset bar counter
+                    cycleCounter = 0;   // Reset cycle counter
                     break;
 
                 case Stop:
@@ -1743,6 +2057,8 @@ void UpdateDisplay()
     std::string str;
     char*       cstr;
     char        buffer[30];
+    int         configScrollOffset = 0;
+    int         displayRow = 0;
 
     switch(currentDisplayState)
     {
@@ -1751,7 +2067,8 @@ void UpdateDisplay()
             hw.display.SetCursor(0, 0);
             if(isRunning)
             {
-                int bar = (currentStep / 16) % 8 + 1;  // 1-8
+                // Calculate bar (1-8) using barCounter (counts 2-bar phrases)
+                int bar = (barCounter * 2) + (currentStep / 16) + 1;  // 1-8
                 int beat = (currentStep % 16) / 4 + 1; // 1-4
                 sprintf(buffer, "BPM:%d %s %s %d:%d",
                         (int)bpm,
@@ -1768,43 +2085,30 @@ void UpdateDisplay()
             }
             hw.display.WriteString(buffer, Font_6x8, true);
 
-            // Pattern info
-            if(isRunning)
-            {
-                hw.display.SetCursor(0, 10);
-                sprintf(buffer, "Ptn: K%d C%d H%d", currentKickPattern, currentClapPattern, currentHatPattern);
-                hw.display.WriteString(buffer, Font_6x8, true);
-            }
-
             // Groove pattern display
             hw.display.SetCursor(0, 20);
             str = "Groove: ";
             str += groovePatternNames[currentGroovePattern];
             cstr = &str[0];
             hw.display.WriteString(cstr, Font_6x8, true);
-
-            // Debug: Show groove amount and offset for hi-hat
-            if(isRunning)
-            {
-                hw.display.SetCursor(0, 30);
-                int32_t hatOffset = CalculateGrooveOffset(HIHAT1_CLOSED, currentStep);
-                int8_t patternValue = groovePatterns[currentGroovePattern][currentStep % 16];
-                sprintf(buffer, "S:%2d P:%+4d O:%+4d",
-                        currentStep,
-                        (int)patternValue,
-                        (int)(hatOffset * 1000 / hw.AudioSampleRate()));
-                hw.display.WriteString(buffer, Font_6x8, true);
-            }
             break;
 
         case DISPLAY_CONFIG_MENU:
+        {
             // Show config menu with values (arrow on config name)
             hw.display.SetCursor(0, 0);
             hw.display.WriteString("=== CONFIG ===", Font_6x8, true);
 
+            // Calculate scroll offset to keep selected item visible
+            // Display can show 5 items (rows 10, 20, 30, 40, 50)
+            configScrollOffset = 0;
+            if(currentConfigOption > 4) configScrollOffset = currentConfigOption - 4;
+
             for(int i = 0; i < NUM_CONFIG_OPTIONS; i++)
             {
-                hw.display.SetCursor(0, 10 + i * 10);
+                displayRow = i - configScrollOffset;
+                if(displayRow < 0 || displayRow > 4) continue; // Skip items outside visible area
+                hw.display.SetCursor(0, 10 + displayRow * 10);
 
                 if(i == CONFIG_BPM)
                 {
@@ -1816,17 +2120,37 @@ void UpdateDisplay()
                         sprintf(buffer, " %-11s%d", configOptionNames[i], (int)bpm);
                     }
                 }
+                else if(i == CONFIG_OUT2_DIVISION)
+                {
+                    sprintf(buffer, ">%-11s%s",
+                            (i == currentConfigOption) ? configOptionNames[i] : "",
+                            outDivisionNames[currentOut2Division]);
+                    if(i != currentConfigOption)
+                    {
+                        sprintf(buffer, " %-11s%s", configOptionNames[i], outDivisionNames[currentOut2Division]);
+                    }
+                }
                 else if(i == CONFIG_OUT3_DIVISION)
                 {
                     sprintf(buffer, ">%-11s%s",
                             (i == currentConfigOption) ? configOptionNames[i] : "",
-                            out3DivisionNames[currentOut3Division]);
+                            outDivisionNames[currentOut3Division]);
                     if(i != currentConfigOption)
                     {
-                        sprintf(buffer, " %-11s%s", configOptionNames[i], out3DivisionNames[currentOut3Division]);
+                        sprintf(buffer, " %-11s%s", configOptionNames[i], outDivisionNames[currentOut3Division]);
                     }
                 }
-                else // CONFIG_BACK
+                else if(i == CONFIG_FREEZE)
+                {
+                    sprintf(buffer, ">%-11s%s",
+                            (i == currentConfigOption) ? configOptionNames[i] : "",
+                            freezeEnabled ? "On" : "Off");
+                    if(i != currentConfigOption)
+                    {
+                        sprintf(buffer, " %-11s%s", configOptionNames[i], freezeEnabled ? "On" : "Off");
+                    }
+                }
+                else // CONFIG_PATTERN_INFO or CONFIG_BACK
                 {
                     sprintf(buffer, "%s%s",
                             (i == currentConfigOption) ? ">" : " ",
@@ -1835,16 +2159,25 @@ void UpdateDisplay()
 
                 hw.display.WriteString(buffer, Font_6x8, true);
             }
-            break;
+        }
+        break;
 
         case DISPLAY_CONFIG_EDIT:
+        {
             // Show config menu with values (arrow on value being edited)
             hw.display.SetCursor(0, 0);
             hw.display.WriteString("=== CONFIG ===", Font_6x8, true);
 
+            // Calculate scroll offset to keep selected item visible
+            // Display can show 5 items (rows 10, 20, 30, 40, 50)
+            configScrollOffset = 0;
+            if(currentConfigOption > 4) configScrollOffset = currentConfigOption - 4;
+
             for(int i = 0; i < NUM_CONFIG_OPTIONS; i++)
             {
-                hw.display.SetCursor(0, 10 + i * 10);
+                displayRow = i - configScrollOffset;
+                if(displayRow < 0 || displayRow > 4) continue; // Skip items outside visible area
+                hw.display.SetCursor(0, 10 + displayRow * 10);
 
                 if(i == CONFIG_BPM)
                 {
@@ -1853,14 +2186,28 @@ void UpdateDisplay()
                             (i == currentConfigOption) ? ">" : " ",
                             (int)bpm);
                 }
+                else if(i == CONFIG_OUT2_DIVISION)
+                {
+                    sprintf(buffer, " %-10s%s%s",
+                            configOptionNames[i],
+                            (i == currentConfigOption) ? ">" : " ",
+                            outDivisionNames[currentOut2Division]);
+                }
                 else if(i == CONFIG_OUT3_DIVISION)
                 {
                     sprintf(buffer, " %-10s%s%s",
                             configOptionNames[i],
                             (i == currentConfigOption) ? ">" : " ",
-                            out3DivisionNames[currentOut3Division]);
+                            outDivisionNames[currentOut3Division]);
                 }
-                else // CONFIG_BACK
+                else if(i == CONFIG_FREEZE)
+                {
+                    sprintf(buffer, " %-10s%s%s",
+                            configOptionNames[i],
+                            (i == currentConfigOption) ? ">" : " ",
+                            freezeEnabled ? "On" : "Off");
+                }
+                else // CONFIG_PATTERN_INFO or CONFIG_BACK
                 {
                     sprintf(buffer, " %s", configOptionNames[i]);
                 }
@@ -1873,6 +2220,87 @@ void UpdateDisplay()
             {
                 hw.display.SetCursor(0, 50);
                 hw.display.WriteString("(External Clock)", Font_6x8, true);
+            }
+        }
+        break;
+
+        case DISPLAY_PATTERN_INFO:
+            // Pattern info display
+            hw.display.SetCursor(0, 0);
+            hw.display.WriteString("=PATTERN INFO=", Font_6x8, true);
+
+            // Voice labels (will be updated for index 3 based on which plays backbeat)
+            const char* voiceLabels[] = {"D1", "D2", "ML", "??", "H2", "An"};
+            voiceLabels[3] = (fundamentalBeatVoice == CLAP) ? "SN" : "CL";
+
+            const char* styleNames[] = {"Syn", "Str", "Euc", "AEu", "FKi"};
+            const char* densityNames[] = {"Lo", "Md", "Hi"};
+            const char* interactionSymbols[] = {"", "Div", "AB", "AH", "A2"};
+
+            // We have 7 total lines: 1 fundamental beat + 6 generative voices
+            // Display can show 4 lines at once (rows 10, 24, 38, 52) - tighter spacing for 64px display
+            int totalLines = 7;
+            int maxScroll = totalLines - 4;
+
+            // Display 4 lines starting from scroll offset
+            for(int i = 0; i < 4; i++)
+            {
+                int lineIdx = i + patternInfoScroll;
+                if(lineIdx >= totalLines) break;
+
+                hw.display.SetCursor(0, 10 + i * 14);
+
+                if(lineIdx == 0)
+                {
+                    // First line: fundamental beat
+                    char beatVoiceName = (fundamentalBeatVoice == CLAP) ? 'C' : 'S';
+                    sprintf(buffer, "%-2c:Fund Beat", beatVoiceName);
+                }
+                else
+                {
+                    // Generative voices (lineIdx 1-6 = voiceIdx 0-5)
+                    int voiceIdx = lineIdx - 1;
+                    VoiceConfig* voice = &generativeVoices[voiceIdx];
+
+                    // Find interaction partner name
+                    char partnerName[4] = "";
+                    if(voice->interaction != INTERACTION_NONE)
+                    {
+                        // Find which voice index is the partner
+                        for(int j = 0; j < 6; j++)
+                        {
+                            if(generativeVoices[j].voice == voice->interactionPartner)
+                            {
+                                strncpy(partnerName, voiceLabels[j], 3);
+                                partnerName[2] = '\0';
+                                break;
+                            }
+                        }
+                    }
+
+                    // Format: "D1 :Euc Hi L32 >D2" (aligned columns)
+                    sprintf(buffer, "%-2s:%s %s L%-2d%s%s",
+                            voiceLabels[voiceIdx],
+                            styleNames[voice->rhythmStyle],
+                            densityNames[voice->density],
+                            voice->patternLength,
+                            (voice->interaction != INTERACTION_NONE) ? " >" : "",
+                            partnerName);
+                }
+
+                hw.display.WriteString(buffer, Font_6x8, true);
+            }
+
+            // Show scroll indicators
+            if(patternInfoScroll > 0)
+            {
+                hw.display.SetCursor(120, 10);
+                hw.display.WriteString("^", Font_6x8, true);
+            }
+            if(patternInfoScroll < maxScroll)
+            {
+                hw.display.SetCursor(120, 50);
+                hw.display.WriteString("v", Font_6x8, true);
             }
             break;
     }
@@ -1912,8 +2340,8 @@ void ProcessControls()
             if(inc != 0)
             {
                 int option = (int)currentConfigOption + inc;
-                if(option < 0) option = NUM_CONFIG_OPTIONS - 1;
-                if(option >= NUM_CONFIG_OPTIONS) option = 0;
+                if(option < 0) option = 0;
+                if(option >= NUM_CONFIG_OPTIONS) option = NUM_CONFIG_OPTIONS - 1;
                 currentConfigOption = (ConfigOption)option;
                 lastEncoderActivity = now;
             }
@@ -1924,6 +2352,18 @@ void ProcessControls()
                 {
                     // Back to default display
                     currentDisplayState = DISPLAY_DEFAULT;
+                }
+                else if(currentConfigOption == CONFIG_PATTERN_INFO)
+                {
+                    // Enter pattern info display
+                    currentDisplayState = DISPLAY_PATTERN_INFO;
+                    patternInfoScroll = 0;
+                }
+                else if(currentConfigOption == CONFIG_FREEZE)
+                {
+                    // Toggle freeze directly (binary option)
+                    freezeEnabled = !freezeEnabled;
+                    SaveSettings();
                 }
                 else
                 {
@@ -1954,14 +2394,25 @@ void ProcessControls()
                         }
                         break;
 
+                    case CONFIG_OUT2_DIVISION:
+                        {
+                            int div = (int)currentOut2Division + inc;
+                            if(div < 0) div = 0;
+                            if(div >= NUM_OUT_DIVISIONS) div = NUM_OUT_DIVISIONS - 1;
+                            currentOut2Division = (OutDivision)div;
+                        }
+                        break;
+
                     case CONFIG_OUT3_DIVISION:
                         {
                             int div = (int)currentOut3Division + inc;
-                            if(div < 0) div = NUM_OUT3_DIVISIONS - 1;
-                            if(div >= NUM_OUT3_DIVISIONS) div = 0;
-                            currentOut3Division = (Out3Division)div;
+                            if(div < 0) div = 0;
+                            if(div >= NUM_OUT_DIVISIONS) div = NUM_OUT_DIVISIONS - 1;
+                            currentOut3Division = (OutDivision)div;
                         }
                         break;
+
+                    // CONFIG_FREEZE is handled directly in menu, not in edit mode
 
                     default:
                         break;
@@ -1975,6 +2426,22 @@ void ProcessControls()
 
                 currentDisplayState = DISPLAY_CONFIG_MENU;
                 lastEncoderActivity = now;
+            }
+            break;
+
+        case DISPLAY_PATTERN_INFO:
+            // In pattern info mode, encoder scrolls
+            if(inc != 0)
+            {
+                patternInfoScroll += inc;
+                if(patternInfoScroll < 0) patternInfoScroll = 0;
+                int maxScroll = 3; // 7 total lines - 4 visible = 3 max scroll
+                if(patternInfoScroll > maxScroll) patternInfoScroll = maxScroll;
+            }
+            // Encoder button returns to config menu
+            else if(buttonPressed)
+            {
+                currentDisplayState = DISPLAY_CONFIG_MENU;
             }
             break;
     }
@@ -2004,8 +2471,15 @@ void ProcessClock()
         // Trigger 16th note gate
         TriggerGate16th();
 
-        // Trigger OUT3 gate based on division setting
-        if(ShouldTriggerOut3(currentStep, barCounter))
+        // Trigger OUT2 and OUT3 gates based on division settings
+        // Calculate actual bar number (0-7) and step within bar (0-15)
+        uint8_t actualBar = (barCounter * 2) + (currentStep / 16);
+        uint8_t stepInBar = currentStep % 16;
+        if(ShouldTriggerOut2(stepInBar, actualBar))
+        {
+            TriggerGate2();
+        }
+        if(ShouldTriggerOut3(stepInBar, actualBar))
         {
             TriggerGateQuarter();
         }
@@ -2023,7 +2497,7 @@ void ProcessClock()
         }
     }
 
-    // Handle gate pulse timing for gate out port
+    // Handle gate pulse timing for 16th note gate (on Audio Out 1)
     if(gateHigh)
     {
         gateHighCounter++;
@@ -2035,8 +2509,9 @@ void ProcessClock()
         }
     }
 
-    // Set gate output
-    dsy_gpio_write(&hw.gate_output, gateHigh ? 1 : 0);
+    // Set gate output to Analog voice gate
+    // Note: analogGateHigh timing is managed in AudioCallback at 48kHz
+    dsy_gpio_write(&hw.gate_output, analogGateHigh ? 1 : 0);
 }
 
 int main(void)
