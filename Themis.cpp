@@ -111,6 +111,14 @@ enum ConfigOption
     CONFIG_OUT2_DIVISION,
     CONFIG_OUT3_DIVISION,
     CONFIG_FREEZE,
+    CONFIG_MELODY_SCALE,
+    CONFIG_MELODY_ROOT,
+    CONFIG_CV_STYLE,
+    CONFIG_MIDI_STYLE,
+    CONFIG_MIDI_MEL_CH,
+    CONFIG_MELODY_FREEZE,
+    CONFIG_TUNE_MODE,
+    CONFIG_RANDOMIZE_ALL,
     CONFIG_PATTERN_INFO,
     CONFIG_BACK,
     NUM_CONFIG_OPTIONS
@@ -120,7 +128,15 @@ const char* configOptionNames[NUM_CONFIG_OPTIONS] = {
     "BPM",
     "OUT2 div",
     "OUT3 div",
-    "Freeze",
+    "DrumFreeze",
+    "Scale",
+    "Root",
+    "CV Style",
+    "MIDI Style",
+    "MIDI Ch",
+    "MelFreeze",
+    "TuneMode",
+    "Randomize!",
     "Pattern info",
     "Back"
 };
@@ -168,8 +184,14 @@ struct PersistentSettings
     float bpm;                // BPM setting
     uint8_t out2Division;     // OUT2 division setting
     uint8_t out3Division;     // OUT3 division setting
-    uint8_t freezeEnabled;    // Freeze pattern/personality randomization
-    uint8_t reserved[22];     // Reserved for future use (total 32 bytes)
+    uint8_t freezeEnabled;    // Freeze drum pattern/personality randomization
+    uint8_t melodyScale;      // Shared melody scale type
+    uint8_t melodyRoot;       // Shared melody root note (0-11)
+    uint8_t cvMelodyStyle;    // CV Melody style
+    uint8_t midiMelodyStyle;  // MIDI Melody style
+    uint8_t midiMelChannel;   // MIDI Melody channel (0-15)
+    uint8_t melodyFreezeEnabled; // Freeze melody randomization
+    uint8_t reserved[17];     // Reserved for future use (total 32 bytes)
 };
 
 PersistentSettings settings;
@@ -234,6 +256,33 @@ const uint8_t TRIGGER_QUEUE_SIZE = 32; // Support up to 32 queued triggers
 MidiTrigger triggerQueue[TRIGGER_QUEUE_SIZE];
 uint8_t triggerQueueHead = 0;
 uint8_t triggerQueueTail = 0;
+
+// Melody trigger structure (for groove-timed melody notes)
+enum MelodyVoiceType { MELODY_CV, MELODY_MIDI };
+struct MelodyTrigger
+{
+    MelodyVoiceType voiceType;
+    int8_t note;             // Semitone value for CV or MIDI note
+    uint64_t fireSample;     // When to trigger
+    bool active;
+
+    void Init()
+    {
+        active = false;
+        fireSample = 0;
+        note = 0;
+        voiceType = MELODY_CV;
+    }
+};
+
+// Melody trigger queue
+const uint8_t MELODY_QUEUE_SIZE = 16;
+MelodyTrigger melodyQueue[MELODY_QUEUE_SIZE];
+uint8_t melodyQueueHead = 0;
+uint8_t melodyQueueTail = 0;
+
+// Melody groove amounts (similar to drum voices)
+float melodyGrooveAmount = 0.5f;  // 50% groove timing for melody
 
 // Global sample counter (sample-accurate timing)
 volatile uint64_t globalSampleCounter = 0;
@@ -625,6 +674,128 @@ enum RhythmStyle
     NUM_RHYTHM_STYLES
 };
 
+// ========================================
+// Melody Generation System
+// ========================================
+
+// Scale types
+enum ScaleType
+{
+    SCALE_MINOR,            // Natural minor: 0, 2, 3, 5, 7, 8, 10
+    SCALE_MINOR_BLUES,      // Minor blues: 0, 3, 5, 6, 7, 10
+    SCALE_MINOR_PENTATONIC, // Minor pentatonic: 0, 3, 5, 7, 10
+    SCALE_GYPSY,            // Hungarian Gypsy: 0, 2, 3, 6, 7, 8, 11
+    NUM_SCALE_TYPES
+};
+
+const char* scaleNames[NUM_SCALE_TYPES] = {
+    "Minor",
+    "MinBlue",
+    "MinPent",
+    "Gypsy"
+};
+
+// Scale intervals (semitones from root)
+const int8_t scaleMinor[] = {0, 2, 3, 5, 7, 8, 10};
+const int8_t scaleMinorBlues[] = {0, 3, 5, 6, 7, 10};
+const int8_t scaleMinorPentatonic[] = {0, 3, 5, 7, 10};
+const int8_t scaleGypsy[] = {0, 2, 3, 6, 7, 8, 11};
+
+const int8_t scaleLengths[NUM_SCALE_TYPES] = {7, 6, 5, 7};
+
+// Root note names (0-11 = C to B)
+const char* rootNoteNames[12] = {
+    "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
+};
+
+// Melody style types
+enum MelodyStyle
+{
+    MELODY_SUPPORTING,      // Sparse, follows rhythm, few note changes
+    MELODY_ARPEGGIATOR,     // Dense, cyclic chord/scale patterns
+    NUM_MELODY_STYLES
+};
+
+const char* melodyStyleNames[NUM_MELODY_STYLES] = {
+    "Support",
+    "Arpeg"
+};
+
+// Supporting style sub-types (randomized)
+enum SupportingSubStyle
+{
+    SUPPORT_FOLLOW_KICK,    // Notes trigger on kick hits
+    SUPPORT_OWN_SPARSE,     // Independent sparse pattern
+    SUPPORT_SUBSET_KICK,    // Subset of kick hits (even sparser)
+    NUM_SUPPORTING_SUBSTYLES
+};
+
+// Arpeggiator sub-types (randomized)
+enum ArpSubStyle
+{
+    ARP_CHORD_TONES,        // Cycles through root, 3rd, 5th, (7th)
+    ARP_SCALE_ASCENDING,    // Moves up through scale degrees
+    ARP_SCALE_RANDOM,       // Random notes from scale, dense rhythm
+    NUM_ARP_SUBSTYLES
+};
+
+// Melody voice configuration
+struct MelodyConfig
+{
+    MelodyStyle style;
+    uint8_t subStyle;           // Supporting or Arp sub-style
+    uint32_t rhythmPattern;     // When notes trigger
+    uint8_t patternLength;      // Pattern length (32 steps default)
+    int8_t noteSequence[32];    // Pre-generated note sequence (semitones from C2)
+    uint8_t sequencePos;        // Current position in note sequence
+    uint8_t currentOctave;      // Current octave offset (0-2 for 3 octaves)
+    bool active;
+};
+
+MelodyConfig melodyVoice = {
+    MELODY_SUPPORTING,  // Default style
+    SUPPORT_FOLLOW_KICK,// Default sub-style
+    0,                  // Rhythm pattern (generated)
+    32,                 // Pattern length
+    {0},                // Note sequence (generated)
+    0,                  // Sequence position
+    0,                  // Current octave
+    true                // Active
+};
+
+// MIDI Melody Voice (same structure, outputs via MIDI)
+MelodyConfig melodyMidiVoice = {
+    MELODY_ARPEGGIATOR, // Default style (different from CV voice)
+    ARP_CHORD_TONES,    // Default sub-style
+    0,                  // Rhythm pattern (generated)
+    32,                 // Pattern length
+    {0},                // Note sequence (generated)
+    0,                  // Sequence position
+    0,                  // Current octave
+    true                // Active
+};
+
+// Shared melody settings (both voices use the same root and scale)
+ScaleType melodyScale = SCALE_MINOR;
+uint8_t melodyRoot = 0;  // 0 = C
+
+// MIDI melody voice settings
+uint8_t melodyMidiChannel = 0;  // MIDI channel 1 (0-indexed)
+uint8_t lastMidiMelodyNote = 0; // Track last note for note-off
+bool midiMelodyNoteOn = false;  // Track if a note is currently on
+
+// Melody freeze (independent from drum freeze)
+bool melodyFreezeEnabled = false;
+
+// Tune mode - outputs middle C quarter notes on both melody channels for VCO tuning
+bool tuneModeEnabled = false;
+
+// Function prototypes for melody generation
+void GenerateMelodyPattern();
+void RandomizeMelodyPersonality();
+int8_t GetScaleNote(ScaleType scale, uint8_t root, int8_t degree);
+float MelodyNoteToCV(int8_t semitone);
+
 // Density levels for pattern generation
 enum DensityLevel
 {
@@ -895,6 +1066,12 @@ void SaveSettings()
     settings.out2Division = (uint8_t)currentOut2Division;
     settings.out3Division = (uint8_t)currentOut3Division;
     settings.freezeEnabled = freezeEnabled ? 1 : 0;
+    settings.melodyScale = (uint8_t)melodyScale;
+    settings.melodyRoot = melodyRoot;
+    settings.cvMelodyStyle = (uint8_t)melodyVoice.style;
+    settings.midiMelodyStyle = (uint8_t)melodyMidiVoice.style;
+    settings.midiMelChannel = melodyMidiChannel;
+    settings.melodyFreezeEnabled = melodyFreezeEnabled ? 1 : 0;
 
     // Write to QSPI flash
     size_t size = sizeof(PersistentSettings);
@@ -947,6 +1124,56 @@ void LoadSettings()
 
         // Load freeze setting
         freezeEnabled = (settings.freezeEnabled != 0);
+
+        // Load shared melody scale and root
+        if(settings.melodyScale < NUM_SCALE_TYPES)
+        {
+            melodyScale = (ScaleType)settings.melodyScale;
+        }
+        else
+        {
+            melodyScale = SCALE_MINOR;
+        }
+
+        if(settings.melodyRoot < 12)
+        {
+            melodyRoot = settings.melodyRoot;
+        }
+        else
+        {
+            melodyRoot = 0; // Default to C
+        }
+
+        // Load CV melody style
+        if(settings.cvMelodyStyle < NUM_MELODY_STYLES)
+        {
+            melodyVoice.style = (MelodyStyle)settings.cvMelodyStyle;
+        }
+        else
+        {
+            melodyVoice.style = MELODY_SUPPORTING;
+        }
+
+        // Load MIDI melody style
+        if(settings.midiMelodyStyle < NUM_MELODY_STYLES)
+        {
+            melodyMidiVoice.style = (MelodyStyle)settings.midiMelodyStyle;
+        }
+        else
+        {
+            melodyMidiVoice.style = MELODY_ARPEGGIATOR;
+        }
+
+        if(settings.midiMelChannel < 16)
+        {
+            melodyMidiChannel = settings.midiMelChannel;
+        }
+        else
+        {
+            melodyMidiChannel = 0; // Default to channel 1
+        }
+
+        melodyFreezeEnabled = (settings.melodyFreezeEnabled != 0);
     }
     else
     {
@@ -955,6 +1182,12 @@ void LoadSettings()
         currentOut2Division = DIV_1_8;
         currentOut3Division = DIV_1_4;
         freezeEnabled = false;
+        melodyScale = SCALE_MINOR;
+        melodyRoot = 0;
+        melodyVoice.style = MELODY_SUPPORTING;
+        melodyMidiVoice.style = MELODY_ARPEGGIATOR;
+        melodyMidiChannel = 0;
+        melodyFreezeEnabled = false;
 
         // Save defaults
         SaveSettings();
@@ -987,6 +1220,14 @@ void InitTriggerQueue()
     }
     triggerQueueHead = 0;
     triggerQueueTail = 0;
+
+    // Initialize melody queue
+    for(int i = 0; i < MELODY_QUEUE_SIZE; i++)
+    {
+        melodyQueue[i].Init();
+    }
+    melodyQueueHead = 0;
+    melodyQueueTail = 0;
 }
 
 // Randomize groove pattern and per-voice amounts
@@ -1015,6 +1256,129 @@ void RandomizeGroove()
 
         seed = System::GetUs() ^ (i * 98765); // Different seed for velocity
         grooveVelocityAmount[i] = (float)(seed % 101) / 100.0f; // 0-100% velocity
+    }
+
+    // Randomize melody groove amount (25-75%)
+    uint32_t melSeed = System::GetUs();
+    melodyGrooveAmount = 0.25f + (float)(melSeed % 51) / 100.0f;
+}
+
+// Calculate groove offset in samples for melody (uses same patterns as drums)
+int32_t CalculateMelodyGrooveOffset(uint8_t step)
+{
+    // Get step within 16-step pattern
+    uint8_t patternStep = step % 16;
+
+    // Get base offset percentage from current groove pattern
+    int8_t baseOffsetPercent = groovePatterns[currentGroovePattern][patternStep];
+
+    // Scale by melody groove amount
+    float scaledOffsetPercent = (float)baseOffsetPercent * melodyGrooveAmount;
+
+    // Convert to samples based on current BPM
+    float samplesPerSixteenth = hw.AudioSampleRate() * 15.0f / bpm;
+    float offsetFloat = (scaledOffsetPercent / 100.0f) * samplesPerSixteenth;
+
+    return (int32_t)offsetFloat;
+}
+
+// Schedule a melody trigger with groove timing
+void ScheduleMelodyTrigger(MelodyVoiceType voiceType, int8_t note, uint8_t step, uint64_t nextBeatSample)
+{
+    int32_t offset = CalculateMelodyGrooveOffset(step);
+    uint64_t fireSample = nextBeatSample + offset;
+
+    // If fire time is in the past or very close, skip (note will be handled next step)
+    if(fireSample <= globalSampleCounter + 48)
+    {
+        // Fire immediately - find queue slot
+    }
+
+    // Find next available queue slot
+    uint8_t nextHead = (melodyQueueHead + 1) % MELODY_QUEUE_SIZE;
+
+    // Check for queue overflow - skip if full
+    if(nextHead == melodyQueueTail)
+    {
+        return; // Queue full, skip this trigger
+    }
+
+    // Add to queue
+    melodyQueue[melodyQueueHead].voiceType = voiceType;
+    melodyQueue[melodyQueueHead].note = note;
+    melodyQueue[melodyQueueHead].fireSample = fireSample;
+    melodyQueue[melodyQueueHead].active = true;
+
+    melodyQueueHead = nextHead;
+}
+
+// Process melody trigger queue (called from audio callback)
+void ProcessMelodyQueue()
+{
+    uint8_t checkCount = 0;
+    uint8_t currentIndex = melodyQueueTail;
+
+    while(currentIndex != melodyQueueHead && checkCount < MELODY_QUEUE_SIZE)
+    {
+        MelodyTrigger* trigger = &melodyQueue[currentIndex];
+
+        if(trigger->active && globalSampleCounter >= trigger->fireSample)
+        {
+            if(trigger->voiceType == MELODY_CV)
+            {
+                // Trigger CV gate
+                analogGateHigh = true;
+                analogGateCounter = 0;
+
+                // Output CV voltage
+                float cvVoltage = MelodyNoteToCV(trigger->note);
+                uint16_t cv1 = (uint16_t)(cvVoltage / 5.0f * 4095.0f);
+                hw.seed.dac.WriteValue(DacHandle::Channel::ONE, cv1);
+            }
+            else // MELODY_MIDI
+            {
+                // Send note-off for previous note if playing
+                if(midiMelodyNoteOn)
+                {
+                    uint8_t noteOff[3] = {
+                        static_cast<uint8_t>(0x80 | melodyMidiChannel),
+                        lastMidiMelodyNote,
+                        0
+                    };
+                    hw.midi.SendMessage(noteOff, 3);
+                }
+
+                // Calculate MIDI note (C2 = 36, add semitones)
+                uint8_t midiNote = 36 + trigger->note;
+                if(midiNote > 127) midiNote = 127;
+
+                // Send note-on
+                uint8_t noteOn[3] = {
+                    static_cast<uint8_t>(0x90 | melodyMidiChannel),
+                    midiNote,
+                    100  // Fixed velocity for melody
+                };
+                hw.midi.SendMessage(noteOn, 3);
+
+                lastMidiMelodyNote = midiNote;
+                midiMelodyNoteOn = true;
+            }
+
+            // Mark as processed
+            trigger->active = false;
+
+            // Advance tail if this was the tail entry
+            if(currentIndex == melodyQueueTail)
+            {
+                while(melodyQueueTail != melodyQueueHead && !melodyQueue[melodyQueueTail].active)
+                {
+                    melodyQueueTail = (melodyQueueTail + 1) % MELODY_QUEUE_SIZE;
+                }
+            }
+        }
+
+        currentIndex = (currentIndex + 1) % MELODY_QUEUE_SIZE;
+        checkCount++;
     }
 }
 
@@ -1661,6 +2025,388 @@ void GenerateVoicePatterns()
     }
 }
 
+// ========================================
+// Melody Generation Functions
+// ========================================
+
+// Get a note from the scale at a given degree (can span multiple octaves)
+int8_t GetScaleNote(ScaleType scale, uint8_t root, int8_t degree)
+{
+    const int8_t* scaleNotes;
+    int8_t scaleLen;
+
+    switch(scale)
+    {
+        case SCALE_MINOR:
+            scaleNotes = scaleMinor;
+            scaleLen = 7;
+            break;
+        case SCALE_MINOR_BLUES:
+            scaleNotes = scaleMinorBlues;
+            scaleLen = 6;
+            break;
+        case SCALE_MINOR_PENTATONIC:
+            scaleNotes = scaleMinorPentatonic;
+            scaleLen = 5;
+            break;
+        case SCALE_GYPSY:
+            scaleNotes = scaleGypsy;
+            scaleLen = 7;
+            break;
+        default:
+            scaleNotes = scaleMinor;
+            scaleLen = 7;
+    }
+
+    // Handle negative degrees and octave wrapping
+    int8_t octave = 0;
+    while(degree < 0)
+    {
+        degree += scaleLen;
+        octave--;
+    }
+    octave += degree / scaleLen;
+    degree = degree % scaleLen;
+
+    // Calculate final semitone (relative to C2 = 0V)
+    return root + scaleNotes[degree] + (octave * 12);
+}
+
+// Convert semitone to CV voltage (1V/octave, 0V = C2)
+float MelodyNoteToCV(int8_t semitone)
+{
+    // 0V = C2 (semitone 0), 3V = C5 (semitone 36)
+    // 1V/octave = 1V per 12 semitones
+    float voltage = (float)semitone / 12.0f;
+    // Clamp to 0-3V range (3 octaves)
+    if(voltage < 0.0f) voltage = 0.0f;
+    if(voltage > 3.0f) voltage = 3.0f;
+    return voltage;
+}
+
+// Generate rhythm pattern for a melody voice based on style and sub-style
+void GenerateMelodyRhythmFor(MelodyConfig* voice)
+{
+    uint32_t seed = System::GetUs();
+    voice->rhythmPattern = 0;
+    voice->patternLength = 32;
+
+    if(voice->style == MELODY_SUPPORTING)
+    {
+        // Strong beat positions (quarter notes: 0, 4, 8, 12, 16, 20, 24, 28)
+        // Half notes: 0, 8, 16, 24
+        // Downbeats of each bar: 0, 16
+        const int strongBeats[] = {0, 4, 8, 12, 16, 20, 24, 28};  // Quarter notes
+        const int halfBeats[] = {0, 8, 16, 24};  // Half notes
+
+        switch(voice->subStyle)
+        {
+            case SUPPORT_FOLLOW_KICK:
+                // Copy current kick pattern directly
+                voice->rhythmPattern = kickPatterns[currentKickPattern];
+                break;
+
+            case SUPPORT_OWN_SPARSE:
+                // Straight sparse pattern using only strong beats
+                // Choose 3-5 quarter note positions
+                {
+                    int hitCount = 3 + (seed % 3);  // 3-5 notes
+                    uint8_t usedPositions = 0;
+
+                    for(int i = 0; i < hitCount; i++)
+                    {
+                        // Pick from strong beats array, avoid repeats
+                        int attempts = 0;
+                        int idx;
+                        do {
+                            idx = (seed >> (i * 3 + attempts)) % 8;
+                            attempts++;
+                        } while((usedPositions & (1 << idx)) && attempts < 10);
+
+                        usedPositions |= (1 << idx);
+                        voice->rhythmPattern |= (1 << strongBeats[idx]);
+                    }
+
+                    // Always include downbeat of bar 1
+                    voice->rhythmPattern |= (1 << 0);
+                }
+                break;
+
+            case SUPPORT_SUBSET_KICK:
+                // Take kick hits but prefer strong beats
+                {
+                    uint32_t kickPat = kickPatterns[currentKickPattern];
+
+                    // First, always take kick hits on strong beats (quarter notes)
+                    for(int i = 0; i < 8; i++)
+                    {
+                        int pos = strongBeats[i];
+                        if(kickPat & (1 << pos))
+                        {
+                            voice->rhythmPattern |= (1 << pos);
+                        }
+                    }
+
+                    // If we have very few hits, add some from half beat positions
+                    if(__builtin_popcount(voice->rhythmPattern) < 2)
+                    {
+                        for(int i = 0; i < 4; i++)
+                        {
+                            voice->rhythmPattern |= (1 << halfBeats[i]);
+                        }
+                    }
+                }
+                break;
+        }
+    }
+    else // MELODY_ARPEGGIATOR
+    {
+        // Arpeggiator: sparse 4-5 note patterns that repeat
+        // 8th note grid positions (every other 16th): 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30
+        const int eighthNotes[] = {0, 2, 4, 6, 8, 10, 12, 14};  // First bar 8th notes
+
+        switch(voice->subStyle)
+        {
+            case ARP_CHORD_TONES:
+                // 4-5 notes per bar, repeating pattern
+                // Create a 1-bar pattern that repeats
+                {
+                    int notesPerBar = 4 + (seed % 2);  // 4-5 notes
+                    uint8_t usedPositions = 0;
+
+                    for(int i = 0; i < notesPerBar; i++)
+                    {
+                        int attempts = 0;
+                        int idx;
+                        do {
+                            idx = (seed >> (i * 3 + attempts)) % 8;
+                            attempts++;
+                        } while((usedPositions & (1 << idx)) && attempts < 10);
+
+                        usedPositions |= (1 << idx);
+                        // Set in both bars (first bar and second bar)
+                        voice->rhythmPattern |= (1 << eighthNotes[idx]);
+                        voice->rhythmPattern |= (1 << (eighthNotes[idx] + 16));
+                    }
+                }
+                break;
+
+            case ARP_SCALE_ASCENDING:
+                // 5 notes ascending, starting on downbeat
+                // Pattern: 1--2--3--4--5--- repeated
+                {
+                    int notesPerBar = 5;
+                    // Space notes evenly across the bar (roughly every 3 16th notes)
+                    int positions[] = {0, 3, 6, 10, 13};  // Evenly spaced
+
+                    for(int i = 0; i < notesPerBar; i++)
+                    {
+                        voice->rhythmPattern |= (1 << positions[i]);
+                        voice->rhythmPattern |= (1 << (positions[i] + 16));  // Repeat in bar 2
+                    }
+                }
+                break;
+
+            case ARP_SCALE_RANDOM:
+                // 4-6 random positions per bar, slightly syncopated
+                {
+                    int notesPerBar = 4 + (seed % 3);  // 4-6 notes
+                    uint32_t usedPositions = 0;
+
+                    for(int i = 0; i < notesPerBar; i++)
+                    {
+                        int attempts = 0;
+                        int pos;
+                        do {
+                            // Allow 16th note positions but prefer 8th notes
+                            if((seed >> (i + attempts)) % 3 == 0)
+                                pos = (seed >> (i * 4 + attempts)) % 16;  // Any 16th in first bar
+                            else
+                                pos = eighthNotes[(seed >> (i * 3 + attempts)) % 8];  // 8th notes
+                            attempts++;
+                        } while((usedPositions & (1 << pos)) && attempts < 15);
+
+                        usedPositions |= (1 << pos);
+                        voice->rhythmPattern |= (1 << pos);
+                        voice->rhythmPattern |= (1 << (pos + 16));  // Mirror to bar 2
+                    }
+                }
+                break;
+        }
+    }
+}
+
+// Generate note sequence for a melody voice based on style
+// Uses shared melodyScale and melodyRoot for both voices
+void GenerateMelodyNotesFor(MelodyConfig* voice)
+{
+    uint32_t seed = System::GetUs();
+    voice->sequencePos = 0;
+
+    if(voice->style == MELODY_SUPPORTING)
+    {
+        // Supporting: Few different notes, low octave, minimal movement
+        // Use 2-4 distinct notes, mostly root and 5th
+        int8_t baseNotes[4];
+        baseNotes[0] = GetScaleNote(melodyScale, melodyRoot, 0);  // Root
+        baseNotes[1] = GetScaleNote(melodyScale, melodyRoot, 4);  // 5th
+        baseNotes[2] = GetScaleNote(melodyScale, melodyRoot, 2);  // 3rd
+        baseNotes[3] = GetScaleNote(melodyScale, melodyRoot, -1); // 7th below
+
+        // Fill sequence with mostly root and 5th
+        for(int i = 0; i < 32; i++)
+        {
+            int noteChoice = (seed >> (i * 2)) % 10;
+            if(noteChoice < 5)
+                voice->noteSequence[i] = baseNotes[0]; // Root 50%
+            else if(noteChoice < 8)
+                voice->noteSequence[i] = baseNotes[1]; // 5th 30%
+            else if(noteChoice < 9)
+                voice->noteSequence[i] = baseNotes[2]; // 3rd 10%
+            else
+                voice->noteSequence[i] = baseNotes[3]; // 7th 10%
+        }
+
+        // Occasional octave jump (10% chance per note)
+        for(int i = 0; i < 32; i++)
+        {
+            if(((seed >> (i + 8)) % 10) == 0)
+            {
+                voice->noteSequence[i] += 12; // Jump up one octave
+            }
+        }
+    }
+    else // MELODY_ARPEGGIATOR
+    {
+        int8_t scaleLen = scaleLengths[melodyScale];
+
+        switch(voice->subStyle)
+        {
+            case ARP_CHORD_TONES:
+                // 4-5 chord tones that repeat: root, 3rd, 5th, (octave), (7th)
+                {
+                    int8_t chordNotes[5];
+                    int numNotes = 4 + (seed % 2);  // 4-5 notes
+                    int8_t chordDegrees[] = {0, 2, 4, 7, 9}; // root, 3rd, 5th, octave, 9th
+
+                    // Generate the chord note set
+                    for(int n = 0; n < numNotes; n++)
+                    {
+                        chordNotes[n] = GetScaleNote(melodyScale, melodyRoot, chordDegrees[n]);
+                    }
+
+                    // Fill sequence by cycling through chord notes
+                    for(int i = 0; i < 32; i++)
+                    {
+                        // Same pattern in bar 1 and bar 2
+                        int barPos = i % 16;
+                        voice->noteSequence[i] = chordNotes[barPos % numNotes];
+                    }
+                }
+                break;
+
+            case ARP_SCALE_ASCENDING:
+                // 5 ascending scale notes that repeat
+                {
+                    int8_t arpNotes[5];
+                    for(int n = 0; n < 5; n++)
+                    {
+                        arpNotes[n] = GetScaleNote(melodyScale, melodyRoot, n);
+                    }
+
+                    // Fill sequence - same 5-note pattern repeats
+                    for(int i = 0; i < 32; i++)
+                    {
+                        int barPos = i % 16;
+                        voice->noteSequence[i] = arpNotes[barPos % 5];
+                    }
+                }
+                break;
+
+            case ARP_SCALE_RANDOM:
+                // 4-6 random scale notes that repeat
+                {
+                    int8_t arpNotes[6];
+                    int numNotes = 4 + (seed % 3);  // 4-6 notes
+
+                    // Generate random scale degrees within 2 octaves
+                    for(int n = 0; n < numNotes; n++)
+                    {
+                        int degree = (seed >> (n * 4)) % (scaleLen * 2);
+                        arpNotes[n] = GetScaleNote(melodyScale, melodyRoot, degree);
+                    }
+
+                    // Fill sequence by cycling through random notes
+                    for(int i = 0; i < 32; i++)
+                    {
+                        int barPos = i % 16;
+                        voice->noteSequence[i] = arpNotes[barPos % numNotes];
+                    }
+                }
+                break;
+        }
+    }
+}
+
+// Generate complete melody pattern for a voice (rhythm + notes)
+void GenerateMelodyPatternFor(MelodyConfig* voice)
+{
+    GenerateMelodyRhythmFor(voice);
+    GenerateMelodyNotesFor(voice);
+}
+
+// Generate patterns for both melody voices
+void GenerateMelodyPattern()
+{
+    GenerateMelodyPatternFor(&melodyVoice);
+    GenerateMelodyPatternFor(&melodyMidiVoice);
+}
+
+// Randomize personality for a single melody voice
+void RandomizeMelodyPersonalityFor(MelodyConfig* voice)
+{
+    uint32_t seed = System::GetUs();
+
+    // Randomize main style
+    voice->style = (MelodyStyle)(seed % NUM_MELODY_STYLES);
+
+    // Randomize sub-style based on main style
+    if(voice->style == MELODY_SUPPORTING)
+    {
+        voice->subStyle = (seed >> 4) % NUM_SUPPORTING_SUBSTYLES;
+    }
+    else
+    {
+        voice->subStyle = (seed >> 4) % NUM_ARP_SUBSTYLES;
+    }
+
+    // Generate new pattern with new personality
+    GenerateMelodyPatternFor(voice);
+}
+
+// Randomize melody personality (style and sub-style) for both voices
+void RandomizeMelodyPersonality()
+{
+    RandomizeMelodyPersonalityFor(&melodyVoice);
+    RandomizeMelodyPersonalityFor(&melodyMidiVoice);
+}
+
+// Randomize ALL parameters (drums + melody) - for config menu
+void RandomizeAllParameters()
+{
+    // Randomize drum patterns
+    RandomizePatterns();
+
+    // Randomize drum voice personalities
+    RandomizeVoicePersonalities();
+
+    // Randomize groove
+    RandomizeGroove();
+
+    // Randomize melody (both voices)
+    RandomizeMelodyPersonality();
+}
+
 // Process drum patterns on each 16th note
 void ProcessDrumPatterns()
 {
@@ -1756,38 +2502,92 @@ void ProcessDrumPatterns()
     }
 
     // Process generative voices (with polyrhythm support)
+    // Note: ANALOG voice is now handled by melody system, skip it in generative voices
     for(int i = 0; i < 6; i++)
     {
         VoiceConfig* voice = &generativeVoices[i];
-        if(voice->active)
+        if(voice->active && voice->voice != ANALOG)
         {
             // Use modulo to loop shorter patterns (polyrhythms)
             uint8_t voiceStep = currentStep % voice->patternLength;
             if(IsStepActive(voice->pattern, voiceStep))
             {
-                if(voice->voice == ANALOG)
-                {
-                    // Analog voice: Trigger gate and set CV
-                    analogGateHigh = true;
-                    analogGateCounter = 0;
-                    // Get velocity for CV (groove-modulated, 0-127)
-                    analogVoiceVelocity = CalculateGrooveVelocity(ANALOG, 100, currentStep); // Base velocity 100
-                }
-                else
-                {
-                    // Regular MIDI voice
-                    ScheduleDrumTriggerWithGroove(voice->voice, 95, currentStep, nextBeatSample);
-                }
+                // Regular MIDI voice
+                ScheduleDrumTriggerWithGroove(voice->voice, 95, currentStep, nextBeatSample);
             }
         }
     }
 
-    // Output Analog voice CV
-    // CV OUT 1: Convert MIDI velocity to 0-5V (velocity 0 = 0V, velocity 127 = 5V)
-    float cvVoltage = (float)analogVoiceVelocity / 127.0f * 5.0f;
-    if(cvVoltage > 5.0f) cvVoltage = 5.0f;
-    uint16_t cv1 = (uint16_t)(cvVoltage / 5.0f * 4095.0f);
-    hw.seed.dac.WriteValue(DacHandle::Channel::ONE, cv1);
+    // Tune mode: output middle C quarter notes on both melody channels
+    if(tuneModeEnabled)
+    {
+        // Quarter notes = every 4 steps (steps 0, 4, 8, 12, 16, 20, 24, 28)
+        bool isQuarterNote = (currentStep % 4) == 0;
+
+        if(isQuarterNote)
+        {
+            // CV output: Middle C = C3 = 1V (semitone 12 from C2)
+            const int8_t middleC_semitone = 12;
+            float cvVoltage = MelodyNoteToCV(middleC_semitone); // 1.0V
+            uint16_t cv1 = (uint16_t)(cvVoltage / 5.0f * 4095.0f);
+            hw.seed.dac.WriteValue(DacHandle::Channel::ONE, cv1);
+
+            // Trigger CV gate
+            analogGateHigh = true;
+            analogGateCounter = 0;
+
+            // MIDI output: Middle C = MIDI note 60
+            const uint8_t middleC_midi = 60;
+
+            // Send note-off for previous note if playing
+            if(midiMelodyNoteOn)
+            {
+                uint8_t noteOff[3] = {
+                    static_cast<uint8_t>(0x80 | melodyMidiChannel),
+                    lastMidiMelodyNote,
+                    0
+                };
+                hw.midi.SendMessage(noteOff, 3);
+            }
+
+            // Send note-on for middle C
+            uint8_t noteOn[3] = {
+                static_cast<uint8_t>(0x90 | melodyMidiChannel),
+                middleC_midi,
+                100
+            };
+            hw.midi.SendMessage(noteOn, 3);
+
+            lastMidiMelodyNote = middleC_midi;
+            midiMelodyNoteOn = true;
+        }
+    }
+    else
+    {
+        // Normal melody processing with groove timing (only when tune mode is off)
+
+        // Schedule CV melody voice with groove timing
+        if(melodyVoice.active)
+        {
+            uint8_t melodyStep = currentStep % melodyVoice.patternLength;
+            if(IsStepActive(melodyVoice.rhythmPattern, melodyStep))
+            {
+                int8_t note = melodyVoice.noteSequence[melodyStep];
+                ScheduleMelodyTrigger(MELODY_CV, note, currentStep, nextBeatSample);
+            }
+        }
+
+        // Schedule MIDI melody voice with groove timing
+        if(melodyMidiVoice.active)
+        {
+            uint8_t midiMelStep = currentStep % melodyMidiVoice.patternLength;
+            if(IsStepActive(melodyMidiVoice.rhythmPattern, midiMelStep))
+            {
+                int8_t note = melodyMidiVoice.noteSequence[midiMelStep];
+                ScheduleMelodyTrigger(MELODY_MIDI, note, currentStep, nextBeatSample);
+            }
+        }
+    }
 
     // Advance step
     currentStep++;
@@ -1803,6 +2603,13 @@ void ProcessDrumPatterns()
             {
                 RandomizePatterns();
             }
+
+            // Melody has independent freeze control
+            if(!melodyFreezeEnabled)
+            {
+                GenerateMelodyPattern();
+            }
+
             barCounter = 0;
             fillActive = false; // Reset fill for next cycle
             cycleCounter++; // Count 8-bar cycles
@@ -1814,6 +2621,13 @@ void ProcessDrumPatterns()
                 {
                     RandomizeVoicePersonalities();
                 }
+
+                // Melody personality also changes at this interval (if not frozen)
+                if(!melodyFreezeEnabled)
+                {
+                    RandomizeMelodyPersonality();
+                }
+
                 cycleCounter = 0;
             }
         }
@@ -1829,6 +2643,9 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     {
         // Process scheduled MIDI triggers (sample-accurate groove timing)
         ProcessTriggerQueue();
+
+        // Process scheduled melody triggers (sample-accurate groove timing)
+        ProcessMelodyQueue();
 
         // Increment global sample counter
         globalSampleCounter++;
@@ -1944,6 +2761,7 @@ void ToggleRunState()
             generationSeed = System::GetUs(); // Initialize seed
             RandomizeVoicePersonalities(); // Randomize voice personalities at start
             GenerateVoicePatterns(); // Generate initial patterns
+            RandomizeMelodyPersonality(); // Randomize melody personality at start
 
             // Initialize groove configurations
             for(int i = 0; i < NUM_DRUM_VOICES; i++)
@@ -2085,12 +2903,36 @@ void UpdateDisplay()
             }
             hw.display.WriteString(buffer, Font_6x8, true);
 
-            // Groove pattern display
-            hw.display.SetCursor(0, 20);
-            str = "Groove: ";
-            str += groovePatternNames[currentGroovePattern];
-            cstr = &str[0];
-            hw.display.WriteString(cstr, Font_6x8, true);
+            // Show tune mode indicator or normal melody info
+            if(tuneModeEnabled)
+            {
+                // Tune mode active - show clear indicator
+                hw.display.SetCursor(0, 12);
+                hw.display.WriteString(">>> TUNE MODE <<<", Font_6x8, true);
+                hw.display.SetCursor(0, 22);
+                hw.display.WriteString("Middle C (1V/60)", Font_6x8, true);
+            }
+            else
+            {
+                // Shared scale/root info (Line 2)
+                hw.display.SetCursor(0, 12);
+                sprintf(buffer, "Key: %s %s",
+                        rootNoteNames[melodyRoot],
+                        scaleNames[melodyScale]);
+                hw.display.WriteString(buffer, Font_6x8, true);
+
+                // CV voice info (Line 3)
+                hw.display.SetCursor(0, 22);
+                sprintf(buffer, "CV: %s", melodyStyleNames[melodyVoice.style]);
+                hw.display.WriteString(buffer, Font_6x8, true);
+
+                // MIDI voice info (Line 4)
+                hw.display.SetCursor(0, 32);
+                sprintf(buffer, "MIDI: %s Ch:%d",
+                        melodyStyleNames[melodyMidiVoice.style],
+                        melodyMidiChannel + 1);
+                hw.display.WriteString(buffer, Font_6x8, true);
+            }
             break;
 
         case DISPLAY_CONFIG_MENU:
@@ -2150,7 +2992,77 @@ void UpdateDisplay()
                         sprintf(buffer, " %-11s%s", configOptionNames[i], freezeEnabled ? "On" : "Off");
                     }
                 }
-                else // CONFIG_PATTERN_INFO or CONFIG_BACK
+                else if(i == CONFIG_MELODY_SCALE)
+                {
+                    sprintf(buffer, ">%-11s%s",
+                            (i == currentConfigOption) ? configOptionNames[i] : "",
+                            scaleNames[melodyScale]);
+                    if(i != currentConfigOption)
+                    {
+                        sprintf(buffer, " %-11s%s", configOptionNames[i], scaleNames[melodyScale]);
+                    }
+                }
+                else if(i == CONFIG_MELODY_ROOT)
+                {
+                    sprintf(buffer, ">%-11s%s",
+                            (i == currentConfigOption) ? configOptionNames[i] : "",
+                            rootNoteNames[melodyRoot]);
+                    if(i != currentConfigOption)
+                    {
+                        sprintf(buffer, " %-11s%s", configOptionNames[i], rootNoteNames[melodyRoot]);
+                    }
+                }
+                else if(i == CONFIG_CV_STYLE)
+                {
+                    sprintf(buffer, ">%-11s%s",
+                            (i == currentConfigOption) ? configOptionNames[i] : "",
+                            melodyStyleNames[melodyVoice.style]);
+                    if(i != currentConfigOption)
+                    {
+                        sprintf(buffer, " %-11s%s", configOptionNames[i], melodyStyleNames[melodyVoice.style]);
+                    }
+                }
+                else if(i == CONFIG_MIDI_STYLE)
+                {
+                    sprintf(buffer, ">%-11s%s",
+                            (i == currentConfigOption) ? configOptionNames[i] : "",
+                            melodyStyleNames[melodyMidiVoice.style]);
+                    if(i != currentConfigOption)
+                    {
+                        sprintf(buffer, " %-11s%s", configOptionNames[i], melodyStyleNames[melodyMidiVoice.style]);
+                    }
+                }
+                else if(i == CONFIG_MIDI_MEL_CH)
+                {
+                    sprintf(buffer, ">%-11s%d",
+                            (i == currentConfigOption) ? configOptionNames[i] : "",
+                            melodyMidiChannel + 1);  // Display 1-indexed
+                    if(i != currentConfigOption)
+                    {
+                        sprintf(buffer, " %-11s%d", configOptionNames[i], melodyMidiChannel + 1);
+                    }
+                }
+                else if(i == CONFIG_MELODY_FREEZE)
+                {
+                    sprintf(buffer, ">%-11s%s",
+                            (i == currentConfigOption) ? configOptionNames[i] : "",
+                            melodyFreezeEnabled ? "On" : "Off");
+                    if(i != currentConfigOption)
+                    {
+                        sprintf(buffer, " %-11s%s", configOptionNames[i], melodyFreezeEnabled ? "On" : "Off");
+                    }
+                }
+                else if(i == CONFIG_TUNE_MODE)
+                {
+                    sprintf(buffer, ">%-11s%s",
+                            (i == currentConfigOption) ? configOptionNames[i] : "",
+                            tuneModeEnabled ? "On" : "Off");
+                    if(i != currentConfigOption)
+                    {
+                        sprintf(buffer, " %-11s%s", configOptionNames[i], tuneModeEnabled ? "On" : "Off");
+                    }
+                }
+                else // CONFIG_PATTERN_INFO, CONFIG_BACK, or CONFIG_RANDOMIZE_ALL
                 {
                     sprintf(buffer, "%s%s",
                             (i == currentConfigOption) ? ">" : " ",
@@ -2207,7 +3119,56 @@ void UpdateDisplay()
                             (i == currentConfigOption) ? ">" : " ",
                             freezeEnabled ? "On" : "Off");
                 }
-                else // CONFIG_PATTERN_INFO or CONFIG_BACK
+                else if(i == CONFIG_MELODY_SCALE)
+                {
+                    sprintf(buffer, " %-10s%s%s",
+                            configOptionNames[i],
+                            (i == currentConfigOption) ? ">" : " ",
+                            scaleNames[melodyScale]);
+                }
+                else if(i == CONFIG_MELODY_ROOT)
+                {
+                    sprintf(buffer, " %-10s%s%s",
+                            configOptionNames[i],
+                            (i == currentConfigOption) ? ">" : " ",
+                            rootNoteNames[melodyRoot]);
+                }
+                else if(i == CONFIG_CV_STYLE)
+                {
+                    sprintf(buffer, " %-10s%s%s",
+                            configOptionNames[i],
+                            (i == currentConfigOption) ? ">" : " ",
+                            melodyStyleNames[melodyVoice.style]);
+                }
+                else if(i == CONFIG_MIDI_STYLE)
+                {
+                    sprintf(buffer, " %-10s%s%s",
+                            configOptionNames[i],
+                            (i == currentConfigOption) ? ">" : " ",
+                            melodyStyleNames[melodyMidiVoice.style]);
+                }
+                else if(i == CONFIG_MIDI_MEL_CH)
+                {
+                    sprintf(buffer, " %-10s%s%d",
+                            configOptionNames[i],
+                            (i == currentConfigOption) ? ">" : " ",
+                            melodyMidiChannel + 1);  // Display 1-indexed
+                }
+                else if(i == CONFIG_MELODY_FREEZE)
+                {
+                    sprintf(buffer, " %-10s%s%s",
+                            configOptionNames[i],
+                            (i == currentConfigOption) ? ">" : " ",
+                            melodyFreezeEnabled ? "On" : "Off");
+                }
+                else if(i == CONFIG_TUNE_MODE)
+                {
+                    sprintf(buffer, " %-10s%s%s",
+                            configOptionNames[i],
+                            (i == currentConfigOption) ? ">" : " ",
+                            tuneModeEnabled ? "On" : "Off");
+                }
+                else // CONFIG_PATTERN_INFO, CONFIG_BACK, or CONFIG_RANDOMIZE_ALL
                 {
                     sprintf(buffer, " %s", configOptionNames[i]);
                 }
@@ -2365,6 +3326,23 @@ void ProcessControls()
                     freezeEnabled = !freezeEnabled;
                     SaveSettings();
                 }
+                else if(currentConfigOption == CONFIG_MELODY_FREEZE)
+                {
+                    // Toggle melody freeze directly (binary option)
+                    melodyFreezeEnabled = !melodyFreezeEnabled;
+                    SaveSettings();
+                }
+                else if(currentConfigOption == CONFIG_TUNE_MODE)
+                {
+                    // Toggle tune mode directly (binary option)
+                    tuneModeEnabled = !tuneModeEnabled;
+                    // Note: tune mode is not saved to flash - it's a temporary mode
+                }
+                else if(currentConfigOption == CONFIG_RANDOMIZE_ALL)
+                {
+                    // Randomize all parameters immediately
+                    RandomizeAllParameters();
+                }
                 else
                 {
                     // Enter edit mode for selected config
@@ -2413,6 +3391,73 @@ void ProcessControls()
                         break;
 
                     // CONFIG_FREEZE is handled directly in menu, not in edit mode
+
+                    case CONFIG_MELODY_SCALE:
+                        {
+                            int scale = (int)melodyScale + inc;
+                            if(scale < 0) scale = 0;
+                            if(scale >= NUM_SCALE_TYPES) scale = NUM_SCALE_TYPES - 1;
+                            melodyScale = (ScaleType)scale;
+                            // Regenerate both melody voices with new scale
+                            GenerateMelodyPatternFor(&melodyVoice);
+                            GenerateMelodyPatternFor(&melodyMidiVoice);
+                        }
+                        break;
+
+                    case CONFIG_MELODY_ROOT:
+                        {
+                            int root = (int)melodyRoot + inc;
+                            if(root < 0) root = 0;
+                            if(root >= 12) root = 11;
+                            melodyRoot = (uint8_t)root;
+                            // Regenerate both melody voices with new root
+                            GenerateMelodyPatternFor(&melodyVoice);
+                            GenerateMelodyPatternFor(&melodyMidiVoice);
+                        }
+                        break;
+
+                    case CONFIG_CV_STYLE:
+                        {
+                            int style = (int)melodyVoice.style + inc;
+                            if(style < 0) style = 0;
+                            if(style >= NUM_MELODY_STYLES) style = NUM_MELODY_STYLES - 1;
+                            melodyVoice.style = (MelodyStyle)style;
+                            // Also randomize sub-style when changing style
+                            if(melodyVoice.style == MELODY_SUPPORTING)
+                                melodyVoice.subStyle = System::GetUs() % NUM_SUPPORTING_SUBSTYLES;
+                            else
+                                melodyVoice.subStyle = System::GetUs() % NUM_ARP_SUBSTYLES;
+                            // Regenerate CV melody with new style
+                            GenerateMelodyPatternFor(&melodyVoice);
+                        }
+                        break;
+
+                    case CONFIG_MIDI_STYLE:
+                        {
+                            int style = (int)melodyMidiVoice.style + inc;
+                            if(style < 0) style = 0;
+                            if(style >= NUM_MELODY_STYLES) style = NUM_MELODY_STYLES - 1;
+                            melodyMidiVoice.style = (MelodyStyle)style;
+                            // Also randomize sub-style when changing style
+                            if(melodyMidiVoice.style == MELODY_SUPPORTING)
+                                melodyMidiVoice.subStyle = System::GetUs() % NUM_SUPPORTING_SUBSTYLES;
+                            else
+                                melodyMidiVoice.subStyle = System::GetUs() % NUM_ARP_SUBSTYLES;
+                            // Regenerate MIDI melody with new style
+                            GenerateMelodyPatternFor(&melodyMidiVoice);
+                        }
+                        break;
+
+                    case CONFIG_MIDI_MEL_CH:
+                        {
+                            int ch = (int)melodyMidiChannel + inc;
+                            if(ch < 0) ch = 0;
+                            if(ch >= 16) ch = 15;
+                            melodyMidiChannel = (uint8_t)ch;
+                        }
+                        break;
+
+                    // CONFIG_MELODY_FREEZE is handled directly in menu, not in edit mode
 
                     default:
                         break;
