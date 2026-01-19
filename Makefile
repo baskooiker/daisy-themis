@@ -2,7 +2,13 @@
 TARGET = Themis
 
 # Sources
-CPP_SOURCES = Themis.cpp
+CPP_SOURCES = Themis.cpp \
+              globals.cpp \
+              groove.cpp \
+              drums.cpp \
+              melody.cpp \
+              display.cpp \
+              config.cpp
 
 # Library Locations
 LIBDAISY_DIR = ../../libDaisy
