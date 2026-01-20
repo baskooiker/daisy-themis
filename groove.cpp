@@ -260,6 +260,18 @@ void ScheduleMelodyTrigger(MelodyVoiceType voiceType, int8_t note,
 
 void ProcessMelodyQueue()
 {
+    // Check for automatic note-off (1/32 note duration)
+    if(midiMelodyNoteOn && globalSampleCounter >= midiMelodyNoteOffSample)
+    {
+        uint8_t noteOff[3] = {
+            static_cast<uint8_t>(0x80 | melodyMidiChannel),
+            lastMidiMelodyNote,
+            0
+        };
+        hw.midi.SendMessage(noteOff, 3);
+        midiMelodyNoteOn = false;
+    }
+
     uint8_t checkCount = 0;
     uint8_t currentIndex = melodyQueueTail;
 
@@ -282,7 +294,7 @@ void ProcessMelodyQueue()
             }
             else // MELODY_MIDI
             {
-                // Send note-off for previous note if playing
+                // Send note-off for previous note if still playing
                 if(midiMelodyNoteOn)
                 {
                     uint8_t noteOff[3] = {
@@ -307,6 +319,11 @@ void ProcessMelodyQueue()
 
                 lastMidiMelodyNote = midiNote;
                 midiMelodyNoteOn = true;
+
+                // Schedule note-off after 1/32 note duration
+                // 1/32 note = samplesPerSixteenth / 2 = sampleRate * 7.5 / bpm
+                float noteLengthSamples = hw.AudioSampleRate() * 7.5f / bpm;
+                midiMelodyNoteOffSample = globalSampleCounter + (uint64_t)noteLengthSamples;
             }
 
             // Mark as processed
@@ -341,4 +358,27 @@ void TriggerDrum(DrumVoice voice, uint8_t velocity)
     hw.midi.SendMessage(noteOn, 3);
 
     // Note: We don't send Note Off for drums, they're self-decaying
+}
+
+void SendMelodyNoteOff()
+{
+    // Send note-off for MIDI melody if currently playing
+    if(midiMelodyNoteOn)
+    {
+        uint8_t noteOff[3] = {
+            static_cast<uint8_t>(0x80 | melodyMidiChannel),
+            lastMidiMelodyNote,
+            0
+        };
+        hw.midi.SendMessage(noteOff, 3);
+        midiMelodyNoteOn = false;
+    }
+
+    // Also clear the melody queue to prevent pending notes from firing
+    for(int i = 0; i < MELODY_QUEUE_SIZE; i++)
+    {
+        melodyQueue[i].active = false;
+    }
+    melodyQueueHead = 0;
+    melodyQueueTail = 0;
 }

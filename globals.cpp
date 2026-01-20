@@ -226,12 +226,16 @@ uint8_t analogVoiceVelocity = 100;
 MelodyConfig melodyVoice = {
     MELODY_SUPPORTING,
     SUPPORT_FOLLOW_KICK,
+    RHYTHM_EUCLIDEAN,   // rhythmStyle
+    DENSITY_LOW,        // density (supporting = sparse)
     0, 32, {0}, 0, 0, true
 };
 
 MelodyConfig melodyMidiVoice = {
     MELODY_ARPEGGIATOR,
     ARP_CHORD_TONES,
+    RHYTHM_EUCLIDEAN,   // rhythmStyle
+    DENSITY_MEDIUM,     // density (arpeggiator = busier)
     0, 32, {0}, 0, 0, true
 };
 
@@ -240,6 +244,7 @@ uint8_t melodyRoot = 0;
 uint8_t melodyMidiChannel = 0;
 uint8_t lastMidiMelodyNote = 0;
 bool midiMelodyNoteOn = false;
+uint64_t midiMelodyNoteOffSample = 0;
 bool melodyFreezeEnabled = false;
 bool tuneModeEnabled = false;
 

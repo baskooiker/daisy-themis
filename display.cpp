@@ -335,10 +335,11 @@ void UpdateDisplay()
             const char* styleNames[] = {"Syn", "Str", "Euc", "AEu", "FKi"};
             const char* densityNames[] = {"Lo", "Md", "Hi"};
             const char* interactionSymbols[] = {"", "Div", "AB", "AH", "A2"};
+            const char* melStyleNames[] = {"Sup", "Arp"};
 
-            // We have 7 total lines: 1 fundamental beat + 6 generative voices
+            // We have 9 total lines: 1 fundamental beat + 6 generative voices + 2 melody voices
             // Display can show 4 lines at once (rows 10, 24, 38, 52) - tighter spacing for 64px display
-            int totalLines = 7;
+            int totalLines = 9;
             int maxScroll = totalLines - 4;
 
             // Display 4 lines starting from scroll offset
@@ -355,7 +356,7 @@ void UpdateDisplay()
                     char beatVoiceName = (fundamentalBeatVoice == CLAP) ? 'C' : 'S';
                     sprintf(buffer, "%-2c:Fund Beat", beatVoiceName);
                 }
-                else
+                else if(lineIdx <= 6)
                 {
                     // Generative voices (lineIdx 1-6 = voiceIdx 0-5)
                     int voiceIdx = lineIdx - 1;
@@ -385,6 +386,20 @@ void UpdateDisplay()
                             voice->patternLength,
                             (voice->interaction != INTERACTION_NONE) ? " >" : "",
                             partnerName);
+                }
+                else
+                {
+                    // Melody voices (lineIdx 7 = CV, lineIdx 8 = MIDI)
+                    MelodyConfig* mel = (lineIdx == 7) ? &melodyVoice : &melodyMidiVoice;
+                    const char* melLabel = (lineIdx == 7) ? "CV" : "MD";
+
+                    // Format: "CV:Sup Euc Lo L32"
+                    sprintf(buffer, "%-2s:%s %s %s L%-2d",
+                            melLabel,
+                            melStyleNames[mel->style],
+                            styleNames[mel->rhythmStyle],
+                            densityNames[mel->density],
+                            mel->patternLength);
                 }
 
                 hw.display.WriteString(buffer, Font_6x8, true);

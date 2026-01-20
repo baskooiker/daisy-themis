@@ -280,6 +280,7 @@ void ToggleRunState()
         }
         else
         {
+            SendMelodyNoteOff();  // Send note-off before stopping
             SendMidiStop();
         }
     }
@@ -343,6 +344,7 @@ void HandleMidiMessage(MidiEvent m)
                     externalClockMode = true;
                     isRunning = false;
                     lastMidiClockTime = System::GetNow();
+                    SendMelodyNoteOff();  // Send note-off before stopping
                     SendMidiStop();
                     gateHigh = false;
                     break;

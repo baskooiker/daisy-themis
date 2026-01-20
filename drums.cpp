@@ -703,6 +703,7 @@ void ProcessDrumPatterns()
             // Melody has independent freeze control
             if(!melodyFreezeEnabled)
             {
+                SendMelodyNoteOff();  // Clean note-off before new pattern
                 GenerateMelodyPattern();
             }
 
@@ -721,6 +722,7 @@ void ProcessDrumPatterns()
                 // Melody personality also changes at this interval (if not frozen)
                 if(!melodyFreezeEnabled)
                 {
+                    SendMelodyNoteOff();  // Clean note-off before personality change
                     RandomizeMelodyPersonality();
                 }
 

@@ -131,6 +131,7 @@ extern uint8_t melodyRoot;
 extern uint8_t melodyMidiChannel;
 extern uint8_t lastMidiMelodyNote;
 extern bool midiMelodyNoteOn;
+extern uint64_t midiMelodyNoteOffSample;  // When to send note-off (sample time)
 extern bool melodyFreezeEnabled;
 extern bool tuneModeEnabled;
 

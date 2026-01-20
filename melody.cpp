@@ -72,150 +72,54 @@ void GenerateMelodyRhythmFor(MelodyConfig* voice)
 {
     uint32_t seed = System::GetUs();
     voice->rhythmPattern = 0;
-    voice->patternLength = 32;
 
-    if(voice->style == MELODY_SUPPORTING)
+    // Odd lengths for polyrhythms (same as drums)
+    const uint8_t oddLengths[] = {12, 13, 15, 17, 18};
+
+    // FOLLOW_KICK always uses 32-step pattern to match kick
+    if(voice->rhythmStyle == RHYTHM_FOLLOW_KICK)
     {
-        // Strong beat positions (quarter notes: 0, 4, 8, 12, 16, 20, 24, 28)
-        // Half notes: 0, 8, 16, 24
-        // Downbeats of each bar: 0, 16
-        const int strongBeats[] = {0, 4, 8, 12, 16, 20, 24, 28};  // Quarter notes
-        const int halfBeats[] = {0, 8, 16, 24};  // Half notes
-
-        switch(voice->subStyle)
-        {
-            case SUPPORT_FOLLOW_KICK:
-                // Copy current kick pattern directly
-                voice->rhythmPattern = kickPatterns[currentKickPattern];
-                break;
-
-            case SUPPORT_OWN_SPARSE:
-                // Straight sparse pattern using only strong beats
-                // Choose 3-5 quarter note positions
-                {
-                    int hitCount = 3 + (seed % 3);  // 3-5 notes
-                    uint8_t usedPositions = 0;
-
-                    for(int i = 0; i < hitCount; i++)
-                    {
-                        // Pick from strong beats array, avoid repeats
-                        int attempts = 0;
-                        int idx;
-                        do {
-                            idx = (seed >> (i * 3 + attempts)) % 8;
-                            attempts++;
-                        } while((usedPositions & (1 << idx)) && attempts < 10);
-
-                        usedPositions |= (1 << idx);
-                        voice->rhythmPattern |= (1 << strongBeats[idx]);
-                    }
-
-                    // Always include downbeat of bar 1
-                    voice->rhythmPattern |= (1 << 0);
-                }
-                break;
-
-            case SUPPORT_SUBSET_KICK:
-                // Take kick hits but prefer strong beats
-                {
-                    uint32_t kickPat = kickPatterns[currentKickPattern];
-
-                    // First, always take kick hits on strong beats (quarter notes)
-                    for(int i = 0; i < 8; i++)
-                    {
-                        int pos = strongBeats[i];
-                        if(kickPat & (1 << pos))
-                        {
-                            voice->rhythmPattern |= (1 << pos);
-                        }
-                    }
-
-                    // If we have very few hits, add some from half beat positions
-                    if(__builtin_popcount(voice->rhythmPattern) < 2)
-                    {
-                        for(int i = 0; i < 4; i++)
-                        {
-                            voice->rhythmPattern |= (1 << halfBeats[i]);
-                        }
-                    }
-                }
-                break;
-        }
+        voice->patternLength = 32;
+        voice->rhythmPattern = kickPatterns[currentKickPattern];
+        return;
     }
-    else // MELODY_ARPEGGIATOR
+
+    // Determine pattern length
+    // Supporting style: less likely to use polyrhythms (10%)
+    // Arpeggiator style: more likely to use polyrhythms (20%)
+    uint32_t polyrhythmChance = (voice->style == MELODY_SUPPORTING) ? 10 : 20;
+
+    if((seed % 100) < polyrhythmChance)
     {
-        // Arpeggiator: sparse 4-5 note patterns that repeat
-        // 8th note grid positions (every other 16th): 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30
-        const int eighthNotes[] = {0, 2, 4, 6, 8, 10, 12, 14};  // First bar 8th notes
+        voice->patternLength = oddLengths[(seed >> 8) % 5];
+    }
+    else
+    {
+        voice->patternLength = 32;
+    }
 
-        switch(voice->subStyle)
-        {
-            case ARP_CHORD_TONES:
-                // 4-5 notes per bar, repeating pattern
-                // Create a 1-bar pattern that repeats
-                {
-                    int notesPerBar = 4 + (seed % 2);  // 4-5 notes
-                    uint8_t usedPositions = 0;
-
-                    for(int i = 0; i < notesPerBar; i++)
-                    {
-                        int attempts = 0;
-                        int idx;
-                        do {
-                            idx = (seed >> (i * 3 + attempts)) % 8;
-                            attempts++;
-                        } while((usedPositions & (1 << idx)) && attempts < 10);
-
-                        usedPositions |= (1 << idx);
-                        // Set in both bars (first bar and second bar)
-                        voice->rhythmPattern |= (1 << eighthNotes[idx]);
-                        voice->rhythmPattern |= (1 << (eighthNotes[idx] + 16));
-                    }
-                }
-                break;
-
-            case ARP_SCALE_ASCENDING:
-                // 5 notes ascending, starting on downbeat
-                // Pattern: 1--2--3--4--5--- repeated
-                {
-                    int notesPerBar = 5;
-                    // Space notes evenly across the bar (roughly every 3 16th notes)
-                    int positions[] = {0, 3, 6, 10, 13};  // Evenly spaced
-
-                    for(int i = 0; i < notesPerBar; i++)
-                    {
-                        voice->rhythmPattern |= (1 << positions[i]);
-                        voice->rhythmPattern |= (1 << (positions[i] + 16));  // Repeat in bar 2
-                    }
-                }
-                break;
-
-            case ARP_SCALE_RANDOM:
-                // 4-6 random positions per bar, slightly syncopated
-                {
-                    int notesPerBar = 4 + (seed % 3);  // 4-6 notes
-                    uint32_t usedPositions = 0;
-
-                    for(int i = 0; i < notesPerBar; i++)
-                    {
-                        int attempts = 0;
-                        int pos;
-                        do {
-                            // Allow 16th note positions but prefer 8th notes
-                            if((seed >> (i + attempts)) % 3 == 0)
-                                pos = (seed >> (i * 4 + attempts)) % 16;  // Any 16th in first bar
-                            else
-                                pos = eighthNotes[(seed >> (i * 3 + attempts)) % 8];  // 8th notes
-                            attempts++;
-                        } while((usedPositions & (1 << pos)) && attempts < 15);
-
-                        usedPositions |= (1 << pos);
-                        voice->rhythmPattern |= (1 << pos);
-                        voice->rhythmPattern |= (1 << (pos + 16));  // Mirror to bar 2
-                    }
-                }
-                break;
-        }
+    // Generate pattern using the same algorithms as drums
+    switch(voice->rhythmStyle)
+    {
+        case RHYTHM_SYNCOPATED:
+            voice->rhythmPattern = GenerateSyncopated(seed, voice->density, voice->patternLength);
+            break;
+        case RHYTHM_STRAIGHT:
+            voice->rhythmPattern = GenerateStraight(seed, voice->density, voice->patternLength);
+            break;
+        case RHYTHM_EUCLIDEAN:
+            voice->rhythmPattern = GenerateEuclidean(seed, voice->density, voice->patternLength);
+            break;
+        case RHYTHM_ANTI_EUCLIDEAN:
+            voice->rhythmPattern = GenerateAntiEuclidean(seed, voice->density, voice->patternLength);
+            break;
+        case RHYTHM_FOLLOW_KICK:
+            // Already handled above, but include for completeness
+            voice->rhythmPattern = kickPatterns[currentKickPattern];
+            break;
+        default:
+            voice->rhythmPattern = GenerateEuclidean(seed, voice->density, voice->patternLength);
+            break;
     }
 }
 
@@ -362,6 +266,44 @@ void RandomizeMelodyPersonalityFor(MelodyConfig* voice)
         voice->subStyle = (seed >> 4) % NUM_ARP_SUBSTYLES;
     }
 
+    // Randomize rhythm style (same options as drums)
+    // Weight toward more musical styles: Euclidean (40%), Straight (30%), Syncopated (20%), Anti-Euclidean (10%)
+    int styleRoll = (seed >> 8) % 100;
+    if(styleRoll < 40)
+        voice->rhythmStyle = RHYTHM_EUCLIDEAN;
+    else if(styleRoll < 70)
+        voice->rhythmStyle = RHYTHM_STRAIGHT;
+    else if(styleRoll < 90)
+        voice->rhythmStyle = RHYTHM_SYNCOPATED;
+    else
+        voice->rhythmStyle = RHYTHM_ANTI_EUCLIDEAN;
+
+    // Randomize density based on main style
+    // Supporting: prefer lower densities (sparse basslines)
+    // Arpeggiator: prefer medium-high densities (busier arpeggios)
+    if(voice->style == MELODY_SUPPORTING)
+    {
+        // 50% LOW, 40% MEDIUM, 10% HIGH
+        int densityRoll = (seed >> 16) % 100;
+        if(densityRoll < 50)
+            voice->density = DENSITY_LOW;
+        else if(densityRoll < 90)
+            voice->density = DENSITY_MEDIUM;
+        else
+            voice->density = DENSITY_HIGH;
+    }
+    else // MELODY_ARPEGGIATOR
+    {
+        // 20% LOW, 50% MEDIUM, 30% HIGH
+        int densityRoll = (seed >> 16) % 100;
+        if(densityRoll < 20)
+            voice->density = DENSITY_LOW;
+        else if(densityRoll < 70)
+            voice->density = DENSITY_MEDIUM;
+        else
+            voice->density = DENSITY_HIGH;
+    }
+
     // Generate new pattern with new personality
     GenerateMelodyPatternFor(voice);
 }
@@ -374,6 +316,9 @@ void RandomizeMelodyPersonality()
 
 void RandomizeAllParameters()
 {
+    // Send note-off for any playing melody note before randomizing
+    SendMelodyNoteOff();
+
     // Randomize drum patterns
     RandomizePatterns();
 

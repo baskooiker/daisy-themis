@@ -124,4 +124,12 @@ void ProcessMelodyQueue();
  */
 void TriggerDrum(DrumVoice voice, uint8_t velocity = 100);
 
+/**
+ * @brief Send note-off for currently playing MIDI melody note
+ *
+ * Call this when stopping the sequencer or before randomizing patterns
+ * to ensure clean note termination.
+ */
+void SendMelodyNoteOff();
+
 #endif // THEMIS_GROOVE_H

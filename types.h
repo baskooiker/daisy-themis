@@ -330,6 +330,8 @@ struct MelodyConfig
 {
     MelodyStyle style;          ///< Supporting or Arpeggiator
     uint8_t subStyle;           ///< Sub-style within main style
+    RhythmStyle rhythmStyle;    ///< Pattern generation algorithm (same as drums)
+    DensityLevel density;       ///< Pattern density (same as drums)
     uint32_t rhythmPattern;     ///< When notes trigger (bit pattern)
     uint8_t patternLength;      ///< Pattern length (typically 32)
     int8_t noteSequence[32];    ///< Pre-generated notes (semitones from C2)
