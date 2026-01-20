@@ -8,7 +8,15 @@ CPP_SOURCES = Themis.cpp \
               drums.cpp \
               melody.cpp \
               display.cpp \
-              config.cpp
+              config.cpp \
+              core/themis_platform.cpp \
+              core/themis_data.cpp \
+              core/themis_patterns.cpp \
+              core/themis_melody.cpp \
+              core/themis_sequencer.cpp
+
+# Include paths
+C_INCLUDES += -I.
 
 # Library Locations
 LIBDAISY_DIR = ../../libDaisy

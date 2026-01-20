@@ -1,5 +1,14 @@
 # Build artifacts
 build/
+*.o
+*.a
+*.so
+*.dylib
+
+# Desktop build
+desktop/imgui/
+desktop/themis_desktop
+desktop/imgui.ini
 
 # Editor files
 *.swp
