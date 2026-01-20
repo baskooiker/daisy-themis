@@ -171,6 +171,49 @@ enum ArpSubStyle
     NUM_ARP_SUBSTYLES
 };
 
+// ============================================================================
+// VARIATION SYSTEM ENUMS
+// ============================================================================
+
+/**
+ * @enum VariationMode
+ * @brief Pattern variation modes (AB or ABC patterns)
+ */
+enum VariationMode
+{
+    VAR_MODE_OFF,           ///< No variation (single pattern)
+    VAR_MODE_AB,            ///< Two variations (A and B)
+    VAR_MODE_ABC,           ///< Three variations (A, B, and C)
+    NUM_VARIATION_MODES
+};
+
+/**
+ * @enum VariationGranularity
+ * @brief How often variation switches occur
+ */
+enum VariationGranularity
+{
+    VAR_GRAN_BAR,           ///< Switch every bar (16 steps)
+    VAR_GRAN_HALF_BAR,      ///< Switch every half bar (8 steps)
+    VAR_GRAN_QUARTER,       ///< Switch every quarter bar (4 steps)
+    NUM_VARIATION_GRANULARITIES
+};
+
+/**
+ * @enum VariationSequence
+ * @brief Preset sequences for variation playback order
+ */
+enum VariationSequence
+{
+    VAR_SEQ_AAAA,           ///< All A (effectively no variation)
+    VAR_SEQ_AAAB,           ///< Three A, one B
+    VAR_SEQ_AABB,           ///< Two A, two B
+    VAR_SEQ_ABAB,           ///< Alternating A and B
+    VAR_SEQ_ABAC,           ///< A, B, A, C (requires ABC mode)
+    VAR_SEQ_AAABAAAC,       ///< Three A, B, three A, C (8-segment)
+    NUM_VARIATION_SEQUENCES
+};
+
 /**
  * @enum MelodyVoiceType
  * @brief Output destination for melody triggers
@@ -307,6 +350,21 @@ struct MelodyTrigger
 };
 
 /**
+ * @struct VariationConfig
+ * @brief Configuration for AB/ABC pattern variations
+ */
+struct VariationConfig
+{
+    VariationMode mode;         ///< Off, AB, or ABC mode
+    VariationSequence sequence; ///< Which sequence pattern to use
+    VariationGranularity granularity; ///< How often to switch variations
+    RhythmStyle styleB;         ///< Rhythm style for B variation
+    RhythmStyle styleC;         ///< Rhythm style for C variation
+    DensityLevel densityB;      ///< Density for B variation
+    DensityLevel densityC;      ///< Density for C variation
+};
+
+/**
  * @struct VoiceConfig
  * @brief Configuration for a generative drum voice
  */
@@ -317,9 +375,12 @@ struct VoiceConfig
     DensityLevel density;       ///< How dense the pattern is
     InteractionStyle interaction; ///< How it interacts with partner
     DrumVoice interactionPartner; ///< Partner voice for interaction
-    uint32_t pattern;           ///< Generated bit pattern
+    uint32_t pattern;           ///< Generated bit pattern (A variation)
+    uint32_t patternB;          ///< B variation pattern
+    uint32_t patternC;          ///< C variation pattern
     uint8_t patternLength;      ///< Steps in pattern (8-32)
     bool active;                ///< Is voice enabled
+    VariationConfig variation;  ///< AB/ABC variation settings
 };
 
 /**
@@ -332,12 +393,17 @@ struct MelodyConfig
     uint8_t subStyle;           ///< Sub-style within main style
     RhythmStyle rhythmStyle;    ///< Pattern generation algorithm (same as drums)
     DensityLevel density;       ///< Pattern density (same as drums)
-    uint32_t rhythmPattern;     ///< When notes trigger (bit pattern)
+    uint32_t rhythmPattern;     ///< When notes trigger (bit pattern, A variation)
+    uint32_t rhythmPatternB;    ///< B variation rhythm pattern
+    uint32_t rhythmPatternC;    ///< C variation rhythm pattern
     uint8_t patternLength;      ///< Pattern length (typically 32)
-    int8_t noteSequence[32];    ///< Pre-generated notes (semitones from C2)
+    int8_t noteSequence[32];    ///< Pre-generated notes (semitones from C2, A variation)
+    int8_t noteSequenceB[32];   ///< B variation note sequence
+    int8_t noteSequenceC[32];   ///< C variation note sequence
     uint8_t sequencePos;        ///< Current position in sequence
     uint8_t currentOctave;      ///< Current octave offset (0-2)
     bool active;                ///< Is voice enabled
+    VariationConfig variation;  ///< AB/ABC variation settings
 };
 
 /**

@@ -113,6 +113,19 @@ void ProcessInteractionAlternateHalf(VoiceConfig* voice1, VoiceConfig* voice2);
 void ProcessInteractionAlternateTwo(VoiceConfig* voice1, VoiceConfig* voice2);
 
 // ============================================================================
+// VARIATION SYSTEM
+// ============================================================================
+
+/**
+ * @brief Determine which variation (A/B/C) to use based on current position
+ * @param config Pointer to the variation configuration
+ * @param currentStep Current step within the 32-step pattern (0-31)
+ * @param barInCycle Current bar within the 8-bar cycle (0-3)
+ * @return 0 for A, 1 for B, 2 for C
+ */
+uint8_t GetCurrentVariation(const VariationConfig* config, uint8_t currentStep, uint8_t barInCycle);
+
+// ============================================================================
 // VOICE CONFIGURATION
 // ============================================================================
 

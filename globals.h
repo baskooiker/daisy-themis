@@ -190,4 +190,7 @@ extern const int8_t scaleMinorPentatonic[5];
 extern const int8_t scaleGypsy[7];
 extern const int8_t scaleLengths[NUM_SCALE_TYPES];
 
+// Variation sequence patterns [sequence][segment] -> variation (0=A, 1=B, 2=C)
+extern const uint8_t variationSequences[NUM_VARIATION_SEQUENCES][8];
+
 #endif // THEMIS_GLOBALS_H

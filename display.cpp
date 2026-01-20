@@ -4,6 +4,7 @@
  */
 
 #include "display.h"
+#include "drums.h"
 #include <string>
 
 void UpdateDisplay()
@@ -336,6 +337,7 @@ void UpdateDisplay()
             const char* densityNames[] = {"Lo", "Md", "Hi"};
             const char* interactionSymbols[] = {"", "Div", "AB", "AH", "A2"};
             const char* melStyleNames[] = {"Sup", "Arp"};
+            const char varChars[] = {'A', 'B', 'C'};
 
             // We have 9 total lines: 1 fundamental beat + 6 generative voices + 2 melody voices
             // Display can show 4 lines at once (rows 10, 24, 38, 52) - tighter spacing for 64px display
@@ -362,30 +364,21 @@ void UpdateDisplay()
                     int voiceIdx = lineIdx - 1;
                     VoiceConfig* voice = &generativeVoices[voiceIdx];
 
-                    // Find interaction partner name
-                    char partnerName[4] = "";
-                    if(voice->interaction != INTERACTION_NONE)
+                    // Get current variation indicator
+                    char varIndicator[4] = "";
+                    if(voice->variation.mode != VAR_MODE_OFF)
                     {
-                        // Find which voice index is the partner
-                        for(int j = 0; j < 6; j++)
-                        {
-                            if(generativeVoices[j].voice == voice->interactionPartner)
-                            {
-                                strncpy(partnerName, voiceLabels[j], 3);
-                                partnerName[2] = '\0';
-                                break;
-                            }
-                        }
+                        uint8_t var = GetCurrentVariation(&voice->variation, currentStep, barCounter);
+                        sprintf(varIndicator, "[%c]", varChars[var]);
                     }
 
-                    // Format: "D1 :Euc Hi L32 >D2" (aligned columns)
-                    sprintf(buffer, "%-2s:%s %s L%-2d%s%s",
+                    // Format: "D1:Euc Hi L32 [A]" (with variation indicator when enabled)
+                    sprintf(buffer, "%-2s:%s %s L%-2d%s",
                             voiceLabels[voiceIdx],
                             styleNames[voice->rhythmStyle],
                             densityNames[voice->density],
                             voice->patternLength,
-                            (voice->interaction != INTERACTION_NONE) ? " >" : "",
-                            partnerName);
+                            varIndicator);
                 }
                 else
                 {
@@ -393,13 +386,22 @@ void UpdateDisplay()
                     MelodyConfig* mel = (lineIdx == 7) ? &melodyVoice : &melodyMidiVoice;
                     const char* melLabel = (lineIdx == 7) ? "CV" : "MD";
 
-                    // Format: "CV:Sup Euc Lo L32"
-                    sprintf(buffer, "%-2s:%s %s %s L%-2d",
+                    // Get current variation indicator
+                    char varIndicator[4] = "";
+                    if(mel->variation.mode != VAR_MODE_OFF)
+                    {
+                        uint8_t var = GetCurrentVariation(&mel->variation, currentStep, barCounter);
+                        sprintf(varIndicator, "[%c]", varChars[var]);
+                    }
+
+                    // Format: "CV:Sup Euc Lo L32 [A]"
+                    sprintf(buffer, "%-2s:%s %s %s L%-2d%s",
                             melLabel,
                             melStyleNames[mel->style],
                             styleNames[mel->rhythmStyle],
                             densityNames[mel->density],
-                            mel->patternLength);
+                            mel->patternLength,
+                            varIndicator);
                 }
 
                 hw.display.WriteString(buffer, Font_6x8, true);

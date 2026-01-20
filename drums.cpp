@@ -244,6 +244,54 @@ void ProcessInteractionAlternateTwo(VoiceConfig* voice1, VoiceConfig* voice2)
 }
 
 // ============================================================================
+// VARIATION SYSTEM
+// ============================================================================
+
+uint8_t GetCurrentVariation(const VariationConfig* config, uint8_t step, uint8_t barInCycle)
+{
+    // If variation is off, always return A (0)
+    if(config->mode == VAR_MODE_OFF)
+        return 0;
+
+    // Calculate segment based on granularity
+    // Each barInCycle represents a 2-bar phrase (32 steps)
+    // step is 0-31 within that phrase
+    uint8_t segment = 0;
+
+    switch(config->granularity)
+    {
+        case VAR_GRAN_BAR:
+            // 16 steps per segment (1 bar)
+            // barInCycle 0-3 (each is 2 bars), step 0-31
+            // Total segments in 8-bar cycle: 8
+            segment = (barInCycle * 2) + (step / 16);
+            break;
+        case VAR_GRAN_HALF_BAR:
+            // 8 steps per segment (half bar)
+            // Total segments in 8-bar cycle: 16, but we use modulo 8
+            segment = ((barInCycle * 4) + (step / 8)) % 8;
+            break;
+        case VAR_GRAN_QUARTER:
+            // 4 steps per segment (quarter bar)
+            // Total segments in 8-bar cycle: 32, but we use modulo 8
+            segment = ((barInCycle * 8) + (step / 4)) % 8;
+            break;
+        default:
+            segment = barInCycle;
+            break;
+    }
+
+    // Look up variation from sequence table (modulo 8 for safety)
+    uint8_t variation = variationSequences[config->sequence][segment % 8];
+
+    // Clamp to valid variation for the mode
+    if(config->mode == VAR_MODE_AB && variation > 1)
+        variation = 1;  // Clamp C to B for AB mode
+
+    return variation;
+}
+
+// ============================================================================
 // VOICE CONFIGURATION
 // ============================================================================
 
@@ -353,6 +401,26 @@ void RandomizeVoicePersonalities()
     }
 }
 
+// Helper to generate a pattern for a given style and density
+static uint32_t GeneratePatternForStyle(uint32_t seed, RhythmStyle style, DensityLevel density, uint8_t length)
+{
+    switch(style)
+    {
+        case RHYTHM_SYNCOPATED:
+            return GenerateSyncopated(seed, density, length);
+        case RHYTHM_STRAIGHT:
+            return GenerateStraight(seed, density, length);
+        case RHYTHM_EUCLIDEAN:
+            return GenerateEuclidean(seed, density, length);
+        case RHYTHM_ANTI_EUCLIDEAN:
+            return GenerateAntiEuclidean(seed, density, length);
+        case RHYTHM_FOLLOW_KICK:
+            return kickPatterns[currentKickPattern];
+        default:
+            return GenerateEuclidean(seed, density, length);
+    }
+}
+
 void GenerateVoicePatterns()
 {
     // Odd lengths for polyrhythms
@@ -382,27 +450,30 @@ void GenerateVoicePatterns()
             voice->patternLength = 32;
         }
 
-        // Generate pattern based on rhythm style
-        switch(voice->rhythmStyle)
+        // Generate A pattern based on rhythm style
+        voice->pattern = GeneratePatternForStyle(seed, voice->rhythmStyle, voice->density, voice->patternLength);
+
+        // Generate B and C variations if enabled and pattern length is compatible
+        // Skip variation generation for polyrhythm lengths (not 4, 8, 16, or 32)
+        bool compatibleLength = (voice->patternLength == 4 || voice->patternLength == 8 ||
+                                 voice->patternLength == 16 || voice->patternLength == 32);
+
+        if(voice->variation.mode != VAR_MODE_OFF && compatibleLength)
         {
-            case RHYTHM_SYNCOPATED:
-                voice->pattern = GenerateSyncopated(seed, voice->density, voice->patternLength);
-                break;
-            case RHYTHM_STRAIGHT:
-                voice->pattern = GenerateStraight(seed, voice->density, voice->patternLength);
-                break;
-            case RHYTHM_EUCLIDEAN:
-                voice->pattern = GenerateEuclidean(seed, voice->density, voice->patternLength);
-                break;
-            case RHYTHM_ANTI_EUCLIDEAN:
-                voice->pattern = GenerateAntiEuclidean(seed, voice->density, voice->patternLength);
-                break;
-            case RHYTHM_FOLLOW_KICK:
-                voice->pattern = kickPatterns[currentKickPattern];
-                break;
-            default:
-                voice->pattern = GenerateEuclidean(seed, voice->density, voice->patternLength);
-                break;
+            // Generate B pattern with different seed and potentially different style/density
+            uint32_t seedB = seed ^ 0xB5B5B5B5;
+            voice->patternB = GeneratePatternForStyle(seedB, voice->variation.styleB,
+                                                       voice->variation.densityB,
+                                                       voice->patternLength);
+
+            // Generate C pattern if in ABC mode
+            if(voice->variation.mode == VAR_MODE_ABC)
+            {
+                uint32_t seedC = seed ^ 0xC3C3C3C3;
+                voice->patternC = GeneratePatternForStyle(seedC, voice->variation.styleC,
+                                                           voice->variation.densityC,
+                                                           voice->patternLength);
+            }
         }
     }
 
@@ -597,16 +668,28 @@ void ProcessDrumPatterns()
         }
     }
 
-    // Process generative voices (with polyrhythm support)
+    // Process generative voices (with polyrhythm support and AB/ABC variations)
     // Note: ANALOG voice is now handled by melody system, skip it in generative voices
     for(int i = 0; i < 6; i++)
     {
         VoiceConfig* voice = &generativeVoices[i];
         if(voice->active && voice->voice != ANALOG)
         {
+            // Get which variation to use (0=A, 1=B, 2=C)
+            uint8_t var = GetCurrentVariation(&voice->variation, currentStep, barCounter);
+
+            // Select the appropriate pattern based on variation
+            uint32_t activePattern;
+            if(var == 1)
+                activePattern = voice->patternB;
+            else if(var == 2)
+                activePattern = voice->patternC;
+            else
+                activePattern = voice->pattern;
+
             // Use modulo to loop shorter patterns (polyrhythms)
             uint8_t voiceStep = currentStep % voice->patternLength;
-            if(IsStepActive(voice->pattern, voiceStep))
+            if(IsStepActive(activePattern, voiceStep))
             {
                 // Regular MIDI voice
                 ScheduleDrumTriggerWithGroove(voice->voice, 95, currentStep, nextBeatSample);
@@ -662,24 +745,58 @@ void ProcessDrumPatterns()
     {
         // Normal melody processing with groove timing (only when tune mode is off)
 
-        // Schedule CV melody voice with groove timing
+        // Schedule CV melody voice with groove timing and AB/ABC variations
         if(melodyVoice.active)
         {
+            // Get which variation to use
+            uint8_t var = GetCurrentVariation(&melodyVoice.variation, currentStep, barCounter);
+
+            // Select rhythm pattern based on variation
+            uint32_t activeRhythm;
+            const int8_t* activeNotes;
+            if(var == 1) {
+                activeRhythm = melodyVoice.rhythmPatternB;
+                activeNotes = melodyVoice.noteSequenceB;
+            } else if(var == 2) {
+                activeRhythm = melodyVoice.rhythmPatternC;
+                activeNotes = melodyVoice.noteSequenceC;
+            } else {
+                activeRhythm = melodyVoice.rhythmPattern;
+                activeNotes = melodyVoice.noteSequence;
+            }
+
             uint8_t melodyStep = currentStep % melodyVoice.patternLength;
-            if(IsStepActive(melodyVoice.rhythmPattern, melodyStep))
+            if(IsStepActive(activeRhythm, melodyStep))
             {
-                int8_t note = melodyVoice.noteSequence[melodyStep];
+                int8_t note = activeNotes[melodyStep];
                 ScheduleMelodyTrigger(MELODY_CV, note, currentStep, nextBeatSample);
             }
         }
 
-        // Schedule MIDI melody voice with groove timing
+        // Schedule MIDI melody voice with groove timing and AB/ABC variations
         if(melodyMidiVoice.active)
         {
+            // Get which variation to use
+            uint8_t var = GetCurrentVariation(&melodyMidiVoice.variation, currentStep, barCounter);
+
+            // Select rhythm pattern based on variation
+            uint32_t activeRhythm;
+            const int8_t* activeNotes;
+            if(var == 1) {
+                activeRhythm = melodyMidiVoice.rhythmPatternB;
+                activeNotes = melodyMidiVoice.noteSequenceB;
+            } else if(var == 2) {
+                activeRhythm = melodyMidiVoice.rhythmPatternC;
+                activeNotes = melodyMidiVoice.noteSequenceC;
+            } else {
+                activeRhythm = melodyMidiVoice.rhythmPattern;
+                activeNotes = melodyMidiVoice.noteSequence;
+            }
+
             uint8_t midiMelStep = currentStep % melodyMidiVoice.patternLength;
-            if(IsStepActive(melodyMidiVoice.rhythmPattern, midiMelStep))
+            if(IsStepActive(activeRhythm, midiMelStep))
             {
-                int8_t note = melodyMidiVoice.noteSequence[midiMelStep];
+                int8_t note = activeNotes[midiMelStep];
                 ScheduleMelodyTrigger(MELODY_MIDI, note, currentStep, nextBeatSample);
             }
         }

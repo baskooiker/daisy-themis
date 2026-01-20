@@ -233,10 +233,163 @@ void GenerateMelodyNotesFor(MelodyConfig* voice)
     }
 }
 
+// Helper to generate melody rhythm pattern with specific parameters
+static uint32_t GenerateMelodyRhythmWithParams(uint32_t seed, MelodyConfig* voice,
+                                                RhythmStyle style, DensityLevel density)
+{
+    // FOLLOW_KICK always uses kick pattern
+    if(style == RHYTHM_FOLLOW_KICK)
+    {
+        return kickPatterns[currentKickPattern];
+    }
+
+    // Generate pattern using the same algorithms as drums
+    switch(style)
+    {
+        case RHYTHM_SYNCOPATED:
+            return GenerateSyncopated(seed, density, voice->patternLength);
+        case RHYTHM_STRAIGHT:
+            return GenerateStraight(seed, density, voice->patternLength);
+        case RHYTHM_EUCLIDEAN:
+            return GenerateEuclidean(seed, density, voice->patternLength);
+        case RHYTHM_ANTI_EUCLIDEAN:
+            return GenerateAntiEuclidean(seed, density, voice->patternLength);
+        default:
+            return GenerateEuclidean(seed, density, voice->patternLength);
+    }
+}
+
+// Helper to generate note sequence with specific seed
+static void GenerateMelodyNotesWithSeed(uint32_t seed, MelodyConfig* voice, int8_t* noteArray)
+{
+    if(voice->style == MELODY_SUPPORTING)
+    {
+        // Supporting: Few different notes, low octave, minimal movement
+        int8_t baseNotes[4];
+        baseNotes[0] = GetScaleNote(melodyScale, melodyRoot, 0);  // Root
+        baseNotes[1] = GetScaleNote(melodyScale, melodyRoot, 4);  // 5th
+        baseNotes[2] = GetScaleNote(melodyScale, melodyRoot, 2);  // 3rd
+        baseNotes[3] = GetScaleNote(melodyScale, melodyRoot, -1); // 7th below
+
+        // Fill sequence with mostly root and 5th
+        for(int i = 0; i < 32; i++)
+        {
+            int noteChoice = (seed >> (i * 2)) % 10;
+            if(noteChoice < 5)
+                noteArray[i] = baseNotes[0]; // Root 50%
+            else if(noteChoice < 8)
+                noteArray[i] = baseNotes[1]; // 5th 30%
+            else if(noteChoice < 9)
+                noteArray[i] = baseNotes[2]; // 3rd 10%
+            else
+                noteArray[i] = baseNotes[3]; // 7th 10%
+        }
+
+        // Occasional octave jump (10% chance per note)
+        for(int i = 0; i < 32; i++)
+        {
+            if(((seed >> (i + 8)) % 10) == 0)
+            {
+                noteArray[i] += 12; // Jump up one octave
+            }
+        }
+    }
+    else // MELODY_ARPEGGIATOR
+    {
+        int8_t scaleLen = scaleLengths[melodyScale];
+
+        switch(voice->subStyle)
+        {
+            case ARP_CHORD_TONES:
+                {
+                    int8_t chordNotes[5];
+                    int numNotes = 4 + (seed % 2);
+                    int8_t chordDegrees[] = {0, 2, 4, 7, 9};
+
+                    for(int n = 0; n < numNotes; n++)
+                    {
+                        chordNotes[n] = GetScaleNote(melodyScale, melodyRoot, chordDegrees[n]);
+                    }
+
+                    for(int i = 0; i < 32; i++)
+                    {
+                        int barPos = i % 16;
+                        noteArray[i] = chordNotes[barPos % numNotes];
+                    }
+                }
+                break;
+
+            case ARP_SCALE_ASCENDING:
+                {
+                    int8_t arpNotes[5];
+                    for(int n = 0; n < 5; n++)
+                    {
+                        arpNotes[n] = GetScaleNote(melodyScale, melodyRoot, n);
+                    }
+
+                    for(int i = 0; i < 32; i++)
+                    {
+                        int barPos = i % 16;
+                        noteArray[i] = arpNotes[barPos % 5];
+                    }
+                }
+                break;
+
+            case ARP_SCALE_RANDOM:
+                {
+                    int8_t arpNotes[6];
+                    int numNotes = 4 + (seed % 3);
+
+                    for(int n = 0; n < numNotes; n++)
+                    {
+                        int degree = (seed >> (n * 4)) % (scaleLen * 2);
+                        arpNotes[n] = GetScaleNote(melodyScale, melodyRoot, degree);
+                    }
+
+                    for(int i = 0; i < 32; i++)
+                    {
+                        int barPos = i % 16;
+                        noteArray[i] = arpNotes[barPos % numNotes];
+                    }
+                }
+                break;
+        }
+    }
+}
+
 void GenerateMelodyPatternFor(MelodyConfig* voice)
 {
     GenerateMelodyRhythmFor(voice);
     GenerateMelodyNotesFor(voice);
+
+    // Generate B and C variations if enabled and pattern length is compatible
+    bool compatibleLength = (voice->patternLength == 4 || voice->patternLength == 8 ||
+                             voice->patternLength == 16 || voice->patternLength == 32);
+
+    if(voice->variation.mode != VAR_MODE_OFF && compatibleLength)
+    {
+        uint32_t seedB = System::GetUs() ^ 0xBEEFBEEF;
+
+        // Generate B rhythm pattern
+        voice->rhythmPatternB = GenerateMelodyRhythmWithParams(seedB, voice,
+                                                                voice->variation.styleB,
+                                                                voice->variation.densityB);
+
+        // Generate B note sequence
+        GenerateMelodyNotesWithSeed(seedB, voice, voice->noteSequenceB);
+
+        // Generate C variation if in ABC mode
+        if(voice->variation.mode == VAR_MODE_ABC)
+        {
+            uint32_t seedC = System::GetUs() ^ 0xCAFECAFE;
+
+            voice->rhythmPatternC = GenerateMelodyRhythmWithParams(seedC, voice,
+                                                                    voice->variation.styleC,
+                                                                    voice->variation.densityC);
+
+            GenerateMelodyNotesWithSeed(seedC, voice, voice->noteSequenceC);
+        }
+    }
 }
 
 void GenerateMelodyPattern()

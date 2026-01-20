@@ -206,13 +206,25 @@ uint8_t currentClapPattern = 0;
 uint8_t currentHatPattern = 0;
 DrumVoice fundamentalBeatVoice = SNARE;
 
+// Default variation config: mode=OFF (variations disabled by default)
+static const VariationConfig defaultVoiceVariation = {
+    VAR_MODE_OFF,           // mode
+    VAR_SEQ_AAAB,           // sequence (default when enabled)
+    VAR_GRAN_BAR,           // granularity
+    RHYTHM_EUCLIDEAN,       // styleB
+    RHYTHM_EUCLIDEAN,       // styleC
+    DENSITY_MEDIUM,         // densityB
+    DENSITY_MEDIUM          // densityC
+};
+
 VoiceConfig generativeVoices[6] = {
-    {DRUM1, RHYTHM_EUCLIDEAN, DENSITY_MEDIUM, INTERACTION_DIVIDED, DRUM2, 0, 32, true},
-    {DRUM2, RHYTHM_EUCLIDEAN, DENSITY_MEDIUM, INTERACTION_DIVIDED, DRUM1, 0, 32, true},
-    {MULTI, RHYTHM_SYNCOPATED, DENSITY_LOW, INTERACTION_NONE, MULTI, 0, 32, true},
-    {SNARE, RHYTHM_STRAIGHT, DENSITY_MEDIUM, INTERACTION_ALTERNATE_BAR, HIHAT2_CLOSED, 0, 32, true},
-    {HIHAT2_CLOSED, RHYTHM_STRAIGHT, DENSITY_HIGH, INTERACTION_NONE, HIHAT2_CLOSED, 0, 32, true},
-    {ANALOG, RHYTHM_FOLLOW_KICK, DENSITY_HIGH, INTERACTION_NONE, ANALOG, 0, 32, true}
+    // voice, rhythmStyle, density, interaction, partner, pattern, patternB, patternC, length, active, variation
+    {DRUM1, RHYTHM_EUCLIDEAN, DENSITY_MEDIUM, INTERACTION_DIVIDED, DRUM2, 0, 0, 0, 32, true, defaultVoiceVariation},
+    {DRUM2, RHYTHM_EUCLIDEAN, DENSITY_MEDIUM, INTERACTION_DIVIDED, DRUM1, 0, 0, 0, 32, true, defaultVoiceVariation},
+    {MULTI, RHYTHM_SYNCOPATED, DENSITY_LOW, INTERACTION_NONE, MULTI, 0, 0, 0, 32, true, defaultVoiceVariation},
+    {SNARE, RHYTHM_STRAIGHT, DENSITY_MEDIUM, INTERACTION_ALTERNATE_BAR, HIHAT2_CLOSED, 0, 0, 0, 32, true, defaultVoiceVariation},
+    {HIHAT2_CLOSED, RHYTHM_STRAIGHT, DENSITY_HIGH, INTERACTION_NONE, HIHAT2_CLOSED, 0, 0, 0, 32, true, defaultVoiceVariation},
+    {ANALOG, RHYTHM_FOLLOW_KICK, DENSITY_HIGH, INTERACTION_NONE, ANALOG, 0, 0, 0, 32, true, defaultVoiceVariation}
 };
 
 bool analogGateHigh = false;
@@ -223,20 +235,51 @@ uint8_t analogVoiceVelocity = 100;
 // MELODY SYSTEM
 // ============================================================================
 
+// Default melody variation config: mode=OFF (variations disabled by default)
+static const VariationConfig defaultMelodyVariation = {
+    VAR_MODE_OFF,           // mode
+    VAR_SEQ_AAAB,           // sequence (default when enabled)
+    VAR_GRAN_BAR,           // granularity
+    RHYTHM_EUCLIDEAN,       // styleB
+    RHYTHM_EUCLIDEAN,       // styleC
+    DENSITY_LOW,            // densityB
+    DENSITY_MEDIUM          // densityC
+};
+
 MelodyConfig melodyVoice = {
-    MELODY_SUPPORTING,
-    SUPPORT_FOLLOW_KICK,
-    RHYTHM_EUCLIDEAN,   // rhythmStyle
-    DENSITY_LOW,        // density (supporting = sparse)
-    0, 32, {0}, 0, 0, true
+    MELODY_SUPPORTING,      // style
+    SUPPORT_FOLLOW_KICK,    // subStyle
+    RHYTHM_EUCLIDEAN,       // rhythmStyle
+    DENSITY_LOW,            // density (supporting = sparse)
+    0,                      // rhythmPattern
+    0,                      // rhythmPatternB
+    0,                      // rhythmPatternC
+    32,                     // patternLength
+    {0},                    // noteSequence
+    {0},                    // noteSequenceB
+    {0},                    // noteSequenceC
+    0,                      // sequencePos
+    0,                      // currentOctave
+    true,                   // active
+    defaultMelodyVariation  // variation
 };
 
 MelodyConfig melodyMidiVoice = {
-    MELODY_ARPEGGIATOR,
-    ARP_CHORD_TONES,
-    RHYTHM_EUCLIDEAN,   // rhythmStyle
-    DENSITY_MEDIUM,     // density (arpeggiator = busier)
-    0, 32, {0}, 0, 0, true
+    MELODY_ARPEGGIATOR,     // style
+    ARP_CHORD_TONES,        // subStyle
+    RHYTHM_EUCLIDEAN,       // rhythmStyle
+    DENSITY_MEDIUM,         // density (arpeggiator = busier)
+    0,                      // rhythmPattern
+    0,                      // rhythmPatternB
+    0,                      // rhythmPatternC
+    32,                     // patternLength
+    {0},                    // noteSequence
+    {0},                    // noteSequenceB
+    {0},                    // noteSequenceC
+    0,                      // sequencePos
+    0,                      // currentOctave
+    true,                   // active
+    defaultMelodyVariation  // variation
 };
 
 ScaleType melodyScale = SCALE_MINOR;
@@ -518,4 +561,19 @@ const uint16_t hatClosedFillsWhole[8] = {
 const uint16_t hatOpenFillsWhole[8] = {
     0b0000000000000001, 0b0000000000000010, 0b1000000000000001, 0b0000000010000000,
     0b0000100000001000, 0b0000000000000000, 0b1000000010000001, 0b0001000100010001
+};
+
+// ============================================================================
+// VARIATION SEQUENCE PATTERNS
+// ============================================================================
+
+// [sequence][segment] -> variation (0=A, 1=B, 2=C)
+// Extended to 8 segments for AAABAAAC pattern
+const uint8_t variationSequences[NUM_VARIATION_SEQUENCES][8] = {
+    {0, 0, 0, 0, 0, 0, 0, 0},  // VAR_SEQ_AAAA (all A)
+    {0, 0, 0, 1, 0, 0, 0, 1},  // VAR_SEQ_AAAB
+    {0, 0, 1, 1, 0, 0, 1, 1},  // VAR_SEQ_AABB
+    {0, 1, 0, 1, 0, 1, 0, 1},  // VAR_SEQ_ABAB
+    {0, 1, 0, 2, 0, 1, 0, 2},  // VAR_SEQ_ABAC
+    {0, 0, 0, 1, 0, 0, 0, 2},  // VAR_SEQ_AAABAAAC
 };
