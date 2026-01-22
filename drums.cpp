@@ -802,6 +802,9 @@ void ProcessDrumPatterns()
         }
     }
 
+    // Process poly voice (chords)
+    ProcessPolyVoiceStep(currentStep);
+
     // Advance step
     currentStep++;
     if(currentStep >= 32) // Now 32 steps = 2 bars

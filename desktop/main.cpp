@@ -131,6 +131,41 @@ static void SetupCallbacks()
         }
     };
 
+    // Poly voice (chords) callback
+    g_sequencer.onPolyTrigger = [](const int8_t* notes, uint8_t count, bool noteOn) {
+        // Trigger activity indicator
+        themis_ui::g_ui.TriggerPolyActivity();
+
+        // Check mixer solo/mute state
+        if (!themis_ui::g_ui.ShouldPlayPoly()) {
+            return;
+        }
+
+        if (noteOn) {
+            // Trigger synth notes
+            themis_audio::g_audioEngine.TriggerPolyChord(notes, count,
+                                                          g_sequencer.polyVoice.velocity);
+
+            // Send MIDI note-ons
+            if (themis::g_platform) {
+                for (uint8_t i = 0; i < count; i++) {
+                    themis::g_platform->SendMidiNoteOn(1, notes[i],
+                                                        g_sequencer.polyVoice.velocity);
+                }
+            }
+        } else {
+            // Release synth notes
+            themis_audio::g_audioEngine.ReleasePolyChord(notes, count);
+
+            // Send MIDI note-offs
+            if (themis::g_platform) {
+                for (uint8_t i = 0; i < count; i++) {
+                    themis::g_platform->SendMidiNoteOff(1, notes[i]);
+                }
+            }
+        }
+    };
+
 #ifdef THEMIS_ENABLE_MIDI
     // Connect MIDI callbacks
     g_platform.midiNoteOnCallback = [](uint8_t ch, uint8_t note, uint8_t vel) {
@@ -253,6 +288,18 @@ int main(int argc, char* argv[])
             themis_midi::g_midiOutput.OpenPort(g_settings.midiPort);
         }
 #endif
+
+        // Apply mixer mute/solo settings to UI
+        for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) {
+            themis_ui::g_ui.drumMute[i] = g_settings.drumMute[i];
+            themis_ui::g_ui.drumSolo[i] = g_settings.drumSolo[i];
+        }
+        themis_ui::g_ui.melodyCVMute = g_settings.melodyCVMute;
+        themis_ui::g_ui.melodyCVSolo = g_settings.melodyCVSolo;
+        themis_ui::g_ui.melodyMidiMute = g_settings.melodyMidiMute;
+        themis_ui::g_ui.melodyMidiSolo = g_settings.melodyMidiSolo;
+        themis_ui::g_ui.polyMute = g_settings.polyMute;
+        themis_ui::g_ui.polySolo = g_settings.polySolo;
     } else {
         std::cout << "No config file found, using defaults" << std::endl;
     }
@@ -352,6 +399,18 @@ int main(int argc, char* argv[])
         g_settings.midiPortName = themis_midi::g_midiOutput.GetCurrentPortName();
     }
 #endif
+
+    // Save mixer mute/solo settings from UI
+    for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) {
+        g_settings.drumMute[i] = themis_ui::g_ui.drumMute[i];
+        g_settings.drumSolo[i] = themis_ui::g_ui.drumSolo[i];
+    }
+    g_settings.melodyCVMute = themis_ui::g_ui.melodyCVMute;
+    g_settings.melodyCVSolo = themis_ui::g_ui.melodyCVSolo;
+    g_settings.melodyMidiMute = themis_ui::g_ui.melodyMidiMute;
+    g_settings.melodyMidiSolo = themis_ui::g_ui.melodyMidiSolo;
+    g_settings.polyMute = themis_ui::g_ui.polyMute;
+    g_settings.polySolo = themis_ui::g_ui.polySolo;
 
     if (themis_config::SaveSettings(g_settings)) {
         std::cout << "Settings saved to " << themis_config::GetConfigPath() << std::endl;

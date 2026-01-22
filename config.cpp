@@ -29,6 +29,13 @@ void SaveSettings()
     settings.midiMelChannel = melodyMidiChannel;
     settings.melodyFreezeEnabled = melodyFreezeEnabled ? 1 : 0;
 
+    // Poly voice settings
+    settings.polyActive = polyVoice.active ? 1 : 0;
+    settings.polyProgression = polyVoice.progressionIndex;
+    settings.polyRate = polyVoice.chordRate;
+    settings.polyOctave = polyVoice.octaveOffset;
+    settings.polyMidiChannel = polyVoice.midiChannel;
+
     // Write to QSPI flash
     size_t size = sizeof(PersistentSettings);
     uint32_t addr = 0x90000000; // QSPI memory-mapped base address
@@ -129,6 +136,46 @@ void LoadSettings()
         }
 
         melodyFreezeEnabled = (settings.melodyFreezeEnabled != 0);
+
+        // Load poly voice settings
+        polyVoice.active = (settings.polyActive != 0);
+
+        if(settings.polyProgression < NUM_PROGRESSIONS)
+        {
+            polyVoice.progressionIndex = settings.polyProgression;
+        }
+        else
+        {
+            polyVoice.progressionIndex = 0;
+        }
+
+        if(settings.polyRate < NUM_CHORD_RATES)
+        {
+            polyVoice.chordRate = settings.polyRate;
+        }
+        else
+        {
+            polyVoice.chordRate = CHORD_RATE_1_BAR;
+        }
+
+        // Clamp octave offset to valid range
+        if(settings.polyOctave >= -2 && settings.polyOctave <= 2)
+        {
+            polyVoice.octaveOffset = settings.polyOctave;
+        }
+        else
+        {
+            polyVoice.octaveOffset = 0;
+        }
+
+        if(settings.polyMidiChannel < 16)
+        {
+            polyVoice.midiChannel = settings.polyMidiChannel;
+        }
+        else
+        {
+            polyVoice.midiChannel = 1;  // Default to channel 2
+        }
     }
     else
     {
@@ -143,6 +190,13 @@ void LoadSettings()
         melodyMidiVoice.style = MELODY_ARPEGGIATOR;
         melodyMidiChannel = 0;
         melodyFreezeEnabled = false;
+
+        // Poly voice defaults
+        polyVoice.active = false;
+        polyVoice.progressionIndex = 0;
+        polyVoice.chordRate = CHORD_RATE_1_BAR;
+        polyVoice.octaveOffset = 0;
+        polyVoice.midiChannel = 1;  // Default to channel 2
 
         // Save defaults
         SaveSettings();
@@ -270,6 +324,9 @@ void ToggleRunState()
             // Randomize groove at start
             RandomizeGroove();
 
+            // Initialize poly voice
+            InitPolyVoice();
+
             // Initialize trigger queue
             InitTriggerQueue();
             globalSampleCounter = 0;
@@ -281,6 +338,7 @@ void ToggleRunState()
         else
         {
             SendMelodyNoteOff();  // Send note-off before stopping
+            SendPolyNoteOff();    // Send poly chord note-off before stopping
             SendMidiStop();
         }
     }
@@ -345,6 +403,7 @@ void HandleMidiMessage(MidiEvent m)
                     isRunning = false;
                     lastMidiClockTime = System::GetNow();
                     SendMelodyNoteOff();  // Send note-off before stopping
+                    SendPolyNoteOff();    // Send poly chord note-off before stopping
                     SendMidiStop();
                     gateHigh = false;
                     break;
@@ -439,6 +498,16 @@ void ProcessControls()
                     // Toggle tune mode directly (binary option)
                     tuneModeEnabled = !tuneModeEnabled;
                     // Note: tune mode is not saved to flash - it's a temporary mode
+                }
+                else if(currentConfigOption == CONFIG_POLY_ACTIVE)
+                {
+                    // Toggle poly voice directly (binary option)
+                    polyVoice.active = !polyVoice.active;
+                    if(!polyVoice.active)
+                    {
+                        SendPolyNoteOff();  // Turn off any playing notes
+                    }
+                    SaveSettings();
                 }
                 else if(currentConfigOption == CONFIG_RANDOMIZE_ALL)
                 {
@@ -560,6 +629,49 @@ void ProcessControls()
                         break;
 
                     // CONFIG_MELODY_FREEZE is handled directly in menu, not in edit mode
+
+                    // CONFIG_POLY_ACTIVE is handled directly in menu, not in edit mode
+
+                    case CONFIG_POLY_PROG:
+                        {
+                            // Send note-off for current chord before changing progression
+                            SendPolyNoteOff();
+                            int prog = (int)polyVoice.progressionIndex + inc;
+                            if(prog < 0) prog = 0;
+                            if(prog >= NUM_PROGRESSIONS) prog = NUM_PROGRESSIONS - 1;
+                            polyVoice.progressionIndex = (uint8_t)prog;
+                            polyState.currentChordIndex = 0;  // Reset to start of new progression
+                        }
+                        break;
+
+                    case CONFIG_POLY_RATE:
+                        {
+                            int rate = (int)polyVoice.chordRate + inc;
+                            if(rate < 0) rate = 0;
+                            if(rate >= NUM_CHORD_RATES) rate = NUM_CHORD_RATES - 1;
+                            polyVoice.chordRate = (uint8_t)rate;
+                        }
+                        break;
+
+                    case CONFIG_POLY_OCTAVE:
+                        {
+                            int oct = (int)polyVoice.octaveOffset + inc;
+                            if(oct < -2) oct = -2;
+                            if(oct > 2) oct = 2;
+                            polyVoice.octaveOffset = (int8_t)oct;
+                        }
+                        break;
+
+                    case CONFIG_POLY_MIDI_CH:
+                        {
+                            // Send note-off on old channel before changing
+                            SendPolyNoteOff();
+                            int ch = (int)polyVoice.midiChannel + inc;
+                            if(ch < 0) ch = 0;
+                            if(ch >= 16) ch = 15;
+                            polyVoice.midiChannel = (uint8_t)ch;
+                        }
+                        break;
 
                     default:
                         break;

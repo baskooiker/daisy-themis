@@ -34,6 +34,10 @@ public:
     ScaleType melodyScale = SCALE_MINOR;
     uint8_t melodyRoot = 0;
 
+    // Poly voice (chords/pads)
+    PolyVoiceConfig polyVoice;
+    PolyVoiceState polyState;
+
     // Pattern indices
     uint8_t currentKickPattern = 0;
     uint8_t currentClapPattern = 0;
@@ -94,6 +98,14 @@ public:
      * @param isMidi True for MIDI, false for CV
      */
     std::function<void(bool isMidi)> onMelodyNoteOff;
+
+    /**
+     * @brief Called when poly voice chord notes should trigger
+     * @param notes Array of MIDI note numbers
+     * @param count Number of notes in chord
+     * @param noteOn True for note-on, false for note-off
+     */
+    std::function<void(const int8_t* notes, uint8_t count, bool noteOn)> onPolyTrigger;
 
     // ========================================================================
     // Methods
@@ -163,7 +175,32 @@ public:
      */
     void ScheduleFill();
 
+    /**
+     * @brief Randomize poly voice settings
+     */
+    void RandomizePolyVoice();
+
+    /**
+     * @brief Get context about current chord for melody mapping
+     * @return ChordContext with root, type, and diatonic status
+     */
+    ChordContext GetCurrentChordContext() const;
+
 private:
+    /**
+     * @brief Process poly voice chord changes
+     */
+    void ProcessPolyVoice();
+
+    /**
+     * @brief Trigger new chord for poly voice
+     */
+    void TriggerPolyChord();
+
+    /**
+     * @brief Release currently held poly voice notes
+     */
+    void ReleasePolyChord();
     /**
      * @brief Calculate groove offset in samples for a voice/step
      */

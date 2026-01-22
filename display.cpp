@@ -201,6 +201,56 @@ void UpdateDisplay()
                         sprintf(buffer, " %-11s%s", configOptionNames[i], tuneModeEnabled ? "On" : "Off");
                     }
                 }
+                else if(i == CONFIG_POLY_ACTIVE)
+                {
+                    sprintf(buffer, ">%-11s%s",
+                            (i == currentConfigOption) ? configOptionNames[i] : "",
+                            polyVoice.active ? "On" : "Off");
+                    if(i != currentConfigOption)
+                    {
+                        sprintf(buffer, " %-11s%s", configOptionNames[i], polyVoice.active ? "On" : "Off");
+                    }
+                }
+                else if(i == CONFIG_POLY_PROG)
+                {
+                    sprintf(buffer, ">%-11s%s",
+                            (i == currentConfigOption) ? configOptionNames[i] : "",
+                            progressions[polyVoice.progressionIndex].name);
+                    if(i != currentConfigOption)
+                    {
+                        sprintf(buffer, " %-11s%s", configOptionNames[i], progressions[polyVoice.progressionIndex].name);
+                    }
+                }
+                else if(i == CONFIG_POLY_RATE)
+                {
+                    sprintf(buffer, ">%-11s%s",
+                            (i == currentConfigOption) ? configOptionNames[i] : "",
+                            chordRateNames[polyVoice.chordRate]);
+                    if(i != currentConfigOption)
+                    {
+                        sprintf(buffer, " %-11s%s", configOptionNames[i], chordRateNames[polyVoice.chordRate]);
+                    }
+                }
+                else if(i == CONFIG_POLY_OCTAVE)
+                {
+                    sprintf(buffer, ">%-11s%d",
+                            (i == currentConfigOption) ? configOptionNames[i] : "",
+                            polyVoice.octaveOffset);
+                    if(i != currentConfigOption)
+                    {
+                        sprintf(buffer, " %-11s%d", configOptionNames[i], polyVoice.octaveOffset);
+                    }
+                }
+                else if(i == CONFIG_POLY_MIDI_CH)
+                {
+                    sprintf(buffer, ">%-11s%d",
+                            (i == currentConfigOption) ? configOptionNames[i] : "",
+                            polyVoice.midiChannel + 1);  // Display 1-indexed
+                    if(i != currentConfigOption)
+                    {
+                        sprintf(buffer, " %-11s%d", configOptionNames[i], polyVoice.midiChannel + 1);
+                    }
+                }
                 else // CONFIG_PATTERN_INFO, CONFIG_BACK, or CONFIG_RANDOMIZE_ALL
                 {
                     sprintf(buffer, "%s%s",
@@ -306,6 +356,41 @@ void UpdateDisplay()
                             configOptionNames[i],
                             (i == currentConfigOption) ? ">" : " ",
                             tuneModeEnabled ? "On" : "Off");
+                }
+                else if(i == CONFIG_POLY_ACTIVE)
+                {
+                    sprintf(buffer, " %-10s%s%s",
+                            configOptionNames[i],
+                            (i == currentConfigOption) ? ">" : " ",
+                            polyVoice.active ? "On" : "Off");
+                }
+                else if(i == CONFIG_POLY_PROG)
+                {
+                    sprintf(buffer, " %-10s%s%s",
+                            configOptionNames[i],
+                            (i == currentConfigOption) ? ">" : " ",
+                            progressions[polyVoice.progressionIndex].name);
+                }
+                else if(i == CONFIG_POLY_RATE)
+                {
+                    sprintf(buffer, " %-10s%s%s",
+                            configOptionNames[i],
+                            (i == currentConfigOption) ? ">" : " ",
+                            chordRateNames[polyVoice.chordRate]);
+                }
+                else if(i == CONFIG_POLY_OCTAVE)
+                {
+                    sprintf(buffer, " %-10s%s%d",
+                            configOptionNames[i],
+                            (i == currentConfigOption) ? ">" : " ",
+                            polyVoice.octaveOffset);
+                }
+                else if(i == CONFIG_POLY_MIDI_CH)
+                {
+                    sprintf(buffer, " %-10s%s%d",
+                            configOptionNames[i],
+                            (i == currentConfigOption) ? ">" : " ",
+                            polyVoice.midiChannel + 1);  // Display 1-indexed
                 }
                 else // CONFIG_PATTERN_INFO, CONFIG_BACK, or CONFIG_RANDOMIZE_ALL
                 {

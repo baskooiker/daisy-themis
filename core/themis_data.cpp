@@ -308,4 +308,8 @@ const char* interactionStyleNames[NUM_INTERACTION_STYLES] = {
     "None", "Divided", "AltBar", "AltHalf", "AltTwo"
 };
 
+const char* compatModeNames[NUM_COMPAT_MODES] = {
+    "Chord", "Penta", "Scale"
+};
+
 } // namespace themis

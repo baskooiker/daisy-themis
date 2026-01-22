@@ -31,6 +31,16 @@ struct Settings {
     // MIDI settings
     int midiPort = -1;
     std::string midiPortName;
+
+    // Mixer mute/solo settings (11 drum voices + melody CV + melody MIDI + poly)
+    bool drumMute[11] = {false};
+    bool drumSolo[11] = {false};
+    bool melodyCVMute = false;
+    bool melodyCVSolo = false;
+    bool melodyMidiMute = false;
+    bool melodyMidiSolo = false;
+    bool polyMute = false;
+    bool polySolo = false;
 };
 
 /**

@@ -38,6 +38,8 @@ public:
     bool melodyCVSolo = false;
     bool melodyMidiMute = false;
     bool melodyMidiSolo = false;
+    bool polyMute = false;
+    bool polySolo = false;
 
     // Check if any solo is active
     bool IsAnySoloActive() const;
@@ -49,10 +51,14 @@ public:
     bool ShouldPlayMelodyCV() const;
     bool ShouldPlayMelodyMidi() const;
 
+    // Check if poly voice should sound
+    bool ShouldPlayPoly() const;
+
     // Activity triggers (call from audio callbacks)
     void TriggerDrumActivity(themis::DrumVoice voice);
     void TriggerMelodyCVActivity();
     void TriggerMelodyMidiActivity();
+    void TriggerPolyActivity();
 
 private:
     themis::Sequencer* sequencer = nullptr;
@@ -65,6 +71,7 @@ private:
     float drumActivity[themis::NUM_DRUM_VOICES] = {0.0f};
     float melodyCVActivity = 0.0f;
     float melodyMidiActivity = 0.0f;
+    float polyActivity = 0.0f;
 
     // UI sections
     void RenderTransportControls();

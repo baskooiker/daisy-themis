@@ -8,6 +8,7 @@
 #include "themis_data.h"
 #include "themis_patterns.h"
 #include "themis_melody.h"
+#include "themis_chords.h"
 
 namespace themis {
 
@@ -75,6 +76,7 @@ void Sequencer::Init()
     melodyVoice.currentOctave = 0;
     melodyVoice.active = true;
     melodyVoice.variation = defaultMelVar;
+    melodyVoice.compatMode = COMPAT_CHORD_SCALE;  // Default: most melodic freedom
 
     melodyMidiVoice.style = MELODY_ARPEGGIATOR;
     melodyMidiVoice.subStyle = ARP_CHORD_TONES;
@@ -93,9 +95,20 @@ void Sequencer::Init()
     melodyMidiVoice.currentOctave = 0;
     melodyMidiVoice.active = true;
     melodyMidiVoice.variation = defaultMelVar;
+    melodyMidiVoice.compatMode = COMPAT_CHORD_SCALE;  // Default: most melodic freedom
 
     melodyScale = SCALE_MINOR;
     melodyRoot = 0;
+
+    // Initialize poly voice
+    polyVoice.active = false;
+    polyVoice.progressionIndex = 0;
+    polyVoice.chordRate = CHORD_RATE_1_BAR;
+    polyVoice.velocity = 80;
+    polyVoice.octaveOffset = 0;
+    polyVoice.progressionB = 1;
+    polyVoice.variationMode = VAR_MODE_OFF;
+    polyState.Init();
 
     // Initialize groove amounts
     for(int i = 0; i < NUM_DRUM_VOICES; i++) {
@@ -149,6 +162,8 @@ void Sequencer::Stop()
         onMelodyNoteOff(false);  // CV
         onMelodyNoteOff(true);   // MIDI
     }
+    // Release any held poly chord notes
+    ReleasePolyChord();
 }
 
 // ============================================================================
@@ -454,12 +469,14 @@ void Sequencer::RandomizeAll()
         onMelodyNoteOff(false);
         onMelodyNoteOff(true);
     }
+    ReleasePolyChord();
 
     // Randomize personalities FIRST so patterns are generated with correct interactions
     RandomizeVoicePersonalities();
     RandomizePatterns();
     RandomizeGroove();
     RandomizeMelodyPersonality();
+    RandomizePolyVoice();
 }
 
 void Sequencer::ScheduleFill()
@@ -585,6 +602,13 @@ void Sequencer::ProcessDrumPatterns(float sampleRate)
 
 void Sequencer::ProcessMelodyPatterns()
 {
+    // Get chord context once (reused for both voices if poly is active)
+    ChordContext chordCtx;
+    bool useChordMapping = polyVoice.active;
+    if (useChordMapping) {
+        chordCtx = GetCurrentChordContext();
+    }
+
     // CV melody voice
     if(melodyVoice.active)
     {
@@ -607,6 +631,12 @@ void Sequencer::ProcessMelodyPatterns()
         if(IsStepActive(activeRhythm, melodyStep) && onMelodyTrigger)
         {
             int8_t note = activeNotes[melodyStep];
+
+            // Apply chord-aware mapping when poly voice is active
+            if (useChordMapping) {
+                note = MapNoteToChord(note, chordCtx, melodyVoice.compatMode);
+            }
+
             onMelodyTrigger(note, false);  // CV
         }
     }
@@ -633,6 +663,12 @@ void Sequencer::ProcessMelodyPatterns()
         if(IsStepActive(activeRhythm, midiMelStep) && onMelodyTrigger)
         {
             int8_t note = activeNotes[midiMelStep];
+
+            // Apply chord-aware mapping when poly voice is active
+            if (useChordMapping) {
+                note = MapNoteToChord(note, chordCtx, melodyMidiVoice.compatMode);
+            }
+
             onMelodyTrigger(note, true);  // MIDI
         }
     }
@@ -662,6 +698,7 @@ void Sequencer::ProcessStep(float sampleRate)
     // Process patterns
     ProcessDrumPatterns(sampleRate);
     ProcessMelodyPatterns();
+    ProcessPolyVoice();
 
     // Advance step
     currentStep++;
@@ -710,6 +747,192 @@ void Sequencer::ProcessStep(float sampleRate)
             }
         }
     }
+}
+
+// ============================================================================
+// POLY VOICE
+// ============================================================================
+
+void Sequencer::ProcessPolyVoice()
+{
+    // If voice was deactivated while notes are playing, release them
+    if (!polyVoice.active) {
+        if (polyState.notesOn) {
+            ReleasePolyChord();
+        }
+        return;
+    }
+
+    uint8_t stepsPerChord = chordRateSteps[polyVoice.chordRate];
+
+    // Initialize on first step
+    if (polyState.stepsUntilChange == 0 && !polyState.notesOn) {
+        polyState.stepsUntilChange = stepsPerChord;
+        TriggerPolyChord();
+        return;
+    }
+
+    // Check if we need to release notes (1 step before chord change)
+    if (polyState.notesOn && polyState.stepsUntilChange == 1) {
+        ReleasePolyChord();
+    }
+
+    // Decrement countdown
+    polyState.stepsUntilChange--;
+
+    // Check if it's time for a new chord
+    if (polyState.stepsUntilChange == 0) {
+        // Advance to next chord in progression
+        uint8_t progIndex = polyVoice.progressionIndex;
+
+        // Handle variation
+        if (polyVoice.variationMode != VAR_MODE_OFF) {
+            // Simple A/B switching based on bar
+            if ((barCounter % 2) == 1) {
+                progIndex = polyVoice.progressionB;
+            }
+        }
+
+        polyState.currentChordIndex = (polyState.currentChordIndex + 1) %
+                                       progressions[progIndex].length;
+
+        // Trigger new chord
+        TriggerPolyChord();
+
+        // Reset countdown
+        polyState.stepsUntilChange = stepsPerChord;
+    }
+}
+
+void Sequencer::TriggerPolyChord()
+{
+    // First release any currently held notes
+    if (polyState.notesOn) {
+        ReleasePolyChord();
+    }
+
+    // Get the correct progression based on variation
+    uint8_t progIndex = polyVoice.progressionIndex;
+    if (polyVoice.variationMode != VAR_MODE_OFF && (barCounter % 2) == 1) {
+        progIndex = polyVoice.progressionB;
+    }
+
+    // Get the chord notes
+    int8_t notes[6];
+    uint8_t count = GetChordNotes(
+        &progressions[progIndex],
+        polyState.currentChordIndex,
+        melodyRoot,
+        melodyScale,
+        polyVoice.octaveOffset,
+        notes
+    );
+
+    // Store active notes for later release
+    polyState.numActiveNotes = count;
+    for (int i = 0; i < count && i < 6; i++) {
+        polyState.activeNotes[i] = notes[i];
+    }
+    polyState.notesOn = true;
+
+    // Trigger callback
+    if (onPolyTrigger) {
+        onPolyTrigger(notes, count, true);  // noteOn = true
+    }
+}
+
+void Sequencer::ReleasePolyChord()
+{
+    if (!polyState.notesOn) return;
+
+    // Send note-offs for all active notes
+    if (onPolyTrigger) {
+        onPolyTrigger(polyState.activeNotes, polyState.numActiveNotes, false);
+    }
+
+    polyState.notesOn = false;
+    polyState.numActiveNotes = 0;
+}
+
+ChordContext Sequencer::GetCurrentChordContext() const
+{
+    ChordContext ctx;
+
+    // Default to global root if poly voice is inactive
+    if (!polyVoice.active || polyState.numActiveNotes == 0) {
+        ctx.chordRoot = melodyRoot;
+        ctx.chordType = CHORD_MINOR;  // Default assumption for minor scales
+        ctx.isDiatonic = true;
+        return ctx;
+    }
+
+    // Get the current progression based on variation
+    uint8_t progIndex = polyVoice.progressionIndex;
+    if (polyVoice.variationMode != VAR_MODE_OFF && (barCounter % 2) == 1) {
+        progIndex = polyVoice.progressionB;
+    }
+
+    const ChordProgression& prog = progressions[progIndex];
+    const ProgressionStep& step = prog.steps[polyState.currentChordIndex];
+
+    // Calculate the chord root
+    if (step.isDiatonic) {
+        // Get scale degree note
+        ctx.chordRoot = GetScaleNote((ScaleType)melodyScale, melodyRoot, step.scaleDegree);
+    } else {
+        // Direct semitone offset from global root
+        ctx.chordRoot = melodyRoot + step.scaleDegree;
+    }
+
+    // Normalize to 0-11 range
+    while (ctx.chordRoot < 0) ctx.chordRoot += 12;
+    ctx.chordRoot = ctx.chordRoot % 12;
+
+    ctx.chordType = step.chordType;
+    ctx.isDiatonic = step.isDiatonic;
+
+    return ctx;
+}
+
+void Sequencer::RandomizePolyVoice()
+{
+    // IMPORTANT: Release any currently playing notes before randomizing
+    // to prevent hanging notes
+    ReleasePolyChord();
+
+    uint32_t seed = g_platform ? g_platform->GetRandomSeed() : 12345;
+
+    // Randomize progression (0-15)
+    polyVoice.progressionIndex = seed % NUM_PROGRESSIONS;
+
+    // Randomize chord rate (favor 1 bar and half bar)
+    int rateRoll = (seed >> 8) % 100;
+    if (rateRoll < 20)
+        polyVoice.chordRate = CHORD_RATE_2_BARS;
+    else if (rateRoll < 60)
+        polyVoice.chordRate = CHORD_RATE_1_BAR;
+    else if (rateRoll < 90)
+        polyVoice.chordRate = CHORD_RATE_HALF_BAR;
+    else
+        polyVoice.chordRate = CHORD_RATE_QUARTER;
+
+    // Randomize octave offset (-1 to +1)
+    polyVoice.octaveOffset = ((seed >> 16) % 3) - 1;
+
+    // Randomize B progression (different from A)
+    polyVoice.progressionB = ((seed >> 20) % (NUM_PROGRESSIONS - 1));
+    if (polyVoice.progressionB >= polyVoice.progressionIndex) {
+        polyVoice.progressionB++;
+    }
+
+    // Randomize variation mode (50% off, 50% AB)
+    polyVoice.variationMode = ((seed >> 24) % 2) == 0 ? VAR_MODE_OFF : VAR_MODE_AB;
+
+    // Randomize velocity (70-110)
+    polyVoice.velocity = 70 + ((seed >> 28) % 41);
+
+    // Reset state for new progression
+    polyState.Init();
 }
 
 } // namespace themis

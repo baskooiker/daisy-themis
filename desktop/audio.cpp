@@ -245,6 +245,101 @@ float TomSynth::Process(float sampleRate)
 }
 
 // ============================================================================
+// PAD SYNTH
+// ============================================================================
+
+void PadSynth::NoteOn(int8_t note, uint8_t velocity)
+{
+    // Find existing voice with same note or free voice
+    int freeVoice = -1;
+    for (int i = 0; i < MAX_VOICES; i++) {
+        if (voices[i].note == note && voices[i].active) {
+            // Retrigger existing voice
+            voices[i].targetEnv = (float)velocity / 127.0f;
+            return;
+        }
+        if (!voices[i].active && freeVoice == -1) {
+            freeVoice = i;
+        }
+    }
+
+    // Use free voice or steal quietest
+    if (freeVoice == -1) {
+        float quietest = 1.0f;
+        for (int i = 0; i < MAX_VOICES; i++) {
+            if (voices[i].env < quietest) {
+                quietest = voices[i].env;
+                freeVoice = i;
+            }
+        }
+    }
+
+    if (freeVoice >= 0) {
+        PadVoice& v = voices[freeVoice];
+        v.active = true;
+        v.note = note;
+        v.freq = 440.0f * powf(2.0f, ((float)note - 69.0f) / 12.0f);
+        v.targetEnv = (float)velocity / 127.0f;
+        v.phase = 0.0f;
+        v.filterState = 0.0f;
+    }
+}
+
+void PadSynth::NoteOff(int8_t note)
+{
+    for (int i = 0; i < MAX_VOICES; i++) {
+        if (voices[i].note == note && voices[i].active) {
+            voices[i].targetEnv = 0.0f;
+            // Don't set active = false yet, let the release finish
+        }
+    }
+}
+
+void PadSynth::AllNotesOff()
+{
+    for (int i = 0; i < MAX_VOICES; i++) {
+        voices[i].targetEnv = 0.0f;
+    }
+}
+
+float PadSynth::Process(float sampleRate)
+{
+    (void)sampleRate;  // Rate-dependent values are pre-calculated
+
+    float output = 0.0f;
+
+    for (int i = 0; i < MAX_VOICES; i++) {
+        PadVoice& v = voices[i];
+        if (!v.active && v.env < 0.001f) continue;
+
+        // Smooth envelope
+        float envRate = (v.targetEnv > v.env) ? attackRate : releaseRate;
+        v.env += (v.targetEnv - v.env) * envRate;
+
+        // Deactivate when envelope is done releasing
+        if (v.targetEnv == 0.0f && v.env < 0.001f) {
+            v.active = false;
+            continue;
+        }
+
+        // Oscillator (sine + subtle saw for warmth)
+        v.phase += v.freq / sampleRate;
+        if (v.phase > 1.0f) v.phase -= 1.0f;
+
+        float sine = sinf(v.phase * 2.0f * M_PI);
+        float saw = v.phase * 2.0f - 1.0f;
+        float osc = sine * 0.7f + saw * 0.3f;
+
+        // Simple low-pass filter for warm sound
+        v.filterState += 0.15f * (osc - v.filterState);
+
+        output += v.filterState * v.env * 0.12f;
+    }
+
+    return output;
+}
+
+// ============================================================================
 // AUDIO ENGINE
 // ============================================================================
 
@@ -373,6 +468,28 @@ void AudioEngine::StopMelodyMidi()
     melodyMidiActive = false;
 }
 
+void AudioEngine::TriggerPolyChord(const int8_t* notes, uint8_t count, uint8_t velocity)
+{
+    std::lock_guard<std::mutex> lock(synthMutex);
+    for (uint8_t i = 0; i < count && i < 6; i++) {
+        padSynth.NoteOn(notes[i], velocity);
+    }
+}
+
+void AudioEngine::ReleasePolyChord(const int8_t* notes, uint8_t count)
+{
+    std::lock_guard<std::mutex> lock(synthMutex);
+    for (uint8_t i = 0; i < count && i < 6; i++) {
+        padSynth.NoteOff(notes[i]);
+    }
+}
+
+void AudioEngine::StopAllPolyNotes()
+{
+    std::lock_guard<std::mutex> lock(synthMutex);
+    padSynth.AllNotesOff();
+}
+
 void AudioEngine::AudioCallback(void* userdata, Uint8* stream, int len)
 {
     AudioEngine* engine = static_cast<AudioEngine*>(userdata);
@@ -452,6 +569,9 @@ void AudioEngine::ProcessAudio(float* buffer, int frames)
             float midiDecayRate = 0.9996f + decay * 0.0003f;
             melodyMidiEnv *= midiDecayRate;
         }
+
+        // Pad synth (polyphonic chords)
+        sample += padSynth.Process(sampleRate);
 
         // Apply master low-pass filter
         masterFilterState += filterCoeff * (sample - masterFilterState);

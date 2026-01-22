@@ -382,3 +382,159 @@ void SendMelodyNoteOff()
     melodyQueueHead = 0;
     melodyQueueTail = 0;
 }
+
+// ============================================================================
+// POLY VOICE (CHORDS) MIDI OUTPUT
+// ============================================================================
+
+void InitPolyVoice()
+{
+    polyState.Init();
+    polyNotesOn = false;
+    polyNumActiveNotes = 0;
+    for(int i = 0; i < 6; i++)
+    {
+        polyActiveNotes[i] = -1;
+    }
+}
+
+uint8_t GetChordNotes(int8_t rootNote, ChordType chordType, int8_t octaveOffset, int8_t* outNotes)
+{
+    if(chordType >= NUM_CHORD_TYPES)
+        return 0;
+
+    const ChordShape& shape = chordShapes[chordType];
+
+    // Base MIDI note: C3 (48) + root + octave offset
+    int8_t baseNote = 48 + rootNote + (octaveOffset * 12);
+
+    uint8_t numNotes = 0;
+    for(int i = 0; i < shape.numNotes && i < 6; i++)
+    {
+        int8_t note = baseNote + shape.intervals[i];
+        // Clamp to valid MIDI range
+        if(note >= 0 && note <= 127)
+        {
+            outNotes[numNotes++] = note;
+        }
+    }
+
+    return numNotes;
+}
+
+void SendPolyChordOn(const int8_t* notes, uint8_t numNotes, uint8_t velocity)
+{
+    // Store active notes for note-off later
+    polyNumActiveNotes = numNotes;
+    for(int i = 0; i < 6; i++)
+    {
+        if(i < numNotes)
+            polyActiveNotes[i] = notes[i];
+        else
+            polyActiveNotes[i] = -1;
+    }
+
+    // Send note-on for each note in the chord
+    for(uint8_t i = 0; i < numNotes; i++)
+    {
+        uint8_t noteOn[3] = {
+            static_cast<uint8_t>(0x90 | polyVoice.midiChannel),
+            static_cast<uint8_t>(notes[i]),
+            velocity
+        };
+        hw.midi.SendMessage(noteOn, 3);
+    }
+
+    polyNotesOn = true;
+}
+
+void SendPolyNoteOff()
+{
+    if(!polyNotesOn)
+        return;
+
+    // Send note-off for all active notes
+    for(uint8_t i = 0; i < polyNumActiveNotes; i++)
+    {
+        if(polyActiveNotes[i] >= 0)
+        {
+            uint8_t noteOff[3] = {
+                static_cast<uint8_t>(0x80 | polyVoice.midiChannel),
+                static_cast<uint8_t>(polyActiveNotes[i]),
+                0
+            };
+            hw.midi.SendMessage(noteOff, 3);
+            polyActiveNotes[i] = -1;
+        }
+    }
+
+    polyNotesOn = false;
+    polyNumActiveNotes = 0;
+}
+
+void ProcessPolyVoiceStep(uint8_t step)
+{
+    if(!polyVoice.active)
+        return;
+
+    // Get chord rate in steps
+    uint8_t rateSteps = chordRateSteps[polyVoice.chordRate];
+
+    // Check if it's time to change chords
+    // Change occurs on step 0, and then at intervals based on rate
+    bool shouldChange = false;
+
+    if(step == 0)
+    {
+        // Always change on step 0 (start of 2-bar pattern)
+        shouldChange = true;
+    }
+    else if(rateSteps < 64)
+    {
+        // For rates faster than 2 bars, check if we're at the interval
+        shouldChange = (step % rateSteps) == 0;
+    }
+
+    if(shouldChange)
+    {
+        // Get current progression
+        const ChordProgression& prog = progressions[polyVoice.progressionIndex];
+
+        // Send note-off for previous chord
+        SendPolyNoteOff();
+
+        // Get current chord from progression
+        const ProgressionStep& chordStep = prog.steps[polyState.currentChordIndex];
+
+        // Calculate root note
+        int8_t rootNote;
+        if(prog.diatonic)
+        {
+            // Diatonic: use scale degree offset from melody root
+            rootNote = melodyRoot + chordStep.rootOffset;
+        }
+        else
+        {
+            // Chromatic: absolute semitone offset
+            rootNote = chordStep.rootOffset;
+        }
+
+        // Get chord notes
+        int8_t chordNotes[6];
+        uint8_t numNotes = GetChordNotes(rootNote, chordStep.chordType,
+                                          polyVoice.octaveOffset, chordNotes);
+
+        // Send note-on for new chord
+        if(numNotes > 0)
+        {
+            SendPolyChordOn(chordNotes, numNotes, polyVoice.velocity);
+        }
+
+        // Advance to next chord in progression
+        polyState.currentChordIndex++;
+        if(polyState.currentChordIndex >= prog.numChords)
+        {
+            polyState.currentChordIndex = 0;
+        }
+    }
+}

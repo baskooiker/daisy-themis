@@ -292,6 +292,87 @@ bool melodyFreezeEnabled = false;
 bool tuneModeEnabled = false;
 
 // ============================================================================
+// POLY VOICE (CHORDS)
+// ============================================================================
+
+PolyVoiceConfig polyVoice = {
+    false,      // active
+    0,          // progressionIndex (Pop progression)
+    CHORD_RATE_1_BAR,  // chordRate
+    100,        // velocity
+    0,          // octaveOffset
+    1           // midiChannel (channel 2, 0-indexed)
+};
+
+PolyVoiceState polyState;
+
+int8_t polyActiveNotes[6] = {-1, -1, -1, -1, -1, -1};
+uint8_t polyNumActiveNotes = 0;
+bool polyNotesOn = false;
+
+// Chord shapes: intervals from root
+const ChordShape chordShapes[NUM_CHORD_TYPES] = {
+    {{0, 4, 7, -1, -1, -1}, 3},      // CHORD_MAJOR
+    {{0, 3, 7, -1, -1, -1}, 3},      // CHORD_MINOR
+    {{0, 3, 6, -1, -1, -1}, 3},      // CHORD_DIM
+    {{0, 4, 8, -1, -1, -1}, 3},      // CHORD_AUG
+    {{0, 2, 7, -1, -1, -1}, 3},      // CHORD_SUS2
+    {{0, 5, 7, -1, -1, -1}, 3},      // CHORD_SUS4
+    {{0, 4, 7, 11, -1, -1}, 4},      // CHORD_MAJ7
+    {{0, 3, 7, 10, -1, -1}, 4},      // CHORD_MIN7
+    {{0, 4, 7, 10, -1, -1}, 4},      // CHORD_DOM7
+    {{0, 3, 6, 9, -1, -1}, 4},       // CHORD_DIM7
+    {{0, 3, 6, 10, -1, -1}, 4},      // CHORD_MIN7B5
+    {{0, 4, 7, 14, -1, -1}, 4},      // CHORD_ADD9
+    {{0, 3, 7, 14, -1, -1}, 4}       // CHORD_MADD9
+};
+
+// Chord progressions (16 progressions)
+const ChordProgression progressions[NUM_PROGRESSIONS] = {
+    // 0: Pop (I-V-vi-IV in C)
+    {"Pop", {{0, CHORD_MAJOR}, {7, CHORD_MAJOR}, {9, CHORD_MINOR}, {5, CHORD_MAJOR}}, 4, true},
+    // 1: Rock (I-IV-V-I)
+    {"Rock", {{0, CHORD_MAJOR}, {5, CHORD_MAJOR}, {7, CHORD_MAJOR}, {0, CHORD_MAJOR}}, 4, true},
+    // 2: Jazz (ii-V-I-vi)
+    {"Jazz", {{2, CHORD_MIN7}, {7, CHORD_DOM7}, {0, CHORD_MAJ7}, {9, CHORD_MIN7}}, 4, true},
+    // 3: Dreamy (I-iii-IV-iv)
+    {"Dreamy", {{0, CHORD_MAJOR}, {4, CHORD_MINOR}, {5, CHORD_MAJOR}, {5, CHORD_MINOR}}, 4, true},
+    // 4: Andalusian (Am-G-F-E)
+    {"Andalusian", {{9, CHORD_MINOR}, {7, CHORD_MAJOR}, {5, CHORD_MAJOR}, {4, CHORD_MAJOR}}, 4, false},
+    // 5: Minor Progression (i-VI-III-VII)
+    {"MinorProg", {{0, CHORD_MINOR}, {8, CHORD_MAJOR}, {3, CHORD_MAJOR}, {10, CHORD_MAJOR}}, 4, true},
+    // 6: Circle of Fifths (C-G-D-A-E)
+    {"Fifths", {{0, CHORD_MAJOR}, {7, CHORD_MAJOR}, {2, CHORD_MAJOR}, {9, CHORD_MAJOR}}, 4, false},
+    // 7: Pachelbel Canon (I-V-vi-iii-IV-I-IV-V)
+    {"Canon", {{0, CHORD_MAJOR}, {7, CHORD_MAJOR}, {9, CHORD_MINOR}, {4, CHORD_MINOR}, {5, CHORD_MAJOR}, {0, CHORD_MAJOR}, {5, CHORD_MAJOR}, {7, CHORD_MAJOR}}, 8, true},
+    // 8: Blues (I7-IV7-I7-V7)
+    {"Blues", {{0, CHORD_DOM7}, {5, CHORD_DOM7}, {0, CHORD_DOM7}, {7, CHORD_DOM7}}, 4, false},
+    // 9: Gospel (I-I7-IV-iv)
+    {"Gospel", {{0, CHORD_MAJOR}, {0, CHORD_DOM7}, {5, CHORD_MAJOR}, {5, CHORD_MINOR}}, 4, true},
+    // 10: Cinematic (i-VI-III-VII in minor)
+    {"Cinematic", {{0, CHORD_MINOR}, {8, CHORD_MAJOR}, {3, CHORD_MAJOR}, {10, CHORD_MAJOR}}, 4, true},
+    // 11: EDM (vi-IV-I-V)
+    {"EDM", {{9, CHORD_MINOR}, {5, CHORD_MAJOR}, {0, CHORD_MAJOR}, {7, CHORD_MAJOR}}, 4, true},
+    // 12: Chill (Imaj7-vi7-ii7-V7)
+    {"Chill", {{0, CHORD_MAJ7}, {9, CHORD_MIN7}, {2, CHORD_MIN7}, {7, CHORD_DOM7}}, 4, true},
+    // 13: Ambient (sus2 based)
+    {"Ambient", {{0, CHORD_SUS2}, {5, CHORD_SUS2}, {7, CHORD_SUS2}, {2, CHORD_SUS2}}, 4, false},
+    // 14: Dark (i-v-VI-iv)
+    {"Dark", {{0, CHORD_MINOR}, {7, CHORD_MINOR}, {8, CHORD_MAJOR}, {5, CHORD_MINOR}}, 4, true},
+    // 15: Happy (I-IV-V-IV)
+    {"Happy", {{0, CHORD_MAJOR}, {5, CHORD_MAJOR}, {7, CHORD_MAJOR}, {5, CHORD_MAJOR}}, 4, true}
+};
+
+// Chord rate names and step values
+const char* chordRateNames[NUM_CHORD_RATES] = {
+    "2 bars", "1 bar", "half", "quarter"
+};
+
+const uint8_t chordRateSteps[NUM_CHORD_RATES] = {
+    64, 32, 16, 8
+};
+
+// ============================================================================
 // TURING MACHINES
 // ============================================================================
 
@@ -315,6 +396,7 @@ const char* drumNames[NUM_DRUM_VOICES] = {
 const char* configOptionNames[NUM_CONFIG_OPTIONS] = {
     "BPM", "OUT2 div", "OUT3 div", "DrumFreeze", "Scale", "Root",
     "CV Style", "MIDI Style", "MIDI Ch", "MelFreeze", "TuneMode",
+    "Poly On", "Poly Prog", "Poly Rate", "Poly Oct", "Poly Ch",
     "Randomize!", "Pattern info", "Back"
 };
 

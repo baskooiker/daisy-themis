@@ -225,6 +225,47 @@ enum MelodyVoiceType
 };
 
 // ============================================================================
+// POLY VOICE (CHORDS) ENUMS
+// ============================================================================
+
+/**
+ * @enum ChordType
+ * @brief Available chord qualities
+ */
+enum ChordType
+{
+    CHORD_MAJOR,            ///< Major triad: 0, 4, 7
+    CHORD_MINOR,            ///< Minor triad: 0, 3, 7
+    CHORD_DIM,              ///< Diminished: 0, 3, 6
+    CHORD_AUG,              ///< Augmented: 0, 4, 8
+    CHORD_SUS2,             ///< Suspended 2nd: 0, 2, 7
+    CHORD_SUS4,             ///< Suspended 4th: 0, 5, 7
+    CHORD_MAJ7,             ///< Major 7th: 0, 4, 7, 11
+    CHORD_MIN7,             ///< Minor 7th: 0, 3, 7, 10
+    CHORD_DOM7,             ///< Dominant 7th: 0, 4, 7, 10
+    CHORD_DIM7,             ///< Diminished 7th: 0, 3, 6, 9
+    CHORD_MIN7B5,           ///< Half-diminished: 0, 3, 6, 10
+    CHORD_ADD9,             ///< Major add 9: 0, 4, 7, 14
+    CHORD_MADD9,            ///< Minor add 9: 0, 3, 7, 14
+    NUM_CHORD_TYPES
+};
+
+/**
+ * @enum ChordRate
+ * @brief How often chord changes occur
+ */
+enum ChordRate
+{
+    CHORD_RATE_2_BARS,      ///< Change every 64 steps (2 bars)
+    CHORD_RATE_1_BAR,       ///< Change every 32 steps (1 bar)
+    CHORD_RATE_HALF_BAR,    ///< Change every 16 steps (half bar)
+    CHORD_RATE_QUARTER,     ///< Change every 8 steps (quarter bar)
+    NUM_CHORD_RATES
+};
+
+constexpr uint8_t NUM_PROGRESSIONS = 16;  ///< Number of built-in progressions
+
+// ============================================================================
 // UI SYSTEM ENUMS
 // ============================================================================
 
@@ -258,6 +299,11 @@ enum ConfigOption
     CONFIG_MIDI_STYLE,      ///< MIDI melody style
     CONFIG_MIDI_MEL_CH,     ///< MIDI melody channel
     CONFIG_MELODY_FREEZE,   ///< Freeze melody patterns
+    CONFIG_POLY_ACTIVE,     ///< Poly voice on/off
+    CONFIG_POLY_PROG,       ///< Poly voice progression
+    CONFIG_POLY_RATE,       ///< Poly voice chord rate
+    CONFIG_POLY_OCTAVE,     ///< Poly voice octave offset
+    CONFIG_POLY_MIDI_CH,    ///< Poly voice MIDI channel
     CONFIG_TUNE_MODE,       ///< VCO tuning mode
     CONFIG_RANDOMIZE_ALL,   ///< Randomize all parameters
     CONFIG_PATTERN_INFO,    ///< Show pattern info
@@ -426,7 +472,12 @@ struct PersistentSettings
     uint8_t midiMelodyStyle;    ///< MelodyStyle for MIDI voice
     uint8_t midiMelChannel;     ///< MIDI channel (0-15)
     uint8_t melodyFreezeEnabled;///< Melody freeze state
-    uint8_t reserved[17];       ///< Padding to 32 bytes
+    uint8_t polyActive;         ///< Poly voice enabled
+    uint8_t polyProgression;    ///< Poly voice progression index
+    uint8_t polyRate;           ///< Poly voice chord rate
+    int8_t polyOctave;          ///< Poly voice octave offset
+    uint8_t polyMidiChannel;    ///< Poly voice MIDI channel
+    uint8_t reserved[12];       ///< Padding to 32 bytes
 };
 
 /**
@@ -451,6 +502,78 @@ struct TuringMachine
 
     void Init(uint32_t seed);
     void Process();
+};
+
+// ============================================================================
+// POLY VOICE (CHORDS) STRUCTS
+// ============================================================================
+
+/**
+ * @struct ChordShape
+ * @brief Defines intervals in a chord
+ */
+struct ChordShape
+{
+    int8_t intervals[6];        ///< Intervals from root, -128 = unused
+    uint8_t numNotes;           ///< Number of notes in chord
+};
+
+/**
+ * @struct ProgressionStep
+ * @brief Single chord in a progression
+ */
+struct ProgressionStep
+{
+    int8_t rootOffset;          ///< Root note offset (semitones or scale degree)
+    ChordType chordType;        ///< Chord quality
+};
+
+/**
+ * @struct ChordProgression
+ * @brief A sequence of chords
+ */
+struct ChordProgression
+{
+    const char* name;           ///< Display name
+    ProgressionStep steps[8];   ///< Up to 8 chords
+    uint8_t numChords;          ///< Number of chords in progression
+    bool diatonic;              ///< True = scale degrees, false = chromatic
+};
+
+/**
+ * @struct PolyVoiceConfig
+ * @brief Configuration for poly voice (chords/pads)
+ */
+struct PolyVoiceConfig
+{
+    bool active;                ///< Is poly voice enabled
+    uint8_t progressionIndex;   ///< Current progression (0-15)
+    uint8_t chordRate;          ///< ChordRate enum value
+    uint8_t velocity;           ///< MIDI velocity (0-127)
+    int8_t octaveOffset;        ///< Octave shift (-2 to +2)
+    uint8_t midiChannel;        ///< MIDI channel (0-15)
+};
+
+/**
+ * @struct PolyVoiceState
+ * @brief Runtime state for poly voice
+ */
+struct PolyVoiceState
+{
+    uint8_t currentChordIndex;  ///< Current chord in progression (0-7)
+    uint8_t stepsUntilChange;   ///< Steps until next chord
+    int8_t activeNotes[6];      ///< Currently held MIDI notes
+    uint8_t numActiveNotes;     ///< Number of active notes
+    bool notesOn;               ///< Are notes currently held
+
+    void Init()
+    {
+        currentChordIndex = 0;
+        stepsUntilChange = 0;
+        numActiveNotes = 0;
+        notesOn = false;
+        for(int i = 0; i < 6; i++) activeNotes[i] = 0;
+    }
 };
 
 // ============================================================================

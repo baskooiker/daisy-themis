@@ -113,6 +113,20 @@ enum ArpSubStyle
     NUM_ARP_SUBSTYLES
 };
 
+/**
+ * @brief Melody compatibility mode for chord-aware mapping
+ *
+ * Controls how melody notes are quantized to harmonize with current chord.
+ * Applied at trigger time when poly voice is active.
+ */
+enum MelodyCompatMode
+{
+    COMPAT_CHORD_TONES,      ///< Strict: root, 3rd, 5th, 7th of current chord (safest)
+    COMPAT_CHORD_PENTATONIC, ///< Pentatonic built on chord root (balanced)
+    COMPAT_CHORD_SCALE,      ///< Full scale from chord root (most freedom)
+    NUM_COMPAT_MODES
+};
+
 // ============================================================================
 // VARIATION SYSTEM ENUMS
 // ============================================================================
@@ -170,6 +184,19 @@ enum OutDivision
 // STRUCTS
 // ============================================================================
 
+/**
+ * @brief Context about the current chord for melody mapping
+ *
+ * Provides information about the currently playing chord so melody
+ * notes can be quantized to harmonically compatible notes.
+ */
+struct ChordContext
+{
+    int8_t chordRoot;        ///< Absolute semitone from C (0=C, 7=G, etc.)
+    uint8_t chordType;       ///< ChordType enum value (CHORD_MAJOR, CHORD_MINOR, etc.)
+    bool isDiatonic;         ///< True if chord is diatonic to global scale
+};
+
 struct VariationConfig
 {
     VariationMode mode;
@@ -213,6 +240,44 @@ struct MelodyConfig
     uint8_t currentOctave;
     bool active;
     VariationConfig variation;
+    MelodyCompatMode compatMode;  ///< How melody notes map to current chord
+};
+
+struct PolyVoiceConfig
+{
+    bool active;
+
+    // Progression selection
+    uint8_t progressionIndex;     // Which progression to use (0-15)
+    uint8_t chordRate;            // ChordRate enum - how fast chords change
+
+    // Sound shaping
+    uint8_t velocity;             // 0-127
+    int8_t octaveOffset;          // -2 to +2, shifts all chord notes
+
+    // Variation
+    uint8_t progressionB;         // Alternative progression for B variation
+    VariationMode variationMode;  // Off, AB, ABC
+};
+
+struct PolyVoiceState
+{
+    uint8_t currentChordIndex;    // Which chord in progression (0-7)
+    uint8_t stepsUntilChange;     // Countdown to next chord
+    int8_t activeNotes[6];        // Currently sounding MIDI notes (for note-off)
+    uint8_t numActiveNotes;       // How many notes are active
+    bool notesOn;                 // Are notes currently sounding?
+
+    void Init()
+    {
+        currentChordIndex = 0;
+        stepsUntilChange = 0;
+        numActiveNotes = 0;
+        notesOn = false;
+        for (int i = 0; i < 6; i++) {
+            activeNotes[i] = 0;
+        }
+    }
 };
 
 struct GrooveConfig

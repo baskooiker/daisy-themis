@@ -93,6 +93,7 @@ extern const char* densityNames[NUM_DENSITY_LEVELS];
 extern const char* variationModeNames[NUM_VARIATION_MODES];
 extern const char* variationSequenceNames[NUM_VARIATION_SEQUENCES];
 extern const char* interactionStyleNames[NUM_INTERACTION_STYLES];
+extern const char* compatModeNames[NUM_COMPAT_MODES];
 
 } // namespace themis
 

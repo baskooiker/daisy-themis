@@ -16,6 +16,7 @@ CORE_SRCS = ../core/themis_platform.cpp \
             ../core/themis_data.cpp \
             ../core/themis_patterns.cpp \
             ../core/themis_melody.cpp \
+            ../core/themis_chords.cpp \
             ../core/themis_sequencer.cpp
 
 DESKTOP_SRCS = main.cpp \

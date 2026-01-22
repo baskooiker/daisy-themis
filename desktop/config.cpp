@@ -97,6 +97,28 @@ bool LoadSettings(Settings& settings)
             settings.midiPort = std::stoi(value);
         } else if (key == "midi_port_name") {
             settings.midiPortName = value;
+        } else if (key == "melody_cv_mute") {
+            settings.melodyCVMute = (value == "true" || value == "1");
+        } else if (key == "melody_cv_solo") {
+            settings.melodyCVSolo = (value == "true" || value == "1");
+        } else if (key == "melody_midi_mute") {
+            settings.melodyMidiMute = (value == "true" || value == "1");
+        } else if (key == "melody_midi_solo") {
+            settings.melodyMidiSolo = (value == "true" || value == "1");
+        } else if (key == "poly_mute") {
+            settings.polyMute = (value == "true" || value == "1");
+        } else if (key == "poly_solo") {
+            settings.polySolo = (value == "true" || value == "1");
+        } else if (key.substr(0, 10) == "drum_mute_") {
+            int idx = std::stoi(key.substr(10));
+            if (idx >= 0 && idx < 11) {
+                settings.drumMute[idx] = (value == "true" || value == "1");
+            }
+        } else if (key.substr(0, 10) == "drum_solo_") {
+            int idx = std::stoi(key.substr(10));
+            if (idx >= 0 && idx < 11) {
+                settings.drumSolo[idx] = (value == "true" || value == "1");
+            }
         }
     }
 
@@ -137,7 +159,19 @@ bool SaveSettings(const Settings& settings)
 
     file << "[midi]\n";
     file << "midi_port=" << settings.midiPort << "\n";
-    file << "midi_port_name=" << settings.midiPortName << "\n";
+    file << "midi_port_name=" << settings.midiPortName << "\n\n";
+
+    file << "[mixer]\n";
+    for (int i = 0; i < 11; i++) {
+        file << "drum_mute_" << i << "=" << (settings.drumMute[i] ? "true" : "false") << "\n";
+        file << "drum_solo_" << i << "=" << (settings.drumSolo[i] ? "true" : "false") << "\n";
+    }
+    file << "melody_cv_mute=" << (settings.melodyCVMute ? "true" : "false") << "\n";
+    file << "melody_cv_solo=" << (settings.melodyCVSolo ? "true" : "false") << "\n";
+    file << "melody_midi_mute=" << (settings.melodyMidiMute ? "true" : "false") << "\n";
+    file << "melody_midi_solo=" << (settings.melodyMidiSolo ? "true" : "false") << "\n";
+    file << "poly_mute=" << (settings.polyMute ? "true" : "false") << "\n";
+    file << "poly_solo=" << (settings.polySolo ? "true" : "false") << "\n";
 
     file.close();
     return true;

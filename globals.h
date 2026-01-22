@@ -144,6 +144,22 @@ extern TuringMachine turingCV3;
 extern TuringMachine turingCV4;
 
 // ============================================================================
+// POLY VOICE (CHORDS)
+// ============================================================================
+
+extern PolyVoiceConfig polyVoice;
+extern PolyVoiceState polyState;
+extern int8_t polyActiveNotes[6];      // Currently held MIDI notes
+extern uint8_t polyNumActiveNotes;     // Number of active notes
+extern bool polyNotesOn;               // Are notes currently held
+
+// Chord data
+extern const ChordShape chordShapes[NUM_CHORD_TYPES];
+extern const ChordProgression progressions[NUM_PROGRESSIONS];
+extern const char* chordRateNames[NUM_CHORD_RATES];
+extern const uint8_t chordRateSteps[NUM_CHORD_RATES];
+
+// ============================================================================
 // CONST DATA (defined in globals.cpp)
 // ============================================================================
 

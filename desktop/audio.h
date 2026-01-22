@@ -120,6 +120,45 @@ private:
 };
 
 // ============================================================================
+// PAD SYNTH (POLYPHONIC)
+// ============================================================================
+
+/**
+ * @struct PadVoice
+ * @brief Single voice in polyphonic pad synth
+ */
+struct PadVoice {
+    bool active = false;
+    int8_t note = 0;        // MIDI note number for identification
+    float phase = 0.0f;
+    float freq = 0.0f;
+    float env = 0.0f;       // Current envelope value
+    float targetEnv = 0.0f; // Target envelope (1 when on, 0 when off)
+    float filterState = 0.0f;
+};
+
+/**
+ * @class PadSynth
+ * @brief Polyphonic pad synthesizer for chords
+ *
+ * Warm pad sound with slow attack/release, suitable for chord progressions
+ */
+class PadSynth {
+public:
+    static constexpr int MAX_VOICES = 6;
+
+    void NoteOn(int8_t note, uint8_t velocity);
+    void NoteOff(int8_t note);
+    void AllNotesOff();
+    float Process(float sampleRate);
+
+private:
+    PadVoice voices[MAX_VOICES];
+    float attackRate = 0.002f;   // Slow attack for pad
+    float releaseRate = 0.0008f; // Slow release for pad
+};
+
+// ============================================================================
 // AUDIO ENGINE
 // ============================================================================
 
@@ -143,6 +182,11 @@ public:
     void TriggerMelodyMidi(int8_t note, uint8_t velocity);
     void StopMelodyCV();
     void StopMelodyMidi();
+
+    // Poly voice (pads/chords)
+    void TriggerPolyChord(const int8_t* notes, uint8_t count, uint8_t velocity);
+    void ReleasePolyChord(const int8_t* notes, uint8_t count);
+    void StopAllPolyNotes();
 
     void SetVolume(float vol) { volume = vol; }
     float GetVolume() const { return volume; }
@@ -198,6 +242,9 @@ private:
     float melodyMidiEnv = 0.0f;
     bool melodyMidiActive = false;
     float melodyMidiFilterState = 0.0f;
+
+    // Poly voice (pads)
+    PadSynth padSynth;
 };
 
 // Global audio engine instance
