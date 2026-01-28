@@ -315,4 +315,9 @@ const char* compatModeNames[NUM_COMPAT_MODES] = {
     "Chord", "Penta", "Scale"
 };
 
+const char* chordTypeNames[13] = {
+    "Maj", "min", "dim", "aug", "sus2", "sus4",
+    "Maj7", "min7", "7", "dim7", "m7b5", "add9", "madd9"
+};
+
 } // namespace themis

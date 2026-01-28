@@ -112,6 +112,10 @@ void Sequencer::Init()
     polyVoice.variationMode = VAR_MODE_OFF;
     polyState.Init();
 
+    // Initialize chord randomizer
+    chordRandomizer.Init();
+    chordRandomizerState.Init();
+
     // Initialize rhythm player voice
     rhythmVoice.Init();
     rhythmState.Init();
@@ -156,6 +160,20 @@ void Sequencer::Start()
     isRunning = true;
     currentStep = 0;
     barCounter = 0;
+    cycleCounter = 0;
+
+    // Reset poly voice state so chord progression starts from beginning
+    polyState.currentChordIndex = 0;
+    polyState.stepsUntilChange = 0;  // Will be initialized on first step
+    polyState.notesOn = false;
+    polyState.numActiveNotes = 0;
+
+    // Reset rhythm player state
+    rhythmState.barPosition = 0;
+    rhythmState.patternPosition = 0;
+
+    // Reset acid voice state
+    acidState.stepPosition = 0;
 
     // Generate initial patterns
     if(g_platform) {
@@ -836,11 +854,21 @@ void Sequencer::ProcessPolyVoice()
         uint8_t nextChordIndex = (polyState.currentChordIndex + 1) %
                                   progressions[progIndex].length;
 
-        // If we've wrapped around to chord 0 and there's a pending progression change, apply it
-        if (nextChordIndex == 0 && polyState.pendingProgressionIndex >= 0) {
-            polyVoice.progressionIndex = (uint8_t)polyState.pendingProgressionIndex;
-            polyState.pendingProgressionIndex = -1;  // Clear pending
-            progIndex = polyVoice.progressionIndex;
+        // If we've wrapped around to chord 0, process chord randomization
+        if (nextChordIndex == 0) {
+            // First apply any pending manual progression change
+            if (polyState.pendingProgressionIndex >= 0) {
+                polyVoice.progressionIndex = (uint8_t)polyState.pendingProgressionIndex;
+                polyState.pendingProgressionIndex = -1;  // Clear pending
+                progIndex = polyVoice.progressionIndex;
+            } else {
+                // Otherwise, process automatic randomization
+                ProcessChordRandomization();
+                progIndex = polyVoice.progressionIndex;
+            }
+
+            // Notify rhythm voice of chord progression cycle
+            NotifyRhythmOfChordCycle();
         }
 
         polyState.currentChordIndex = nextChordIndex;
@@ -951,8 +979,12 @@ void Sequencer::RandomizePolyVoice()
 
     uint32_t seed = g_platform ? g_platform->GetRandomSeed() : 12345;
 
-    // Randomize progression (0-15)
-    polyVoice.progressionIndex = seed % NUM_PROGRESSIONS;
+    // Select a random enabled vibe first
+    VibeType vibe = SelectRandomEnabledVibe(seed);
+    chordRandomizerState.currentVibe = vibe;
+
+    // Select a progression from that vibe (respecting enabled progressions)
+    SelectProgressionFromVibe(vibe, seed);
 
     // Randomize chord rate (favor 1 bar and half bar)
     int rateRoll = (seed >> 8) % 100;
@@ -968,10 +1000,17 @@ void Sequencer::RandomizePolyVoice()
     // Randomize octave offset (-1 to +1)
     polyVoice.octaveOffset = ((seed >> 16) % 3) - 1;
 
-    // Randomize B progression (different from A)
-    polyVoice.progressionB = ((seed >> 20) % (NUM_PROGRESSIONS - 1));
-    if (polyVoice.progressionB >= polyVoice.progressionIndex) {
-        polyVoice.progressionB++;
+    // Randomize B progression (different from A, same vibe)
+    uint8_t vibeIndices[32];
+    uint8_t vibeCount = GetProgressionsForVibe(vibe, vibeIndices, 32);
+    if (vibeCount > 1) {
+        uint8_t bIdx = (seed >> 20) % vibeCount;
+        if (vibeIndices[bIdx] == polyVoice.progressionIndex && vibeCount > 1) {
+            bIdx = (bIdx + 1) % vibeCount;
+        }
+        polyVoice.progressionB = vibeIndices[bIdx];
+    } else {
+        polyVoice.progressionB = polyVoice.progressionIndex;
     }
 
     // Randomize variation mode (50% off, 50% AB)
@@ -982,6 +1021,11 @@ void Sequencer::RandomizePolyVoice()
 
     // Reset state for new progression
     polyState.Init();
+
+    // Reset chord randomizer state
+    chordRandomizerState.inTransition = false;
+    chordRandomizerState.transitionBarsRemaining = 0;
+    chordRandomizerState.changeTimer = 2 + (seed % 3);  // 2-4 progression cycles before first auto-change
 }
 
 // ============================================================================
@@ -1019,10 +1063,8 @@ void Sequencer::ProcessRhythmVoice()
         rhythmState.numActiveNotes = 0;
     }
 
-    // Check morph mode randomization timer
-    if (rhythmVoice.mode == RHYTHM_MODE_MORPH && rhythmState.randomizeTimer == 0) {
-        RandomizeRhythmParams(rhythmVoice, rhythmState, seed ^ 0xFEDCBA98);
-    }
+    // Morph mode randomization is now triggered by NotifyRhythmOfChordCycle()
+    // at chord progression cycle boundaries, not by step-based timers
 
     // Process rhythm step
     int8_t notes[6];
@@ -1241,6 +1283,244 @@ void Sequencer::RandomizeAcidVoice()
     acidState.Init();
     acidState.currentRhythmPattern = acidVoice.rhythmPattern;
     acidState.currentMelodyPattern = acidVoice.melodyPattern;
+}
+
+// ============================================================================
+// CHORD RANDOMIZATION (VIBE SYSTEM)
+// ============================================================================
+
+VibeType Sequencer::SelectRandomEnabledVibe(uint32_t seed)
+{
+    // Count enabled vibes
+    uint8_t enabledCount = 0;
+    uint8_t enabledVibesArr[NUM_VIBE_TYPES];
+
+    for (int v = 0; v < NUM_VIBE_TYPES; v++) {
+        if (chordRandomizer.enabledVibes & (1 << v)) {
+            enabledVibesArr[enabledCount++] = v;
+        }
+    }
+
+    if (enabledCount == 0) {
+        return VIBE_MINOR;  // Fallback
+    }
+
+    return (VibeType)enabledVibesArr[seed % enabledCount];
+}
+
+void Sequencer::SelectProgressionFromVibe(VibeType vibe, uint32_t seed)
+{
+    // Get all progressions for this vibe
+    uint8_t indices[32];
+    uint8_t count = GetProgressionsForVibe(vibe, indices, 32);
+
+    if (count == 0) {
+        return;  // No change
+    }
+
+    // Filter by enabled progressions
+    uint8_t enabledIndices[32];
+    uint8_t enabledCount = 0;
+
+    for (int i = 0; i < count; i++) {
+        uint8_t progIdx = indices[i];
+        // Find position of this progression within the vibe
+        uint8_t vibePos = 0;
+        for (uint8_t j = 0; j < progIdx; j++) {
+            if (progressions[j].vibe == vibe) {
+                vibePos++;
+            }
+        }
+        if (chordRandomizer.enabledProgressions[vibe] & (1 << vibePos)) {
+            enabledIndices[enabledCount++] = progIdx;
+        }
+    }
+
+    if (enabledCount == 0) {
+        // All disabled, use first in vibe
+        polyVoice.progressionIndex = indices[0];
+    } else {
+        polyVoice.progressionIndex = enabledIndices[seed % enabledCount];
+    }
+}
+
+void Sequencer::SelectSteadyChordFromVibe(VibeType vibe, uint32_t seed)
+{
+    polyVoice.progressionIndex = GetSteadyChordForVibe(vibe, seed);
+}
+
+void Sequencer::TransitionToVibe(VibeType newVibe, uint32_t seed)
+{
+    VibeType oldVibe = chordRandomizerState.currentVibe;
+
+    // Calculate root shift
+    int8_t rootShift = CalculateVibeRootShift(oldVibe, newVibe, seed);
+    melodyRoot = (melodyRoot + rootShift + 12) % 12;
+
+    // Update vibe
+    chordRandomizerState.currentVibe = newVibe;
+
+    // Select a steady chord for transition
+    SelectSteadyChordFromVibe(newVibe, seed);
+
+    // Set transition state - calculate how many cycles of steady chord = ~8 bars
+    chordRandomizerState.inTransition = true;
+    // Steady chords have length 1, so cycles needed = 8 bars / (bars per cycle)
+    // Bars per cycle = chordRateSteps[rate] / 32
+    uint8_t barsPerCycle = chordRateSteps[polyVoice.chordRate] / 32;
+    if (barsPerCycle == 0) barsPerCycle = 1;  // Minimum 1 for quarter-bar rate
+    chordRandomizerState.transitionBarsRemaining = 8 / barsPerCycle;
+    if (chordRandomizerState.transitionBarsRemaining < 2) {
+        chordRandomizerState.transitionBarsRemaining = 2;  // Minimum 2 cycles
+    }
+
+    // Timer will be reset after transition completes
+    chordRandomizerState.changeTimer = 0;
+}
+
+void Sequencer::NotifyRhythmOfChordCycle()
+{
+    // Called when chord progression loops back to start
+    // Use this to trigger rhythm personality changes at musically meaningful moments
+
+    // Skip if not in morph mode or frozen
+    if (rhythmVoice.mode != RHYTHM_MODE_MORPH || rhythmVoice.freezeStyle) {
+        return;
+    }
+
+    uint32_t seed = g_platform ? g_platform->GetRandomSeed() : 12345;
+
+    // Check if it's time for a style morph (use morphTimer as a "cycles since last change" counter)
+    // Style changes less often - roughly every 2-4 chord cycles
+    if (rhythmState.morphTimer == 0 || rhythmState.morphTimer <= 16) {
+        // Pick a new target style (different from current)
+        RhythmPlayStyle newStyle = (RhythmPlayStyle)(seed % NUM_RHYTHM_PLAY_STYLES);
+        if (newStyle == rhythmState.currentStyle) {
+            newStyle = (RhythmPlayStyle)((newStyle + 1) % NUM_RHYTHM_PLAY_STYLES);
+        }
+
+        rhythmState.targetStyle = newStyle;
+        rhythmState.styleMorphProgress = 0.0f;
+
+        // Reset morph timer to wait 2-4 chord cycles before next style change
+        // Each chord cycle is roughly 4-8 bars depending on progression length and rate
+        rhythmState.morphTimer = 128 + ((seed >> 8) % 128);  // 4-8 bars worth of steps
+    }
+
+    // Check if it's time for parameter randomization
+    // This happens more frequently - roughly every 1-3 chord cycles
+    if (rhythmState.randomizeTimer == 0 || rhythmState.randomizeTimer <= 32) {
+        RandomizeRhythmParams(rhythmVoice, rhythmState, seed ^ 0xFEDCBA98);
+    }
+}
+
+void Sequencer::ProcessChordRandomization()
+{
+    // Don't process if frozen
+    if (chordRandomizer.freezeEnabled) {
+        return;
+    }
+
+    uint32_t seed = g_platform ? g_platform->GetRandomSeed() : 12345;
+
+    // Check if current vibe is still enabled - if not, plan a transition to an enabled vibe
+    bool currentVibeEnabled = chordRandomizer.enabledVibes & (1 << chordRandomizerState.currentVibe);
+    if (!currentVibeEnabled && !chordRandomizerState.inTransition) {
+        // Start transition: play steady chord from CURRENT vibe while we prepare to switch
+        SelectSteadyChordFromVibe(chordRandomizerState.currentVibe, seed);
+        chordRandomizerState.inTransition = true;
+
+        // Calculate transition duration
+        uint8_t barsPerCycle = chordRateSteps[polyVoice.chordRate] / 32;
+        if (barsPerCycle == 0) barsPerCycle = 1;
+        chordRandomizerState.transitionBarsRemaining = 8 / barsPerCycle;
+        if (chordRandomizerState.transitionBarsRemaining < 2) {
+            chordRandomizerState.transitionBarsRemaining = 2;
+        }
+        chordRandomizerState.changeTimer = 0;
+        return;
+    }
+
+    // Handle ongoing transition (steady chord playing)
+    if (chordRandomizerState.inTransition) {
+        chordRandomizerState.transitionBarsRemaining--;
+
+        if (chordRandomizerState.transitionBarsRemaining <= 0) {
+            // Transition complete
+            chordRandomizerState.inTransition = false;
+
+            // Check if we need to switch vibes (current vibe was disabled)
+            bool currentVibeStillEnabled = chordRandomizer.enabledVibes & (1 << chordRandomizerState.currentVibe);
+            if (!currentVibeStillEnabled) {
+                // Switch to an enabled vibe now
+                VibeType newVibe = SelectRandomEnabledVibe(seed);
+                int8_t rootShift = CalculateVibeRootShift(chordRandomizerState.currentVibe, newVibe, seed);
+                melodyRoot = (melodyRoot + rootShift + 12) % 12;
+                chordRandomizerState.currentVibe = newVibe;
+            }
+
+            // Pick a real progression from the (possibly new) current vibe
+            SelectProgressionFromVibe(chordRandomizerState.currentVibe, seed);
+
+            // Set timer: wait 2-4 progression cycles before next change
+            chordRandomizerState.changeTimer = 2 + (seed % 3);
+        }
+        return;
+    }
+
+    // Decrement change timer (counts progression cycles)
+    if (chordRandomizerState.changeTimer > 0) {
+        chordRandomizerState.changeTimer--;
+        return;  // Timer not expired yet
+    }
+
+    // Timer expired - consider changing
+
+    // Count enabled vibes
+    uint8_t enabledVibeCount = 0;
+    for (int v = 0; v < NUM_VIBE_TYPES; v++) {
+        if (chordRandomizer.enabledVibes & (1 << v)) {
+            enabledVibeCount++;
+        }
+    }
+
+    // Decide: change vibe? (20% probability if multiple vibes enabled)
+    bool changeVibe = (enabledVibeCount > 1) && ((seed % 100) < 20);
+
+    if (changeVibe) {
+        VibeType newVibe = SelectRandomEnabledVibe(seed);
+        if (newVibe != chordRandomizerState.currentVibe) {
+            TransitionToVibe(newVibe, seed);
+            return;
+        }
+    }
+
+    // Stay in vibe - maybe change root? (10% chance)
+    bool changeRoot = ((seed >> 4) % 100) < 10;
+    if (changeRoot) {
+        // Shift root up 7 (fifth) or up 1
+        int8_t shift = ((seed >> 8) % 2) == 0 ? 7 : 1;
+        melodyRoot = (melodyRoot + shift) % 12;
+
+        // Use steady chord for transition
+        SelectSteadyChordFromVibe(chordRandomizerState.currentVibe, seed);
+        chordRandomizerState.inTransition = true;
+
+        // Calculate transition duration in cycles (similar to TransitionToVibe)
+        uint8_t barsPerCycle = chordRateSteps[polyVoice.chordRate] / 32;
+        if (barsPerCycle == 0) barsPerCycle = 1;
+        chordRandomizerState.transitionBarsRemaining = 8 / barsPerCycle;
+        if (chordRandomizerState.transitionBarsRemaining < 2) {
+            chordRandomizerState.transitionBarsRemaining = 2;
+        }
+        chordRandomizerState.changeTimer = 0;  // Will be set after transition
+    } else {
+        // Just pick new progression from same vibe
+        SelectProgressionFromVibe(chordRandomizerState.currentVibe, seed);
+
+        // Reset timer: 2-4 progression cycles
+        chordRandomizerState.changeTimer = 2 + ((seed >> 12) % 3);
+    }
 }
 
 } // namespace themis

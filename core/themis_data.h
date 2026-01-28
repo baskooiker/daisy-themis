@@ -97,6 +97,7 @@ extern const char* variationModeNames[NUM_VARIATION_MODES];
 extern const char* variationSequenceNames[NUM_VARIATION_SEQUENCES];
 extern const char* interactionStyleNames[NUM_INTERACTION_STYLES];
 extern const char* compatModeNames[NUM_COMPAT_MODES];
+extern const char* chordTypeNames[13];  // NUM_CHORD_TYPES from themis_chords.h
 
 } // namespace themis
 

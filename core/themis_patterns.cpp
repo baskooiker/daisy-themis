@@ -82,8 +82,8 @@ uint32_t GenerateEuclidean(uint32_t seed, DensityLevel density, uint8_t length)
 {
     uint32_t pattern = 0;
 
-    // For low density, use slightly off-grid hit counts for more interest
-    // E.g., 3 or 5 hits instead of 4 creates more rhythmic variety
+    // For all densities, use slightly off-grid hit counts for more interest
+    // This avoids boring patterns like straight 8ths (8 over 16)
     int hitCount;
     if(density == DENSITY_LOW)
     {
@@ -96,7 +96,26 @@ uint32_t GenerateEuclidean(uint32_t seed, DensityLevel density, uint8_t length)
     }
     else if(density == DENSITY_MEDIUM)
     {
-        hitCount = length / 2;
+        // For 32-step patterns, avoid 16 hits (straight 8ths) - favor 14, 15, 17, or 18
+        // This creates more interesting rhythmic patterns
+        int baseHits = length / 2;  // 16 for length=32
+
+        // Weight toward off-grid counts: 30% for -2, 30% for -1, 10% for 0, 15% for +1, 15% for +2
+        int roll = (seed >> 4) % 100;
+        if(roll < 30)
+            hitCount = baseHits - 2;      // 14 hits (30%)
+        else if(roll < 60)
+            hitCount = baseHits - 1;      // 15 hits (30%)
+        else if(roll < 70)
+            hitCount = baseHits;          // 16 hits (10%) - straight 8ths, now rare
+        else if(roll < 85)
+            hitCount = baseHits + 1;      // 17 hits (15%)
+        else
+            hitCount = baseHits + 2;      // 18 hits (15%)
+
+        // Clamp to valid range
+        if(hitCount < 1) hitCount = 1;
+        if(hitCount > length - 1) hitCount = length - 1;
     }
     else // DENSITY_HIGH
     {

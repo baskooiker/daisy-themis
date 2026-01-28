@@ -22,6 +22,22 @@ const char* chordRateNames[NUM_CHORD_RATES] = {
 };
 
 // ============================================================================
+// VIBE SYSTEM NAMES
+// ============================================================================
+
+const char* vibeNames[NUM_VIBE_TYPES] = {
+    "Minor",
+    "Whole-Tone",
+    "Major"
+};
+
+const char* progCategoryNames[NUM_PROG_CATEGORIES] = {
+    "Steady",
+    "Cadence",
+    "Full"
+};
+
+// ============================================================================
 // CHORD SHAPE DATA
 // ============================================================================
 
@@ -72,234 +88,288 @@ const ChordShape chordShapes[NUM_CHORD_TYPES] = {
 
 const ChordProgression progressions[NUM_PROGRESSIONS] = {
     // ========================================================================
-    // TECHNO / DARK / MINIMAL - Static and hypnotic progressions
+    // MINOR VIBE - STEADY (for transitions)
     // ========================================================================
 
-    // 0: Static Minor - No changes, pure hypnotic drone
-    {"Static Minor",
+    // 0: Minor Drone - Single i chord (steady)
+    {"Minor Drone",
      {{0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
       {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
       {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
       {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
-     1, FEEL_DARK},
+     1, FEEL_DARK, VIBE_MINOR, PROG_STEADY},
 
-    // 1: Static Min7 - Minor 7th drone, rich but dark
-    {"Static Min7",
+    // 1: Minor 7 Drone - Rich minor drone
+    {"Min7 Drone",
      {{0, true, CHORD_MIN7, 0}, {0, true, CHORD_MIN7, 0},
       {0, true, CHORD_MIN7, 0}, {0, true, CHORD_MIN7, 0},
       {0, true, CHORD_MIN7, 0}, {0, true, CHORD_MIN7, 0},
       {0, true, CHORD_MIN7, 0}, {0, true, CHORD_MIN7, 0}},
-     1, FEEL_DARK},
-
-    // 2: Static Sus4 - Tension without resolution
-    {"Static Sus4",
-     {{0, true, CHORD_SUS4, 0}, {0, true, CHORD_SUS4, 0},
-      {0, true, CHORD_SUS4, 0}, {0, true, CHORD_SUS4, 0},
-      {0, true, CHORD_SUS4, 0}, {0, true, CHORD_SUS4, 0},
-      {0, true, CHORD_SUS4, 0}, {0, true, CHORD_SUS4, 0}},
-     1, FEEL_TENSE},
-
-    // 3: Static Dim7 - Eerie diminished drone
-    {"Static Dim7",
-     {{0, true, CHORD_DIM7, 0}, {0, true, CHORD_DIM7, 0},
-      {0, true, CHORD_DIM7, 0}, {0, true, CHORD_DIM7, 0},
-      {0, true, CHORD_DIM7, 0}, {0, true, CHORD_DIM7, 0},
-      {0, true, CHORD_DIM7, 0}, {0, true, CHORD_DIM7, 0}},
-     1, FEEL_TENSE},
-
-    // 4: Techno Pulse - Minimal movement i-iv
-    {"Techno Pulse",
-     {{0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
-      {0, true, CHORD_MINOR, 0}, {3, true, CHORD_MINOR, 0},
-      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
-      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
-     4, FEEL_DARK},
-
-    // 5: Dark Phrygian - i to bII, classic dark techno
-    {"Dark Phrygian",
-     {{0, true, CHORD_MINOR, 0}, {1, false, CHORD_MAJOR, 0},
-      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
-      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
-      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
-     4, FEEL_DARK},
-
-    // 6: Hypnotic bVII - i with occasional bVII
-    {"Hypnotic bVII",
-     {{0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
-      {-2, false, CHORD_MAJOR, 0}, {0, true, CHORD_MINOR, 0},
-      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
-      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
-     4, FEEL_DARK},
-
-    // 7: Industrial - i-bII-i-bVII, gritty movement
-    {"Industrial",
-     {{0, true, CHORD_MINOR, 0}, {1, false, CHORD_MAJOR, 0},
-      {0, true, CHORD_MINOR, 0}, {-2, false, CHORD_MAJOR, 0},
-      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
-      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
-     4, FEEL_DARK},
-
-    // 8: Tritone - Dissonant tritone movement
-    {"Tritone",
-     {{0, true, CHORD_MINOR, 0}, {6, false, CHORD_MINOR, 0},
-      {0, true, CHORD_MINOR, 0}, {6, false, CHORD_MINOR, 0},
-      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
-      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
-     4, FEEL_TENSE},
-
-    // 9: Half-Dim Drone - Dark half-diminished tension
-    {"Half-Dim",
-     {{0, true, CHORD_MIN7B5, 0}, {0, true, CHORD_MIN7B5, 0},
-      {0, true, CHORD_MIN7B5, 0}, {0, true, CHORD_MIN7B5, 0},
-      {0, true, CHORD_MIN7B5, 0}, {0, true, CHORD_MIN7B5, 0},
-      {0, true, CHORD_MIN7B5, 0}, {0, true, CHORD_MIN7B5, 0}},
-     1, FEEL_TENSE},
+     1, FEEL_DARK, VIBE_MINOR, PROG_STEADY},
 
     // ========================================================================
-    // CLASSIC PROGRESSIONS - Moved from original positions
+    // MINOR VIBE - CADENCES (2 chords)
     // ========================================================================
 
-    // === HAPPY/BRIGHT ===
+    // 2: Minor iv-i - Plagal cadence
+    {"Minor iv-i",
+     {{3, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {3, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
+     2, FEEL_SAD, VIBE_MINOR, PROG_CADENCE},
 
-    // 10: Pop (I - V - vi - IV) - Classic pop progression
-    {"Pop I-V-vi-IV",
-     {{0, true, CHORD_MAJOR, 0}, {4, true, CHORD_MAJOR, 0},
-      {5, true, CHORD_MINOR, 0}, {3, true, CHORD_MAJOR, 0},
-      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
-      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0}},
-     4, FEEL_HAPPY},
+    // 3: Minor V-i - Authentic cadence
+    {"Minor V-i",
+     {{4, true, CHORD_MAJOR, 0}, {0, true, CHORD_MINOR, 0},
+      {4, true, CHORD_MAJOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
+     2, FEEL_DARK, VIBE_MINOR, PROG_CADENCE},
 
-    // 11: Rock (I - IV - V - IV)
-    {"Rock I-IV-V",
-     {{0, true, CHORD_MAJOR, 0}, {3, true, CHORD_MAJOR, 0},
-      {4, true, CHORD_MAJOR, 0}, {3, true, CHORD_MAJOR, 0},
-      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
-      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0}},
-     4, FEEL_BRIGHT},
+    // ========================================================================
+    // MINOR VIBE - FULL PROGRESSIONS (4+ chords)
+    // ========================================================================
 
-    // 12: Fifties (I - vi - IV - V)
-    {"Fifties",
-     {{0, true, CHORD_MAJOR, 0}, {5, true, CHORD_MINOR, 0},
-      {3, true, CHORD_MAJOR, 0}, {4, true, CHORD_MAJOR, 0},
-      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
-      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0}},
-     4, FEEL_NOSTALGIC},
-
-    // === SAD/MELANCHOLIC ===
-
-    // 13: Axis (vi - IV - I - V) - Emotional pop
-    {"Axis vi-IV-I-V",
-     {{5, true, CHORD_MINOR, 0}, {3, true, CHORD_MAJOR, 0},
-      {0, true, CHORD_MAJOR, 0}, {4, true, CHORD_MAJOR, 0},
-      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
-      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0}},
-     4, FEEL_EMOTIONAL},
-
-    // 14: Minor Epic (i - VI - III - VII)
+    // 4: Epic Minor (i - VI - III - VII)
     {"Epic Minor",
      {{0, true, CHORD_MINOR, 0}, {5, true, CHORD_MAJOR, 0},
       {2, true, CHORD_MAJOR, 0}, {6, true, CHORD_MAJOR, 0},
       {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
       {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
-     4, FEEL_EPIC},
+     4, FEEL_EPIC, VIBE_MINOR, PROG_FULL},
 
-    // 15: Natural Minor (i - iv - v - i)
+    // 5: Natural Minor (i - iv - v - i)
     {"Natural Minor",
      {{0, true, CHORD_MINOR, 0}, {3, true, CHORD_MINOR, 0},
       {4, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
       {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
       {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
-     4, FEEL_SAD},
+     4, FEEL_SAD, VIBE_MINOR, PROG_FULL},
 
-    // === TENSE/DRAMATIC ===
-
-    // 16: Andalusian (i - VII - VI - V) using semitones for bVII and bVI
+    // 6: Andalusian (i - VII - VI - V)
     {"Andalusian",
      {{0, true, CHORD_MINOR, 0}, {-2, false, CHORD_MAJOR, 0},
       {-4, false, CHORD_MAJOR, 0}, {4, true, CHORD_MAJOR, 0},
       {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
       {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
-     4, FEEL_TENSE},
+     4, FEEL_TENSE, VIBE_MINOR, PROG_FULL},
 
-    // 17: Mixolydian Rock (I - bVII - IV - I)
-    {"Mixolydian",
-     {{0, true, CHORD_MAJOR, 0}, {-2, false, CHORD_MAJOR, 0},
-      {3, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
-      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
-      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0}},
-     4, FEEL_BRIGHT},
-
-    // 18: Minor Plagal (i - iv - bVII - i)
+    // 7: Minor Plagal (i - iv - bVII - i)
     {"Minor Plagal",
      {{0, true, CHORD_MINOR, 0}, {3, true, CHORD_MINOR, 0},
       {-2, false, CHORD_MAJOR, 0}, {0, true, CHORD_MINOR, 0},
       {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
       {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
-     4, FEEL_MELANCHOLIC},
+     4, FEEL_MELANCHOLIC, VIBE_MINOR, PROG_FULL},
 
-    // === JAZZ ===
+    // 8: Techno Pulse - Minimal movement i-iv
+    {"Techno Pulse",
+     {{0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {3, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
+     4, FEEL_DARK, VIBE_MINOR, PROG_FULL},
 
-    // 19: Jazz 2-5-1 (ii7 - V7 - Imaj7 - Imaj7)
-    {"Jazz ii-V-I",
-     {{1, true, CHORD_MIN7, 0}, {4, true, CHORD_DOM7, 0},
-      {0, true, CHORD_MAJ7, 0}, {0, true, CHORD_MAJ7, 0},
-      {0, true, CHORD_MAJ7, 0}, {0, true, CHORD_MAJ7, 0},
-      {0, true, CHORD_MAJ7, 0}, {0, true, CHORD_MAJ7, 0}},
-     4, FEEL_JAZZY},
+    // 9: Dark Phrygian - i to bII
+    {"Dark Phrygian",
+     {{0, true, CHORD_MINOR, 0}, {1, false, CHORD_MAJOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
+     4, FEEL_DARK, VIBE_MINOR, PROG_FULL},
 
-    // 20: Jazz Standard (I - vi - ii - V)
-    {"Jazz Standard",
-     {{0, true, CHORD_MAJ7, 0}, {5, true, CHORD_MIN7, 0},
-      {1, true, CHORD_MIN7, 0}, {4, true, CHORD_DOM7, 0},
-      {0, true, CHORD_MAJ7, 0}, {0, true, CHORD_MAJ7, 0},
-      {0, true, CHORD_MAJ7, 0}, {0, true, CHORD_MAJ7, 0}},
-     4, FEEL_JAZZY},
+    // ========================================================================
+    // WHOLE-TONE VIBE - STEADY (for transitions)
+    // ========================================================================
 
-    // === DREAMY ===
+    // 10: Augmented Drone
+    {"Aug Drone",
+     {{0, true, CHORD_AUG, 0}, {0, true, CHORD_AUG, 0},
+      {0, true, CHORD_AUG, 0}, {0, true, CHORD_AUG, 0},
+      {0, true, CHORD_AUG, 0}, {0, true, CHORD_AUG, 0},
+      {0, true, CHORD_AUG, 0}, {0, true, CHORD_AUG, 0}},
+     1, FEEL_DREAMY, VIBE_WHOLE_TONE, PROG_STEADY},
 
-    // 21: Dreamy Major 7ths (Imaj7 - IVmaj7 - vi7 - V7)
+    // 11: Sus4 Drone - Tension without resolution
+    {"Sus4 Drone",
+     {{0, true, CHORD_SUS4, 0}, {0, true, CHORD_SUS4, 0},
+      {0, true, CHORD_SUS4, 0}, {0, true, CHORD_SUS4, 0},
+      {0, true, CHORD_SUS4, 0}, {0, true, CHORD_SUS4, 0},
+      {0, true, CHORD_SUS4, 0}, {0, true, CHORD_SUS4, 0}},
+     1, FEEL_TENSE, VIBE_WHOLE_TONE, PROG_STEADY},
+
+    // ========================================================================
+    // WHOLE-TONE VIBE - CADENCES (2 chords)
+    // ========================================================================
+
+    // 12: Aug-Dim resolving
+    {"Aug-Dim",
+     {{0, true, CHORD_AUG, 0}, {0, true, CHORD_DIM, 0},
+      {0, true, CHORD_AUG, 0}, {0, true, CHORD_DIM, 0},
+      {0, true, CHORD_AUG, 0}, {0, true, CHORD_AUG, 0},
+      {0, true, CHORD_AUG, 0}, {0, true, CHORD_AUG, 0}},
+     2, FEEL_TENSE, VIBE_WHOLE_TONE, PROG_CADENCE},
+
+    // 13: Tritone resolving
+    {"Tritone Res",
+     {{0, true, CHORD_MINOR, 0}, {6, false, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {6, false, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
+     2, FEEL_TENSE, VIBE_WHOLE_TONE, PROG_CADENCE},
+
+    // ========================================================================
+    // WHOLE-TONE VIBE - FULL PROGRESSIONS (4+ chords)
+    // ========================================================================
+
+    // 14: Tritone - Dissonant tritone movement
+    {"Tritone",
+     {{0, true, CHORD_MINOR, 0}, {6, false, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {6, false, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
+     4, FEEL_TENSE, VIBE_WHOLE_TONE, PROG_FULL},
+
+    // 15: Industrial - i-bII-i-bVII
+    {"Industrial",
+     {{0, true, CHORD_MINOR, 0}, {1, false, CHORD_MAJOR, 0},
+      {0, true, CHORD_MINOR, 0}, {-2, false, CHORD_MAJOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
+     4, FEEL_DARK, VIBE_WHOLE_TONE, PROG_FULL},
+
+    // 16: Dreamy 7ths (Imaj7 - IVmaj7 - vi7 - V7)
     {"Dreamy 7ths",
      {{0, true, CHORD_MAJ7, 0}, {3, true, CHORD_MAJ7, 0},
       {5, true, CHORD_MIN7, 0}, {4, true, CHORD_DOM7, 0},
       {0, true, CHORD_MAJ7, 0}, {0, true, CHORD_MAJ7, 0},
       {0, true, CHORD_MAJ7, 0}, {0, true, CHORD_MAJ7, 0}},
-     4, FEEL_DREAMY},
+     4, FEEL_DREAMY, VIBE_WHOLE_TONE, PROG_FULL},
 
-    // 22: Major to Minor IV (I - iii - IV - iv)
-    {"Maj-Min IV",
-     {{0, true, CHORD_MAJOR, 0}, {2, true, CHORD_MINOR, 0},
-      {3, true, CHORD_MAJOR, 0}, {3, true, CHORD_MINOR, 0},
+    // 17: Dim7 Drone - Eerie diminished drone
+    {"Dim7 Drone",
+     {{0, true, CHORD_DIM7, 0}, {0, true, CHORD_DIM7, 0},
+      {0, true, CHORD_DIM7, 0}, {0, true, CHORD_DIM7, 0},
+      {0, true, CHORD_DIM7, 0}, {0, true, CHORD_DIM7, 0},
+      {0, true, CHORD_DIM7, 0}, {0, true, CHORD_DIM7, 0}},
+     1, FEEL_TENSE, VIBE_WHOLE_TONE, PROG_STEADY},
+
+    // ========================================================================
+    // MAJOR VIBE - STEADY (for transitions)
+    // ========================================================================
+
+    // 18: Major Drone
+    {"Major Drone",
+     {{0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
+      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
       {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
       {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0}},
-     4, FEEL_DREAMY},
+     1, FEEL_BRIGHT, VIBE_MAJOR, PROG_STEADY},
 
-    // === ADD9 / MODERN ===
+    // 19: Sus2 Drone
+    {"Sus2 Drone",
+     {{0, true, CHORD_SUS2, 0}, {0, true, CHORD_SUS2, 0},
+      {0, true, CHORD_SUS2, 0}, {0, true, CHORD_SUS2, 0},
+      {0, true, CHORD_SUS2, 0}, {0, true, CHORD_SUS2, 0},
+      {0, true, CHORD_SUS2, 0}, {0, true, CHORD_SUS2, 0}},
+     1, FEEL_DREAMY, VIBE_MAJOR, PROG_STEADY},
 
-    // 23: Modern Pop Add9 (Iadd9 - Vadd9 - vi - IV)
+    // ========================================================================
+    // MAJOR VIBE - CADENCES (2 chords)
+    // ========================================================================
+
+    // 20: Major IV-I - Plagal cadence
+    {"Major IV-I",
+     {{3, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
+      {3, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
+      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
+      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0}},
+     2, FEEL_BRIGHT, VIBE_MAJOR, PROG_CADENCE},
+
+    // 21: Major V-I - Authentic cadence
+    {"Major V-I",
+     {{4, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
+      {4, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
+      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
+      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0}},
+     2, FEEL_HAPPY, VIBE_MAJOR, PROG_CADENCE},
+
+    // ========================================================================
+    // MAJOR VIBE - FULL PROGRESSIONS (4+ chords)
+    // ========================================================================
+
+    // 22: Pop (I - V - vi - IV)
+    {"Pop I-V-vi-IV",
+     {{0, true, CHORD_MAJOR, 0}, {4, true, CHORD_MAJOR, 0},
+      {5, true, CHORD_MINOR, 0}, {3, true, CHORD_MAJOR, 0},
+      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
+      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0}},
+     4, FEEL_HAPPY, VIBE_MAJOR, PROG_FULL},
+
+    // 23: Rock (I - IV - V - IV)
+    {"Rock I-IV-V",
+     {{0, true, CHORD_MAJOR, 0}, {3, true, CHORD_MAJOR, 0},
+      {4, true, CHORD_MAJOR, 0}, {3, true, CHORD_MAJOR, 0},
+      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
+      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0}},
+     4, FEEL_BRIGHT, VIBE_MAJOR, PROG_FULL},
+
+    // 24: Fifties (I - vi - IV - V)
+    {"Fifties",
+     {{0, true, CHORD_MAJOR, 0}, {5, true, CHORD_MINOR, 0},
+      {3, true, CHORD_MAJOR, 0}, {4, true, CHORD_MAJOR, 0},
+      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
+      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0}},
+     4, FEEL_NOSTALGIC, VIBE_MAJOR, PROG_FULL},
+
+    // 25: Mixolydian Rock (I - bVII - IV - I)
+    {"Mixolydian",
+     {{0, true, CHORD_MAJOR, 0}, {-2, false, CHORD_MAJOR, 0},
+      {3, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
+      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
+      {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0}},
+     4, FEEL_BRIGHT, VIBE_MAJOR, PROG_FULL},
+
+    // 26: Jazz ii-V-I
+    {"Jazz ii-V-I",
+     {{1, true, CHORD_MIN7, 0}, {4, true, CHORD_DOM7, 0},
+      {0, true, CHORD_MAJ7, 0}, {0, true, CHORD_MAJ7, 0},
+      {0, true, CHORD_MAJ7, 0}, {0, true, CHORD_MAJ7, 0},
+      {0, true, CHORD_MAJ7, 0}, {0, true, CHORD_MAJ7, 0}},
+     4, FEEL_JAZZY, VIBE_MAJOR, PROG_FULL},
+
+    // 27: Jazz Standard (I - vi - ii - V)
+    {"Jazz Standard",
+     {{0, true, CHORD_MAJ7, 0}, {5, true, CHORD_MIN7, 0},
+      {1, true, CHORD_MIN7, 0}, {4, true, CHORD_DOM7, 0},
+      {0, true, CHORD_MAJ7, 0}, {0, true, CHORD_MAJ7, 0},
+      {0, true, CHORD_MAJ7, 0}, {0, true, CHORD_MAJ7, 0}},
+     4, FEEL_JAZZY, VIBE_MAJOR, PROG_FULL},
+
+    // 28: Modern Pop Add9
     {"Modern Add9",
      {{0, true, CHORD_ADD9, 0}, {4, true, CHORD_ADD9, 0},
       {5, true, CHORD_MINOR, 0}, {3, true, CHORD_MAJOR, 0},
       {0, true, CHORD_ADD9, 0}, {0, true, CHORD_ADD9, 0},
       {0, true, CHORD_ADD9, 0}, {0, true, CHORD_ADD9, 0}},
-     4, FEEL_DREAMY},
+     4, FEEL_DREAMY, VIBE_MAJOR, PROG_FULL},
 
-    // === 8-CHORD PROGRESSIONS ===
-
-    // 24: Extended Pop (I - V - vi - IV - I - V - iii - IV)
+    // 29: Extended Pop (I - V - vi - IV - I - V - iii - IV)
     {"Extended Pop",
      {{0, true, CHORD_MAJOR, 0}, {4, true, CHORD_MAJOR, 0},
       {5, true, CHORD_MINOR, 0}, {3, true, CHORD_MAJOR, 0},
       {0, true, CHORD_MAJOR, 0}, {4, true, CHORD_MAJOR, 0},
       {2, true, CHORD_MINOR, 0}, {3, true, CHORD_MAJOR, 0}},
-     8, FEEL_HAPPY},
+     8, FEEL_HAPPY, VIBE_MAJOR, PROG_FULL},
 
-    // 25: Circle of Fifths (vi - ii - V - I - IV - vii° - iii - vi)
+    // 30: Circle of 5ths (vi - ii - V - I - IV - vii° - iii - vi)
     {"Circle of 5ths",
      {{5, true, CHORD_MINOR, 0}, {1, true, CHORD_MINOR, 0},
       {4, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
       {3, true, CHORD_MAJOR, 0}, {6, true, CHORD_DIM, 0},
       {2, true, CHORD_MINOR, 0}, {5, true, CHORD_MINOR, 0}},
-     8, FEEL_JAZZY},
+     8, FEEL_JAZZY, VIBE_MAJOR, PROG_FULL},
 };
 
 // ============================================================================
@@ -524,6 +594,65 @@ int8_t MapNoteToChord(int8_t originalNote, const ChordContext& ctx,
 
     // Quantize to nearest compatible note
     return QuantizeToNearestNote(originalNote, compatibleNotes, numNotes);
+}
+
+// ============================================================================
+// VIBE SYSTEM FUNCTIONS
+// ============================================================================
+
+uint8_t GetProgressionsForVibe(VibeType vibe, uint8_t* indices, uint8_t maxCount) {
+    uint8_t count = 0;
+    for (uint8_t i = 0; i < NUM_PROGRESSIONS && count < maxCount; i++) {
+        if (progressions[i].vibe == vibe) {
+            indices[count++] = i;
+        }
+    }
+    return count;
+}
+
+uint8_t GetProgressionsForVibeCategory(VibeType vibe, ProgressionCategory cat,
+                                        uint8_t* indices, uint8_t maxCount) {
+    uint8_t count = 0;
+    for (uint8_t i = 0; i < NUM_PROGRESSIONS && count < maxCount; i++) {
+        if (progressions[i].vibe == vibe && progressions[i].category == cat) {
+            indices[count++] = i;
+        }
+    }
+    return count;
+}
+
+uint8_t GetSteadyChordForVibe(VibeType vibe, uint32_t seed) {
+    uint8_t steadyIndices[8];
+    uint8_t count = GetProgressionsForVibeCategory(vibe, PROG_STEADY, steadyIndices, 8);
+
+    if (count == 0) {
+        // Fallback: return first progression for this vibe
+        uint8_t allIndices[32];
+        count = GetProgressionsForVibe(vibe, allIndices, 32);
+        return count > 0 ? allIndices[seed % count] : 0;
+    }
+
+    return steadyIndices[seed % count];
+}
+
+int8_t CalculateVibeRootShift(VibeType from, VibeType to, uint32_t seed) {
+    // Minor -> Major: relative major is up 3 or down 4 (down 9 = up 3)
+    if (from == VIBE_MINOR && to == VIBE_MAJOR) {
+        return ((seed & 0x01) == 0) ? 3 : -4;  // Up minor 3rd or down major 3rd
+    }
+
+    // Major -> Minor: relative minor is up 4 or down 3 (same interval, opposite direction)
+    if (from == VIBE_MAJOR && to == VIBE_MINOR) {
+        return ((seed & 0x01) == 0) ? -3 : 4;  // Down minor 3rd or up major 3rd
+    }
+
+    // Whole-tone: shift by whole tone (2) or tritone (6)
+    if (from == VIBE_WHOLE_TONE || to == VIBE_WHOLE_TONE) {
+        return ((seed & 0x01) == 0) ? 2 : 6;
+    }
+
+    // Within same vibe, changing root: up by fifth (7) or up by semitone (1)
+    return ((seed & 0x01) == 0) ? 7 : 1;
 }
 
 } // namespace themis

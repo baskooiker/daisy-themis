@@ -72,6 +72,8 @@ struct ChordProgression {
     ProgressionStep steps[8];  // Max 8 chords in a progression
     uint8_t length;            // Number of chords in progression
     ProgressionFeel feel;      // Categorization
+    VibeType vibe;             // Harmonic vibe category
+    ProgressionCategory category;  // Steady/Cadence/Full
 };
 
 // ============================================================================
@@ -90,7 +92,7 @@ enum ChordRate {
 // CONSTANTS
 // ============================================================================
 
-static const uint8_t NUM_PROGRESSIONS = 26;
+static const uint8_t NUM_PROGRESSIONS = 31;
 
 // Steps per chord for each rate
 extern const uint8_t chordRateSteps[NUM_CHORD_RATES];
@@ -105,8 +107,52 @@ extern const ChordShape chordShapes[NUM_CHORD_TYPES];
 extern const ChordProgression progressions[NUM_PROGRESSIONS];
 
 // ============================================================================
+// VIBE SYSTEM NAMES
+// ============================================================================
+
+extern const char* vibeNames[NUM_VIBE_TYPES];
+extern const char* progCategoryNames[NUM_PROG_CATEGORIES];
+
+// ============================================================================
 // FUNCTIONS
 // ============================================================================
+
+/**
+ * @brief Get progressions for a vibe
+ * @param vibe The vibe category
+ * @param indices Output array for progression indices
+ * @param maxCount Maximum number of indices to return
+ * @return Number of progressions found
+ */
+uint8_t GetProgressionsForVibe(VibeType vibe, uint8_t* indices, uint8_t maxCount);
+
+/**
+ * @brief Get progressions for a vibe and category
+ * @param vibe The vibe category
+ * @param cat The progression category
+ * @param indices Output array for progression indices
+ * @param maxCount Maximum number of indices to return
+ * @return Number of progressions found
+ */
+uint8_t GetProgressionsForVibeCategory(VibeType vibe, ProgressionCategory cat,
+                                        uint8_t* indices, uint8_t maxCount);
+
+/**
+ * @brief Get a random steady chord for a vibe
+ * @param vibe The vibe category
+ * @param seed Random seed
+ * @return Index of a steady progression in that vibe
+ */
+uint8_t GetSteadyChordForVibe(VibeType vibe, uint32_t seed);
+
+/**
+ * @brief Calculate root shift for vibe transition
+ * @param from Source vibe
+ * @param to Destination vibe
+ * @param seed Random seed for choosing between options
+ * @return Semitone shift to apply to root
+ */
+int8_t CalculateVibeRootShift(VibeType from, VibeType to, uint32_t seed);
 
 /**
  * @brief Calculate actual MIDI notes for a chord

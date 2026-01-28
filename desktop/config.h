@@ -7,6 +7,7 @@
 #define THEMIS_CONFIG_H
 
 #include <string>
+#include <cstdint>
 
 namespace themis_config {
 
@@ -100,6 +101,14 @@ struct Settings {
     VoiceSynthParams rhythmSynth;
     VoiceSynthParams acidSynth;
     VoiceSynthParams padSynth;
+
+    // Chord randomizer settings
+    bool chordFreezeEnabled = false;
+    uint8_t chordEnabledVibes = 0x07;  // Bitmask: all 3 vibes enabled
+    uint32_t chordEnabledProgressions[3] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};  // Per-vibe
+    int chordProgressionIndex = 0;
+    int chordRate = 1;  // CHORD_RATE_1_BAR
+    int chordOctaveOffset = 0;
 };
 
 /**

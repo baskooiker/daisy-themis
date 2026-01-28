@@ -185,6 +185,21 @@ bool LoadSettings(Settings& settings)
             if (idx >= 0 && idx < 11) {
                 settings.drumSolo[idx] = (value == "true" || value == "1");
             }
+        } else if (key == "chord_freeze_enabled") {
+            settings.chordFreezeEnabled = (value == "true" || value == "1");
+        } else if (key == "chord_enabled_vibes") {
+            settings.chordEnabledVibes = (uint8_t)std::stoi(value);
+        } else if (key.substr(0, 26) == "chord_enabled_progressions") {
+            int idx = std::stoi(key.substr(27));
+            if (idx >= 0 && idx < 3) {
+                settings.chordEnabledProgressions[idx] = (uint32_t)std::stoul(value);
+            }
+        } else if (key == "chord_progression_index") {
+            settings.chordProgressionIndex = std::stoi(value);
+        } else if (key == "chord_rate") {
+            settings.chordRate = std::stoi(value);
+        } else if (key == "chord_octave_offset") {
+            settings.chordOctaveOffset = std::stoi(value);
         }
 
         // Synth parameters for each voice
@@ -273,6 +288,16 @@ bool SaveSettings(const Settings& settings)
     file << "acid_activity=" << settings.acidActivity << "\n";
     file << "acid_midi_channel=" << settings.acidMidiChannel << "\n";
     file << "acid_octave_offset=" << settings.acidOctaveOffset << "\n\n";
+
+    file << "[chords]\n";
+    file << "chord_freeze_enabled=" << (settings.chordFreezeEnabled ? "true" : "false") << "\n";
+    file << "chord_enabled_vibes=" << (int)settings.chordEnabledVibes << "\n";
+    for (int i = 0; i < 3; i++) {
+        file << "chord_enabled_progressions_" << i << "=" << settings.chordEnabledProgressions[i] << "\n";
+    }
+    file << "chord_progression_index=" << settings.chordProgressionIndex << "\n";
+    file << "chord_rate=" << settings.chordRate << "\n";
+    file << "chord_octave_offset=" << settings.chordOctaveOffset << "\n\n";
 
     file << "[synth_params]\n";
     SaveSynthParams(file, "kick_synth", settings.kickSynth);

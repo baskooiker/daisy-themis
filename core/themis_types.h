@@ -596,6 +596,78 @@ struct RhythmTrigger
 };
 
 // ============================================================================
+// CHORD VIBE SYSTEM ENUMS
+// ============================================================================
+
+/**
+ * @enum VibeType
+ * @brief Harmonic vibe categories for chord progressions
+ */
+enum VibeType
+{
+    VIBE_MINOR,       ///< Natural minor, harmonic minor, aeolian progressions
+    VIBE_WHOLE_TONE,  ///< Whole tone scale, augmented chords, ambiguous tonality
+    VIBE_MAJOR,       ///< Major scale, ionian, bright progressions
+    NUM_VIBE_TYPES
+};
+
+/**
+ * @enum ProgressionCategory
+ * @brief Progression length/purpose category
+ */
+enum ProgressionCategory
+{
+    PROG_STEADY,    ///< 1 chord - for transitions
+    PROG_CADENCE,   ///< 2 chords - short movements
+    PROG_FULL,      ///< 4+ chords - complete progressions
+    NUM_PROG_CATEGORIES
+};
+
+// ============================================================================
+// CHORD VIBE SYSTEM STRUCTS
+// ============================================================================
+
+/**
+ * @struct ChordRandomizerConfig
+ * @brief Configuration for vibe-based chord randomization
+ */
+struct ChordRandomizerConfig
+{
+    bool freezeEnabled;              ///< Completely freeze chord changes
+    uint8_t enabledVibes;            ///< Bitmask: which vibes can be selected
+    uint32_t enabledProgressions[NUM_VIBE_TYPES];  ///< Per-vibe progression enable masks
+
+    void Init()
+    {
+        freezeEnabled = false;
+        enabledVibes = 0x07;  // All vibes enabled
+        for (int i = 0; i < NUM_VIBE_TYPES; i++) {
+            enabledProgressions[i] = 0xFFFFFFFF;  // All enabled
+        }
+    }
+};
+
+/**
+ * @struct ChordRandomizerState
+ * @brief Runtime state for chord randomization
+ */
+struct ChordRandomizerState
+{
+    VibeType currentVibe;           ///< Current harmonic vibe
+    uint16_t changeTimer;           ///< Progression cycles until considering change
+    bool inTransition;              ///< Currently playing transition chord
+    int8_t transitionBarsRemaining; ///< Cycles left in transition
+
+    void Init()
+    {
+        currentVibe = VIBE_MINOR;
+        changeTimer = 3;  // 3 progression cycles before first auto-change
+        inTransition = false;
+        transitionBarsRemaining = 0;
+    }
+};
+
+// ============================================================================
 // ACID VOICE ENUMS
 // ============================================================================
 

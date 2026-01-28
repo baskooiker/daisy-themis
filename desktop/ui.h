@@ -97,6 +97,7 @@ private:
     void RenderOutputSection();
     void RenderPatternVisualization();
     void RenderMixer();
+    void RenderChordsTab();          // Chord vibe randomization controls
 
     // Helper functions
     void RenderVoicePanel(themis::VoiceConfig* voice, int index);

@@ -186,26 +186,90 @@ void GenerateMelodyNotesWithSeed(uint32_t seed, MelodyConfig* voice,
                         chordNotes[n] = GetScaleNote(scale, root, chordDegrees[n]);
                     }
 
+                    // Shuffle chord notes based on seed to vary the order
+                    // This prevents always hitting the same subset when combined with regular rhythms
+                    for(int n = numNotes - 1; n > 0; n--)
+                    {
+                        int swapIdx = ((seed >> (n * 3)) % (n + 1));
+                        int8_t temp = chordNotes[n];
+                        chordNotes[n] = chordNotes[swapIdx];
+                        chordNotes[swapIdx] = temp;
+                    }
+
+                    // Use a step size that's coprime with numNotes to ensure all notes are hit
+                    // For 4 notes: step sizes 1 or 3 both work (hit all 4)
+                    // For 5 notes: step sizes 1, 2, 3, or 4 all work (hit all 5)
+                    int stepSize = 1;
+                    if(numNotes == 4)
+                    {
+                        stepSize = ((seed >> 8) % 2) ? 3 : 1;  // 50% chance of 1 or 3
+                    }
+                    else // numNotes == 5
+                    {
+                        int stepOptions[] = {1, 2, 3, 4};
+                        stepSize = stepOptions[(seed >> 8) % 4];
+                    }
+
+                    // Fill sequence with varied starting offsets per half-bar
+                    // This creates more melodic interest and avoids hitting same notes
                     for(int i = 0; i < 32; i++)
                     {
-                        int barPos = i % 16;
-                        noteArray[i] = chordNotes[barPos % numNotes];
+                        int halfBar = i / 8;  // 0, 1, 2, or 3
+                        int posInHalf = i % 8;
+
+                        // Each half-bar starts at a different offset
+                        int startOffset = (halfBar * 2 + ((seed >> (12 + halfBar)) % 2)) % numNotes;
+
+                        // Use coprime step to cycle through all notes
+                        int noteIdx = (startOffset + posInHalf * stepSize) % numNotes;
+                        noteArray[i] = chordNotes[noteIdx];
+                    }
+
+                    // Add occasional octave variation (20% chance per step)
+                    for(int i = 0; i < 32; i++)
+                    {
+                        if(((seed >> ((i % 16) + 4)) % 5) == 0)
+                        {
+                            noteArray[i] += 12;  // Octave up
+                        }
                     }
                 }
                 break;
 
             case ARP_SCALE_ASCENDING:
                 {
+                    int numNotes = 5;
                     int8_t arpNotes[5];
-                    for(int n = 0; n < 5; n++)
+                    for(int n = 0; n < numNotes; n++)
                     {
                         arpNotes[n] = GetScaleNote(scale, root, n);
                     }
 
+                    // Use coprime step sizes to ensure all notes are hit
+                    // For 5 notes: 1, 2, 3, 4 are all coprime with 5
+                    int stepOptions[] = {1, 2, 3, 4};
+                    int stepSize = stepOptions[(seed >> 8) % 4];
+
+                    // Fill with varied starting offsets per half-bar
                     for(int i = 0; i < 32; i++)
                     {
-                        int barPos = i % 16;
-                        noteArray[i] = arpNotes[barPos % 5];
+                        int halfBar = i / 8;
+                        int posInHalf = i % 8;
+
+                        // Each half-bar starts at different offset
+                        int startOffset = (halfBar * 2 + ((seed >> (12 + halfBar)) % 2)) % numNotes;
+                        int noteIdx = (startOffset + posInHalf * stepSize) % numNotes;
+                        noteArray[i] = arpNotes[noteIdx];
+                    }
+
+                    // Add occasional octave variation (15% chance)
+                    for(int i = 0; i < 32; i++)
+                    {
+                        int roll = (seed >> ((i % 16) + 4)) % 100;
+                        if(roll < 10)
+                            noteArray[i] += 12;  // Octave up
+                        else if(roll < 15)
+                            noteArray[i] -= 12;  // Octave down (if above bass)
                     }
                 }
                 break;
@@ -214,7 +278,7 @@ void GenerateMelodyNotesWithSeed(uint32_t seed, MelodyConfig* voice,
             default:
                 {
                     int8_t arpNotes[6];
-                    int numNotes = 4 + (seed % 3);
+                    int numNotes = 4 + (seed % 3);  // 4, 5, or 6 notes
 
                     for(int n = 0; n < numNotes; n++)
                     {
@@ -222,10 +286,54 @@ void GenerateMelodyNotesWithSeed(uint32_t seed, MelodyConfig* voice,
                         arpNotes[n] = GetScaleNote(scale, root, degree);
                     }
 
+                    // Shuffle the notes to randomize order
+                    for(int n = numNotes - 1; n > 0; n--)
+                    {
+                        int swapIdx = ((seed >> (n * 3 + 8)) % (n + 1));
+                        int8_t temp = arpNotes[n];
+                        arpNotes[n] = arpNotes[swapIdx];
+                        arpNotes[swapIdx] = temp;
+                    }
+
+                    // Use coprime step size to hit all notes
+                    // For 4: use 1 or 3; for 5: use 1,2,3,4; for 6: use 1 or 5
+                    int stepSize = 1;
+                    if(numNotes == 4)
+                        stepSize = ((seed >> 16) % 2) ? 3 : 1;
+                    else if(numNotes == 5)
+                        stepSize = 1 + ((seed >> 16) % 4);
+                    else if(numNotes == 6)
+                        stepSize = ((seed >> 16) % 2) ? 5 : 1;
+
+                    // Fill with varied starting offsets and some true randomization
                     for(int i = 0; i < 32; i++)
                     {
-                        int barPos = i % 16;
-                        noteArray[i] = arpNotes[barPos % numNotes];
+                        int halfBar = i / 8;
+                        int posInHalf = i % 8;
+
+                        // Each half-bar gets a different start offset
+                        int startOffset = (halfBar * 2 + ((seed >> (20 + halfBar)) % 3)) % numNotes;
+
+                        // 25% chance of truly random note selection for variety
+                        if(((seed >> (i % 16)) % 4) == 0)
+                        {
+                            noteArray[i] = arpNotes[(seed >> (i + 8)) % numNotes];
+                        }
+                        else
+                        {
+                            int noteIdx = (startOffset + posInHalf * stepSize) % numNotes;
+                            noteArray[i] = arpNotes[noteIdx];
+                        }
+                    }
+
+                    // Add octave variation (20% chance)
+                    for(int i = 0; i < 32; i++)
+                    {
+                        int roll = (seed >> ((i % 16) + 4)) % 100;
+                        if(roll < 12)
+                            noteArray[i] += 12;
+                        else if(roll < 20)
+                            noteArray[i] -= 12;
                     }
                 }
                 break;

@@ -169,6 +169,10 @@ void ThemisUI::Render()
             RenderVoicesAndPatterns();
             ImGui::EndTabItem();
         }
+        if (ImGui::BeginTabItem("Chords")) {
+            RenderChordsTab();
+            ImGui::EndTabItem();
+        }
         if (ImGui::BeginTabItem("Global")) {
             RenderGlobalControls();
             ImGui::EndTabItem();

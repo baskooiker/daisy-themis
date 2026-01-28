@@ -399,6 +399,16 @@ int main(int argc, char* argv[])
         g_sequencer.acidVoice.activity = (themis::AcidActivity)g_settings.acidActivity;
         g_sequencer.acidVoice.midiChannel = g_settings.acidMidiChannel;
         g_sequencer.acidVoice.octaveOffset = g_settings.acidOctaveOffset;
+
+        // Apply chord randomizer settings
+        g_sequencer.chordRandomizer.freezeEnabled = g_settings.chordFreezeEnabled;
+        g_sequencer.chordRandomizer.enabledVibes = g_settings.chordEnabledVibes;
+        for (int i = 0; i < themis::NUM_VIBE_TYPES; i++) {
+            g_sequencer.chordRandomizer.enabledProgressions[i] = g_settings.chordEnabledProgressions[i];
+        }
+        g_sequencer.polyVoice.progressionIndex = g_settings.chordProgressionIndex;
+        g_sequencer.polyVoice.chordRate = g_settings.chordRate;
+        g_sequencer.polyVoice.octaveOffset = g_settings.chordOctaveOffset;
     } else {
         std::cout << "No config file found, using defaults" << std::endl;
     }
@@ -535,6 +545,16 @@ int main(int argc, char* argv[])
     g_settings.acidActivity = g_sequencer.acidVoice.activity;
     g_settings.acidMidiChannel = g_sequencer.acidVoice.midiChannel;
     g_settings.acidOctaveOffset = g_sequencer.acidVoice.octaveOffset;
+
+    // Save chord randomizer settings
+    g_settings.chordFreezeEnabled = g_sequencer.chordRandomizer.freezeEnabled;
+    g_settings.chordEnabledVibes = g_sequencer.chordRandomizer.enabledVibes;
+    for (int i = 0; i < themis::NUM_VIBE_TYPES; i++) {
+        g_settings.chordEnabledProgressions[i] = g_sequencer.chordRandomizer.enabledProgressions[i];
+    }
+    g_settings.chordProgressionIndex = g_sequencer.polyVoice.progressionIndex;
+    g_settings.chordRate = g_sequencer.polyVoice.chordRate;
+    g_settings.chordOctaveOffset = g_sequencer.polyVoice.octaveOffset;
 
     if (themis_config::SaveSettings(g_settings)) {
         std::cout << "Settings saved to " << themis_config::GetConfigPath() << std::endl;

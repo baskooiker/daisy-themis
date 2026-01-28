@@ -38,6 +38,10 @@ public:
     PolyVoiceConfig polyVoice;
     PolyVoiceState polyState;
 
+    // Chord randomizer (vibe-based chord progression system)
+    ChordRandomizerConfig chordRandomizer;
+    ChordRandomizerState chordRandomizerState;
+
     // Rhythm player voice (supporting accompaniment)
     RhythmPlayerConfig rhythmVoice;
     RhythmPlayerState rhythmState;
@@ -222,7 +226,37 @@ public:
      */
     ChordContext GetCurrentChordContext() const;
 
+    /**
+     * @brief Process chord randomization at end of progression
+     */
+    void ProcessChordRandomization();
+
+    /**
+     * @brief Notify rhythm voice of chord progression cycle
+     * Called when chord progression loops back to start
+     */
+    void NotifyRhythmOfChordCycle();
+
 private:
+    /**
+     * @brief Transition to a new vibe
+     */
+    void TransitionToVibe(VibeType newVibe, uint32_t seed);
+
+    /**
+     * @brief Select a random enabled vibe
+     */
+    VibeType SelectRandomEnabledVibe(uint32_t seed);
+
+    /**
+     * @brief Select a random progression from a vibe
+     */
+    void SelectProgressionFromVibe(VibeType vibe, uint32_t seed);
+
+    /**
+     * @brief Select a steady chord from a vibe (for transitions)
+     */
+    void SelectSteadyChordFromVibe(VibeType vibe, uint32_t seed);
     /**
      * @brief Process poly voice chord changes
      */

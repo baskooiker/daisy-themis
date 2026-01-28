@@ -28,6 +28,7 @@ DESKTOP_SRCS = main.cpp \
                ui_synth.cpp \
                ui_mixer.cpp \
                ui_pattern.cpp \
+               ui_chords.cpp \
                midi_out.cpp \
                config.cpp
 

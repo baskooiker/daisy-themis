@@ -85,6 +85,9 @@ void UpdateRhythmMorph(
     uint8_t step,
     uint32_t seed)
 {
+    (void)step;  // No longer used for automatic style changes
+    (void)seed;  // Style selection now happens via NotifyRhythmOfChordCycle
+
     if (config.mode == RHYTHM_MODE_MANUAL) {
         // In manual mode, just snap to configured style
         state.currentStyle = config.playStyle;
@@ -98,6 +101,7 @@ void UpdateRhythmMorph(
     }
 
     // Morph mode - smooth transition between styles
+    // Style changes are now triggered by NotifyRhythmOfChordCycle() at chord cycle boundaries
     if (state.styleMorphProgress < 1.0f) {
         state.styleMorphProgress += 0.01f;  // ~100 steps to complete morph
         if (state.styleMorphProgress > 1.0f) {
@@ -106,23 +110,9 @@ void UpdateRhythmMorph(
         }
     }
 
-    // Check if time to change style - ONLY at the beginning of a bar (step 0 or 16)
-    state.morphTimer--;
-    if (state.morphTimer == 0 && (step % 16) == 0) {
-        // Pick a new target style (different from current)
-        RhythmPlayStyle newStyle = (RhythmPlayStyle)(seed % NUM_RHYTHM_PLAY_STYLES);
-        if (newStyle == state.currentStyle) {
-            newStyle = (RhythmPlayStyle)((newStyle + 1) % NUM_RHYTHM_PLAY_STYLES);
-        }
-
-        state.targetStyle = newStyle;
-        state.styleMorphProgress = 0.0f;
-
-        // Reset morph timer (4-16 bars)
-        state.morphTimer = 64 + ((seed >> 8) % 192);
-    } else if (state.morphTimer == 0) {
-        // Timer expired but not at bar start - wait for bar start
-        state.morphTimer = 1;
+    // Decrement morph timer (used by NotifyRhythmOfChordCycle to decide when to change)
+    if (state.morphTimer > 0) {
+        state.morphTimer--;
     }
 }
 
