@@ -40,6 +40,10 @@ public:
     bool melodyMidiSolo = false;
     bool polyMute = false;
     bool polySolo = false;
+    bool rhythmMute = false;
+    bool rhythmSolo = false;
+    bool acidMute = false;
+    bool acidSolo = false;
 
     // Check if any solo is active
     bool IsAnySoloActive() const;
@@ -54,11 +58,19 @@ public:
     // Check if poly voice should sound
     bool ShouldPlayPoly() const;
 
+    // Check if rhythm player should sound
+    bool ShouldPlayRhythm() const;
+
+    // Check if acid voice should sound
+    bool ShouldPlayAcid() const;
+
     // Activity triggers (call from audio callbacks)
     void TriggerDrumActivity(themis::DrumVoice voice);
     void TriggerMelodyCVActivity();
     void TriggerMelodyMidiActivity();
     void TriggerPolyActivity();
+    void TriggerRhythmActivity();
+    void TriggerAcidActivity();
 
 private:
     themis::Sequencer* sequencer = nullptr;
@@ -72,6 +84,8 @@ private:
     float melodyCVActivity = 0.0f;
     float melodyMidiActivity = 0.0f;
     float polyActivity = 0.0f;
+    float rhythmActivity = 0.0f;
+    float acidActivity = 0.0f;
 
     // UI sections
     void RenderTransportControls();
@@ -79,6 +93,7 @@ private:
     void RenderDrumVoices();
     void RenderMelodyVoices();
     void RenderGlobalControls();
+    void RenderSynthParams();        // Per-voice synth parameter controls
     void RenderOutputSection();
     void RenderPatternVisualization();
     void RenderMixer();

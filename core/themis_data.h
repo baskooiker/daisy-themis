@@ -72,6 +72,9 @@ extern const int8_t scaleMinor[7];
 extern const int8_t scaleMinorBlues[6];
 extern const int8_t scaleMinorPentatonic[5];
 extern const int8_t scaleGypsy[7];
+extern const int8_t scaleWholeHalf[8];      // Whole-half diminished
+extern const int8_t scaleHalfWhole[8];      // Half-whole diminished
+extern const int8_t scaleWholeTone[6];      // Whole tone
 extern const int8_t scaleLengths[NUM_SCALE_TYPES];
 extern const char* scaleNames[NUM_SCALE_TYPES];
 

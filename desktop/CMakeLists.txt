@@ -58,6 +58,9 @@ add_library(themis_core STATIC
     ../core/themis_data.cpp
     ../core/themis_patterns.cpp
     ../core/themis_melody.cpp
+    ../core/themis_chords.cpp
+    ../core/themis_rhythm.cpp
+    ../core/themis_acid.cpp
     ../core/themis_sequencer.cpp
 )
 target_include_directories(themis_core PUBLIC ../core)
@@ -68,6 +71,7 @@ set(DESKTOP_SOURCES
     platform_desktop.cpp
     audio.cpp
     ui.cpp
+    config.cpp
 )
 
 if(THEMIS_ENABLE_MIDI)

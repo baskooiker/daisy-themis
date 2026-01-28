@@ -13,7 +13,10 @@ CPP_SOURCES = Themis.cpp \
               core/themis_data.cpp \
               core/themis_patterns.cpp \
               core/themis_melody.cpp \
-              core/themis_sequencer.cpp
+              core/themis_chords.cpp \
+              core/themis_sequencer.cpp \
+              core/themis_rhythm.cpp \
+              core/themis_acid.cpp
 
 # Include paths
 C_INCLUDES += -I.

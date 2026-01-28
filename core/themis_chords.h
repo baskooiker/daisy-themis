@@ -90,7 +90,7 @@ enum ChordRate {
 // CONSTANTS
 // ============================================================================
 
-static const uint8_t NUM_PROGRESSIONS = 16;
+static const uint8_t NUM_PROGRESSIONS = 26;
 
 // Steps per chord for each rate
 extern const uint8_t chordRateSteps[NUM_CHORD_RATES];

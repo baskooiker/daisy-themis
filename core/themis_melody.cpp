@@ -36,6 +36,18 @@ int8_t GetScaleNote(ScaleType scale, uint8_t root, int8_t degree)
             scaleNotes = scaleGypsy;
             scaleLen = 7;
             break;
+        case SCALE_WHOLE_HALF:
+            scaleNotes = scaleWholeHalf;
+            scaleLen = 8;
+            break;
+        case SCALE_HALF_WHOLE:
+            scaleNotes = scaleHalfWhole;
+            scaleLen = 8;
+            break;
+        case SCALE_WHOLE_TONE:
+            scaleNotes = scaleWholeTone;
+            scaleLen = 6;
+            break;
         default:
             scaleNotes = scaleMinor;
             scaleLen = 7;

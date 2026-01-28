@@ -71,9 +71,97 @@ const ChordShape chordShapes[NUM_CHORD_TYPES] = {
 // ============================================================================
 
 const ChordProgression progressions[NUM_PROGRESSIONS] = {
+    // ========================================================================
+    // TECHNO / DARK / MINIMAL - Static and hypnotic progressions
+    // ========================================================================
+
+    // 0: Static Minor - No changes, pure hypnotic drone
+    {"Static Minor",
+     {{0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
+     1, FEEL_DARK},
+
+    // 1: Static Min7 - Minor 7th drone, rich but dark
+    {"Static Min7",
+     {{0, true, CHORD_MIN7, 0}, {0, true, CHORD_MIN7, 0},
+      {0, true, CHORD_MIN7, 0}, {0, true, CHORD_MIN7, 0},
+      {0, true, CHORD_MIN7, 0}, {0, true, CHORD_MIN7, 0},
+      {0, true, CHORD_MIN7, 0}, {0, true, CHORD_MIN7, 0}},
+     1, FEEL_DARK},
+
+    // 2: Static Sus4 - Tension without resolution
+    {"Static Sus4",
+     {{0, true, CHORD_SUS4, 0}, {0, true, CHORD_SUS4, 0},
+      {0, true, CHORD_SUS4, 0}, {0, true, CHORD_SUS4, 0},
+      {0, true, CHORD_SUS4, 0}, {0, true, CHORD_SUS4, 0},
+      {0, true, CHORD_SUS4, 0}, {0, true, CHORD_SUS4, 0}},
+     1, FEEL_TENSE},
+
+    // 3: Static Dim7 - Eerie diminished drone
+    {"Static Dim7",
+     {{0, true, CHORD_DIM7, 0}, {0, true, CHORD_DIM7, 0},
+      {0, true, CHORD_DIM7, 0}, {0, true, CHORD_DIM7, 0},
+      {0, true, CHORD_DIM7, 0}, {0, true, CHORD_DIM7, 0},
+      {0, true, CHORD_DIM7, 0}, {0, true, CHORD_DIM7, 0}},
+     1, FEEL_TENSE},
+
+    // 4: Techno Pulse - Minimal movement i-iv
+    {"Techno Pulse",
+     {{0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {3, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
+     4, FEEL_DARK},
+
+    // 5: Dark Phrygian - i to bII, classic dark techno
+    {"Dark Phrygian",
+     {{0, true, CHORD_MINOR, 0}, {1, false, CHORD_MAJOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
+     4, FEEL_DARK},
+
+    // 6: Hypnotic bVII - i with occasional bVII
+    {"Hypnotic bVII",
+     {{0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {-2, false, CHORD_MAJOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
+     4, FEEL_DARK},
+
+    // 7: Industrial - i-bII-i-bVII, gritty movement
+    {"Industrial",
+     {{0, true, CHORD_MINOR, 0}, {1, false, CHORD_MAJOR, 0},
+      {0, true, CHORD_MINOR, 0}, {-2, false, CHORD_MAJOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
+     4, FEEL_DARK},
+
+    // 8: Tritone - Dissonant tritone movement
+    {"Tritone",
+     {{0, true, CHORD_MINOR, 0}, {6, false, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {6, false, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
+      {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
+     4, FEEL_TENSE},
+
+    // 9: Half-Dim Drone - Dark half-diminished tension
+    {"Half-Dim",
+     {{0, true, CHORD_MIN7B5, 0}, {0, true, CHORD_MIN7B5, 0},
+      {0, true, CHORD_MIN7B5, 0}, {0, true, CHORD_MIN7B5, 0},
+      {0, true, CHORD_MIN7B5, 0}, {0, true, CHORD_MIN7B5, 0},
+      {0, true, CHORD_MIN7B5, 0}, {0, true, CHORD_MIN7B5, 0}},
+     1, FEEL_TENSE},
+
+    // ========================================================================
+    // CLASSIC PROGRESSIONS - Moved from original positions
+    // ========================================================================
+
     // === HAPPY/BRIGHT ===
 
-    // 0: Pop (I - V - vi - IV) - Classic pop progression
+    // 10: Pop (I - V - vi - IV) - Classic pop progression
     {"Pop I-V-vi-IV",
      {{0, true, CHORD_MAJOR, 0}, {4, true, CHORD_MAJOR, 0},
       {5, true, CHORD_MINOR, 0}, {3, true, CHORD_MAJOR, 0},
@@ -81,7 +169,7 @@ const ChordProgression progressions[NUM_PROGRESSIONS] = {
       {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0}},
      4, FEEL_HAPPY},
 
-    // 1: Rock (I - IV - V - IV)
+    // 11: Rock (I - IV - V - IV)
     {"Rock I-IV-V",
      {{0, true, CHORD_MAJOR, 0}, {3, true, CHORD_MAJOR, 0},
       {4, true, CHORD_MAJOR, 0}, {3, true, CHORD_MAJOR, 0},
@@ -89,7 +177,7 @@ const ChordProgression progressions[NUM_PROGRESSIONS] = {
       {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0}},
      4, FEEL_BRIGHT},
 
-    // 2: Fifties (I - vi - IV - V)
+    // 12: Fifties (I - vi - IV - V)
     {"Fifties",
      {{0, true, CHORD_MAJOR, 0}, {5, true, CHORD_MINOR, 0},
       {3, true, CHORD_MAJOR, 0}, {4, true, CHORD_MAJOR, 0},
@@ -99,7 +187,7 @@ const ChordProgression progressions[NUM_PROGRESSIONS] = {
 
     // === SAD/MELANCHOLIC ===
 
-    // 3: Axis (vi - IV - I - V) - Emotional pop
+    // 13: Axis (vi - IV - I - V) - Emotional pop
     {"Axis vi-IV-I-V",
      {{5, true, CHORD_MINOR, 0}, {3, true, CHORD_MAJOR, 0},
       {0, true, CHORD_MAJOR, 0}, {4, true, CHORD_MAJOR, 0},
@@ -107,7 +195,7 @@ const ChordProgression progressions[NUM_PROGRESSIONS] = {
       {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0}},
      4, FEEL_EMOTIONAL},
 
-    // 4: Minor Epic (i - VI - III - VII)
+    // 14: Minor Epic (i - VI - III - VII)
     {"Epic Minor",
      {{0, true, CHORD_MINOR, 0}, {5, true, CHORD_MAJOR, 0},
       {2, true, CHORD_MAJOR, 0}, {6, true, CHORD_MAJOR, 0},
@@ -115,7 +203,7 @@ const ChordProgression progressions[NUM_PROGRESSIONS] = {
       {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
      4, FEEL_EPIC},
 
-    // 5: Natural Minor (i - iv - v - i)
+    // 15: Natural Minor (i - iv - v - i)
     {"Natural Minor",
      {{0, true, CHORD_MINOR, 0}, {3, true, CHORD_MINOR, 0},
       {4, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0},
@@ -125,7 +213,7 @@ const ChordProgression progressions[NUM_PROGRESSIONS] = {
 
     // === TENSE/DRAMATIC ===
 
-    // 6: Andalusian (i - VII - VI - V) using semitones for bVII and bVI
+    // 16: Andalusian (i - VII - VI - V) using semitones for bVII and bVI
     {"Andalusian",
      {{0, true, CHORD_MINOR, 0}, {-2, false, CHORD_MAJOR, 0},
       {-4, false, CHORD_MAJOR, 0}, {4, true, CHORD_MAJOR, 0},
@@ -133,7 +221,7 @@ const ChordProgression progressions[NUM_PROGRESSIONS] = {
       {0, true, CHORD_MINOR, 0}, {0, true, CHORD_MINOR, 0}},
      4, FEEL_TENSE},
 
-    // 7: Mixolydian Rock (I - bVII - IV - I)
+    // 17: Mixolydian Rock (I - bVII - IV - I)
     {"Mixolydian",
      {{0, true, CHORD_MAJOR, 0}, {-2, false, CHORD_MAJOR, 0},
       {3, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
@@ -141,7 +229,7 @@ const ChordProgression progressions[NUM_PROGRESSIONS] = {
       {0, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0}},
      4, FEEL_BRIGHT},
 
-    // 8: Minor Plagal (i - iv - bVII - i)
+    // 18: Minor Plagal (i - iv - bVII - i)
     {"Minor Plagal",
      {{0, true, CHORD_MINOR, 0}, {3, true, CHORD_MINOR, 0},
       {-2, false, CHORD_MAJOR, 0}, {0, true, CHORD_MINOR, 0},
@@ -151,7 +239,7 @@ const ChordProgression progressions[NUM_PROGRESSIONS] = {
 
     // === JAZZ ===
 
-    // 9: Jazz 2-5-1 (ii7 - V7 - Imaj7 - Imaj7)
+    // 19: Jazz 2-5-1 (ii7 - V7 - Imaj7 - Imaj7)
     {"Jazz ii-V-I",
      {{1, true, CHORD_MIN7, 0}, {4, true, CHORD_DOM7, 0},
       {0, true, CHORD_MAJ7, 0}, {0, true, CHORD_MAJ7, 0},
@@ -159,7 +247,7 @@ const ChordProgression progressions[NUM_PROGRESSIONS] = {
       {0, true, CHORD_MAJ7, 0}, {0, true, CHORD_MAJ7, 0}},
      4, FEEL_JAZZY},
 
-    // 10: Jazz Standard (I - vi - ii - V)
+    // 20: Jazz Standard (I - vi - ii - V)
     {"Jazz Standard",
      {{0, true, CHORD_MAJ7, 0}, {5, true, CHORD_MIN7, 0},
       {1, true, CHORD_MIN7, 0}, {4, true, CHORD_DOM7, 0},
@@ -169,7 +257,7 @@ const ChordProgression progressions[NUM_PROGRESSIONS] = {
 
     // === DREAMY ===
 
-    // 11: Dreamy Major 7ths (Imaj7 - IVmaj7 - vi7 - V7)
+    // 21: Dreamy Major 7ths (Imaj7 - IVmaj7 - vi7 - V7)
     {"Dreamy 7ths",
      {{0, true, CHORD_MAJ7, 0}, {3, true, CHORD_MAJ7, 0},
       {5, true, CHORD_MIN7, 0}, {4, true, CHORD_DOM7, 0},
@@ -177,7 +265,7 @@ const ChordProgression progressions[NUM_PROGRESSIONS] = {
       {0, true, CHORD_MAJ7, 0}, {0, true, CHORD_MAJ7, 0}},
      4, FEEL_DREAMY},
 
-    // 12: Major to Minor IV (I - iii - IV - iv)
+    // 22: Major to Minor IV (I - iii - IV - iv)
     {"Maj-Min IV",
      {{0, true, CHORD_MAJOR, 0}, {2, true, CHORD_MINOR, 0},
       {3, true, CHORD_MAJOR, 0}, {3, true, CHORD_MINOR, 0},
@@ -187,7 +275,7 @@ const ChordProgression progressions[NUM_PROGRESSIONS] = {
 
     // === ADD9 / MODERN ===
 
-    // 13: Modern Pop Add9 (Iadd9 - Vadd9 - vi - IV)
+    // 23: Modern Pop Add9 (Iadd9 - Vadd9 - vi - IV)
     {"Modern Add9",
      {{0, true, CHORD_ADD9, 0}, {4, true, CHORD_ADD9, 0},
       {5, true, CHORD_MINOR, 0}, {3, true, CHORD_MAJOR, 0},
@@ -197,7 +285,7 @@ const ChordProgression progressions[NUM_PROGRESSIONS] = {
 
     // === 8-CHORD PROGRESSIONS ===
 
-    // 14: Extended Pop (I - V - vi - IV - I - V - iii - IV)
+    // 24: Extended Pop (I - V - vi - IV - I - V - iii - IV)
     {"Extended Pop",
      {{0, true, CHORD_MAJOR, 0}, {4, true, CHORD_MAJOR, 0},
       {5, true, CHORD_MINOR, 0}, {3, true, CHORD_MAJOR, 0},
@@ -205,7 +293,7 @@ const ChordProgression progressions[NUM_PROGRESSIONS] = {
       {2, true, CHORD_MINOR, 0}, {3, true, CHORD_MAJOR, 0}},
      8, FEEL_HAPPY},
 
-    // 15: Circle of Fifths (vi - ii - V - I - IV - vii° - iii - vi)
+    // 25: Circle of Fifths (vi - ii - V - I - IV - vii° - iii - vi)
     {"Circle of 5ths",
      {{5, true, CHORD_MINOR, 0}, {1, true, CHORD_MINOR, 0},
       {4, true, CHORD_MAJOR, 0}, {0, true, CHORD_MAJOR, 0},
@@ -250,9 +338,9 @@ uint8_t GetChordNotes(
     uint8_t count = 0;
     for (int i = 0; i < shape.numNotes && i < 6; i++) {
         int16_t note = baseNote + shape.intervals[i];
-        // Clamp to valid MIDI range
-        if (note < 0) note = 0;
-        if (note > 127) note = 127;
+        // Clamp to valid MIDI range, preserving pitch class (octave-shift instead of hard clamp)
+        while (note < 0) note += 12;
+        while (note > 127) note -= 12;
         outNotes[count++] = (int8_t)note;
     }
 

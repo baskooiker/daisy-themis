@@ -52,6 +52,34 @@ static std::string Trim(const std::string& str)
     return str.substr(start, end - start + 1);
 }
 
+// Helper to load synth params from a key prefix
+static void LoadSynthParam(const std::string& key, const std::string& value,
+                           const std::string& prefix, VoiceSynthParams& params)
+{
+    if (key == prefix + "_filter_cutoff") {
+        params.filterCutoff = std::stof(value);
+    } else if (key == prefix + "_filter_decay") {
+        params.filterDecay = std::stof(value);
+    } else if (key == prefix + "_vca_decay") {
+        params.vcaDecay = std::stof(value);
+    } else if (key == prefix + "_vco_type") {
+        params.vcoType = std::stoi(value);
+    } else if (key == prefix + "_filter_env_amount") {
+        params.filterEnvAmount = std::stof(value);
+    }
+}
+
+// Helper to save synth params with a key prefix
+static void SaveSynthParams(std::ofstream& file, const std::string& prefix,
+                            const VoiceSynthParams& params)
+{
+    file << prefix << "_filter_cutoff=" << params.filterCutoff << "\n";
+    file << prefix << "_filter_decay=" << params.filterDecay << "\n";
+    file << prefix << "_vca_decay=" << params.vcaDecay << "\n";
+    file << prefix << "_vco_type=" << params.vcoType << "\n";
+    file << prefix << "_filter_env_amount=" << params.filterEnvAmount << "\n";
+}
+
 bool LoadSettings(Settings& settings)
 {
     std::string path = GetConfigPath();
@@ -109,6 +137,44 @@ bool LoadSettings(Settings& settings)
             settings.polyMute = (value == "true" || value == "1");
         } else if (key == "poly_solo") {
             settings.polySolo = (value == "true" || value == "1");
+        } else if (key == "melody_cv_active") {
+            settings.melodyCVActive = (value == "true" || value == "1");
+        } else if (key == "melody_midi_active") {
+            settings.melodyMidiActive = (value == "true" || value == "1");
+        } else if (key == "poly_active") {
+            settings.polyActive = (value == "true" || value == "1");
+        } else if (key == "rhythm_active") {
+            settings.rhythmActive = (value == "true" || value == "1");
+        } else if (key == "rhythm_mute") {
+            settings.rhythmMute = (value == "true" || value == "1");
+        } else if (key == "rhythm_solo") {
+            settings.rhythmSolo = (value == "true" || value == "1");
+        } else if (key == "rhythm_mode") {
+            settings.rhythmMode = std::stoi(value);
+        } else if (key == "rhythm_play_style") {
+            settings.rhythmPlayStyle = std::stoi(value);
+        } else if (key == "rhythm_midi_channel") {
+            settings.rhythmMidiChannel = std::stoi(value);
+        } else if (key == "rhythm_octave_offset") {
+            settings.rhythmOctaveOffset = std::stoi(value);
+        } else if (key == "acid_active") {
+            settings.acidActive = (value == "true" || value == "1");
+        } else if (key == "acid_mute") {
+            settings.acidMute = (value == "true" || value == "1");
+        } else if (key == "acid_solo") {
+            settings.acidSolo = (value == "true" || value == "1");
+        } else if (key == "acid_mode") {
+            settings.acidMode = std::stoi(value);
+        } else if (key == "acid_rhythm_pattern") {
+            settings.acidRhythmPattern = std::stoi(value);
+        } else if (key == "acid_melody_pattern") {
+            settings.acidMelodyPattern = std::stoi(value);
+        } else if (key == "acid_activity") {
+            settings.acidActivity = std::stoi(value);
+        } else if (key == "acid_midi_channel") {
+            settings.acidMidiChannel = std::stoi(value);
+        } else if (key == "acid_octave_offset") {
+            settings.acidOctaveOffset = std::stoi(value);
         } else if (key.substr(0, 10) == "drum_mute_") {
             int idx = std::stoi(key.substr(10));
             if (idx >= 0 && idx < 11) {
@@ -120,6 +186,16 @@ bool LoadSettings(Settings& settings)
                 settings.drumSolo[idx] = (value == "true" || value == "1");
             }
         }
+
+        // Synth parameters for each voice
+        LoadSynthParam(key, value, "kick_synth", settings.kickSynth);
+        LoadSynthParam(key, value, "snare_synth", settings.snareSynth);
+        LoadSynthParam(key, value, "hihat_synth", settings.hihatSynth);
+        LoadSynthParam(key, value, "clap_synth", settings.clapSynth);
+        LoadSynthParam(key, value, "tom_synth", settings.tomSynth);
+        LoadSynthParam(key, value, "rhythm_synth", settings.rhythmSynth);
+        LoadSynthParam(key, value, "acid_synth", settings.acidSynth);
+        LoadSynthParam(key, value, "pad_synth", settings.padSynth);
     }
 
     file.close();
@@ -171,7 +247,42 @@ bool SaveSettings(const Settings& settings)
     file << "melody_midi_mute=" << (settings.melodyMidiMute ? "true" : "false") << "\n";
     file << "melody_midi_solo=" << (settings.melodyMidiSolo ? "true" : "false") << "\n";
     file << "poly_mute=" << (settings.polyMute ? "true" : "false") << "\n";
-    file << "poly_solo=" << (settings.polySolo ? "true" : "false") << "\n";
+    file << "poly_solo=" << (settings.polySolo ? "true" : "false") << "\n\n";
+
+    file << "[voices]\n";
+    file << "melody_cv_active=" << (settings.melodyCVActive ? "true" : "false") << "\n";
+    file << "melody_midi_active=" << (settings.melodyMidiActive ? "true" : "false") << "\n";
+    file << "poly_active=" << (settings.polyActive ? "true" : "false") << "\n\n";
+
+    file << "[rhythm]\n";
+    file << "rhythm_active=" << (settings.rhythmActive ? "true" : "false") << "\n";
+    file << "rhythm_mute=" << (settings.rhythmMute ? "true" : "false") << "\n";
+    file << "rhythm_solo=" << (settings.rhythmSolo ? "true" : "false") << "\n";
+    file << "rhythm_mode=" << settings.rhythmMode << "\n";
+    file << "rhythm_play_style=" << settings.rhythmPlayStyle << "\n";
+    file << "rhythm_midi_channel=" << settings.rhythmMidiChannel << "\n";
+    file << "rhythm_octave_offset=" << settings.rhythmOctaveOffset << "\n\n";
+
+    file << "[acid]\n";
+    file << "acid_active=" << (settings.acidActive ? "true" : "false") << "\n";
+    file << "acid_mute=" << (settings.acidMute ? "true" : "false") << "\n";
+    file << "acid_solo=" << (settings.acidSolo ? "true" : "false") << "\n";
+    file << "acid_mode=" << settings.acidMode << "\n";
+    file << "acid_rhythm_pattern=" << settings.acidRhythmPattern << "\n";
+    file << "acid_melody_pattern=" << settings.acidMelodyPattern << "\n";
+    file << "acid_activity=" << settings.acidActivity << "\n";
+    file << "acid_midi_channel=" << settings.acidMidiChannel << "\n";
+    file << "acid_octave_offset=" << settings.acidOctaveOffset << "\n\n";
+
+    file << "[synth_params]\n";
+    SaveSynthParams(file, "kick_synth", settings.kickSynth);
+    SaveSynthParams(file, "snare_synth", settings.snareSynth);
+    SaveSynthParams(file, "hihat_synth", settings.hihatSynth);
+    SaveSynthParams(file, "clap_synth", settings.clapSynth);
+    SaveSynthParams(file, "tom_synth", settings.tomSynth);
+    SaveSynthParams(file, "rhythm_synth", settings.rhythmSynth);
+    SaveSynthParams(file, "acid_synth", settings.acidSynth);
+    SaveSynthParams(file, "pad_synth", settings.padSynth);
 
     file.close();
     return true;

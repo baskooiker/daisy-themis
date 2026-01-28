@@ -1,23 +1,15 @@
 /**
  * @file ui.cpp
- * @brief ImGui user interface implementation
+ * @brief ImGui user interface implementation - core functions
+ *
+ * Split into multiple files for maintainability:
+ *   ui.cpp        - Core UI, transport, voice/pattern controls
+ *   ui_synth.cpp  - Synth parameters tab
+ *   ui_mixer.cpp  - Mixer and activity triggers
+ *   ui_pattern.cpp - Pattern visualization
  */
 
-#include "ui.h"
-#include "platform_desktop.h"
-#include "themis_data.h"
-#include "themis_patterns.h"
-#include "themis_chords.h"
-#include "audio.h"
-#include <imgui.h>
-#include <cstdio>
-#include <cstring>
-#include <string>
-#include <SDL2/SDL.h>
-
-#ifdef THEMIS_ENABLE_MIDI
-#include "midi_out.h"
-#endif
+#include "ui_internal.h"
 
 namespace themis_ui {
 
@@ -45,7 +37,7 @@ bool ThemisUI::IsAnySoloActive() const
     for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) {
         if (drumSolo[i]) return true;
     }
-    return melodyCVSolo || melodyMidiSolo || polySolo;
+    return melodyCVSolo || melodyMidiSolo || polySolo || rhythmSolo || acidSolo;
 }
 
 bool ThemisUI::ShouldPlayDrum(themis::DrumVoice voice) const
@@ -84,6 +76,26 @@ bool ThemisUI::ShouldPlayPoly() const
 
     if (IsAnySoloActive()) {
         return polySolo;
+    }
+    return true;
+}
+
+bool ThemisUI::ShouldPlayRhythm() const
+{
+    if (rhythmMute) return false;
+
+    if (IsAnySoloActive()) {
+        return rhythmSolo;
+    }
+    return true;
+}
+
+bool ThemisUI::ShouldPlayAcid() const
+{
+    if (acidMute) return false;
+
+    if (IsAnySoloActive()) {
+        return acidSolo;
     }
     return true;
 }
@@ -159,6 +171,10 @@ void ThemisUI::Render()
         }
         if (ImGui::BeginTabItem("Global")) {
             RenderGlobalControls();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Synth")) {
+            RenderSynthParams();
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Output")) {
@@ -314,18 +330,31 @@ void ThemisUI::RenderVoicesAndPatterns()
     // Active toggle
     ImGui::Checkbox("Poly", &sequencer->polyVoice.active);
 
-    // Progression
+    // Progression - changes are pending until end of current progression
     ImGui::SameLine();
     ImGui::SetNextItemWidth(80);
-    if (ImGui::BeginCombo("##prog", themis::progressions[sequencer->polyVoice.progressionIndex].name)) {
+    // Show current progression, or pending if one is set
+    uint8_t displayProgIndex = sequencer->polyVoice.progressionIndex;
+    bool hasPending = (sequencer->polyState.pendingProgressionIndex >= 0);
+    if (hasPending) {
+        displayProgIndex = (uint8_t)sequencer->polyState.pendingProgressionIndex;
+    }
+    if (ImGui::BeginCombo("##prog", themis::progressions[displayProgIndex].name)) {
         for (int p = 0; p < themis::NUM_PROGRESSIONS; p++) {
-            if (ImGui::Selectable(themis::progressions[p].name,
-                                   sequencer->polyVoice.progressionIndex == p)) {
-                sequencer->polyVoice.progressionIndex = p;
-                sequencer->polyState.Init();
+            if (ImGui::Selectable(themis::progressions[p].name, displayProgIndex == p)) {
+                // Set as pending - will switch at end of current progression
+                if (p != sequencer->polyVoice.progressionIndex) {
+                    sequencer->polyState.pendingProgressionIndex = p;
+                } else {
+                    // If selecting current, cancel pending
+                    sequencer->polyState.pendingProgressionIndex = -1;
+                }
             }
         }
         ImGui::EndCombo();
+    }
+    if (hasPending && ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Will change at end of current progression");
     }
 
     // Rate
@@ -349,12 +378,260 @@ void ThemisUI::RenderVoicesAndPatterns()
         sequencer->polyVoice.octaveOffset = oct;
     }
 
-    // Show current chord info
+    // Show current chord info (and pending indicator)
     if (sequencer->polyVoice.active) {
         const auto& prog = themis::progressions[sequencer->polyVoice.progressionIndex];
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.8f, 0.6f, 0.2f, 1.0f), "[%d/%d]",
-                          sequencer->polyState.currentChordIndex + 1, prog.length);
+        if (hasPending) {
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "[%d/%d->]",
+                              sequencer->polyState.currentChordIndex + 1, prog.length);
+        } else {
+            ImGui::TextColored(ImVec4(0.8f, 0.6f, 0.2f, 1.0f), "[%d/%d]",
+                              sequencer->polyState.currentChordIndex + 1, prog.length);
+        }
+    }
+
+    ImGui::PopID();
+
+    ImGui::Spacing();
+    ImGui::Separator();
+
+    // Rhythm Player section
+    ImGui::Text("RHYTHM PLAYER");
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Rnd Rhythm")) {
+        sequencer->RandomizeRhythmVoice();
+    }
+
+    ImGui::Separator();
+
+    ImGui::PushID("RhythmCompact");
+
+    // Active toggle and mode
+    ImGui::Checkbox("Rhythm", &sequencer->rhythmVoice.active);
+
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(60);
+    const char* rhythmModeNames[] = {"Manual", "Morph"};
+    if (ImGui::BeginCombo("##rmode", rhythmModeNames[sequencer->rhythmVoice.mode])) {
+        for (int m = 0; m < themis::NUM_RHYTHM_PLAYER_MODES; m++) {
+            if (ImGui::Selectable(rhythmModeNames[m], sequencer->rhythmVoice.mode == m)) {
+                sequencer->rhythmVoice.mode = (themis::RhythmPlayerMode)m;
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    // Style
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(65);
+    const char* styleNames[] = {"Chords", "Arps", "Poly"};
+    if (ImGui::BeginCombo("##rstyle", styleNames[sequencer->rhythmVoice.playStyle])) {
+        for (int s = 0; s < themis::NUM_RHYTHM_PLAY_STYLES; s++) {
+            if (ImGui::Selectable(styleNames[s], sequencer->rhythmVoice.playStyle == s)) {
+                sequencer->rhythmVoice.playStyle = (themis::RhythmPlayStyle)s;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Play style: Chords, Arpeggios, Polyrhythm");
+
+    // Octave
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(50);
+    int rhythmOct = sequencer->rhythmVoice.octaveOffset;
+    if (ImGui::DragInt("##rOct", &rhythmOct, 0.1f, -2, 2, "Oct%+d")) {
+        sequencer->rhythmVoice.octaveOffset = rhythmOct;
+    }
+
+    // MIDI Channel
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(45);
+    int rhythmMidiCh = sequencer->rhythmVoice.midiChannel + 1;
+    if (ImGui::DragInt("##rCh", &rhythmMidiCh, 0.1f, 1, 16, "Ch%d")) {
+        sequencer->rhythmVoice.midiChannel = rhythmMidiCh - 1;
+    }
+
+    // Manual mode parameters (only if in manual mode)
+    if (sequencer->rhythmVoice.mode == themis::RHYTHM_MODE_MANUAL) {
+        // Activity level
+        const char* activityNames[] = {"Sparse", "Mod", "Busy"};
+        ImGui::SetNextItemWidth(55);
+        if (ImGui::BeginCombo("##ract", activityNames[sequencer->rhythmVoice.activity])) {
+            for (int a = 0; a < themis::NUM_RHYTHM_ACTIVITY_LEVELS; a++) {
+                if (ImGui::Selectable(activityNames[a], sequencer->rhythmVoice.activity == a)) {
+                    sequencer->rhythmVoice.activity = (themis::RhythmActivity)a;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Activity/density level");
+
+        // Articulation
+        ImGui::SameLine();
+        const char* articNames[] = {"Stac", "Norm", "Leg"};
+        ImGui::SetNextItemWidth(50);
+        if (ImGui::BeginCombo("##rartic", articNames[sequencer->rhythmVoice.articulation])) {
+            for (int a = 0; a < themis::NUM_RHYTHM_ARTICULATIONS; a++) {
+                if (ImGui::Selectable(articNames[a], sequencer->rhythmVoice.articulation == a)) {
+                    sequencer->rhythmVoice.articulation = (themis::RhythmArticulation)a;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Articulation: Staccato, Normal, Legato");
+
+        // Arp direction (only relevant for arp mode)
+        if (sequencer->rhythmVoice.playStyle == themis::RHYTHM_PLAY_ARPEGGIOS) {
+            ImGui::SameLine();
+            const char* arpDirNames[] = {"Up", "Dn", "U/D", "Rnd"};
+            ImGui::SetNextItemWidth(45);
+            if (ImGui::BeginCombo("##rarp", arpDirNames[sequencer->rhythmVoice.arpDirection])) {
+                for (int d = 0; d < themis::NUM_ARP_DIRECTIONS; d++) {
+                    if (ImGui::Selectable(arpDirNames[d], sequencer->rhythmVoice.arpDirection == d)) {
+                        sequencer->rhythmVoice.arpDirection = (themis::ArpDirection)d;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Arpeggio direction");
+        }
+
+        // Follow kick
+        ImGui::SameLine();
+        ImGui::Checkbox("Kick##rfollow", &sequencer->rhythmVoice.followKick);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Sync rhythm to kick pattern");
+    }
+
+    // Freeze checkbox - prevent automatic style changes
+    ImGui::SameLine();
+    ImGui::Checkbox("Freeze##rstyle", &sequencer->rhythmVoice.freezeStyle);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Prevent automatic style changes");
+
+    // Show current state if active
+    if (sequencer->rhythmVoice.active) {
+        ImGui::SameLine();
+        const char* styleDisplayNames[] = {"Chords", "Arps", "Poly"};
+        ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.6f, 1.0f), "[%s I:%.0f%%]",
+                          styleDisplayNames[sequencer->rhythmState.currentStyle],
+                          sequencer->rhythmState.intensity * 100.0f);
+    }
+
+    ImGui::PopID();
+
+    ImGui::Spacing();
+    ImGui::Separator();
+
+    // Acid Voice section
+    ImGui::Text("ACID VOICE");
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Rnd Acid")) {
+        sequencer->RandomizeAcidVoice();
+    }
+
+    ImGui::Separator();
+
+    ImGui::PushID("AcidCompact");
+
+    // Active toggle and mode
+    ImGui::Checkbox("Acid", &sequencer->acidVoice.active);
+
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(60);
+    const char* acidModeNames[] = {"Manual", "Auto"};
+    if (ImGui::BeginCombo("##amode", acidModeNames[sequencer->acidVoice.mode])) {
+        for (int m = 0; m < themis::NUM_ACID_MODES; m++) {
+            if (ImGui::Selectable(acidModeNames[m], sequencer->acidVoice.mode == m)) {
+                sequencer->acidVoice.mode = (themis::AcidMode)m;
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    // Activity level
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(65);
+    const char* acidActivityNames[] = {"Sparse", "Mod", "Busy"};
+    if (ImGui::BeginCombo("##aact", acidActivityNames[sequencer->acidVoice.activity])) {
+        for (int a = 0; a < themis::NUM_ACID_ACTIVITIES; a++) {
+            if (ImGui::Selectable(acidActivityNames[a], sequencer->acidVoice.activity == a)) {
+                sequencer->acidVoice.activity = (themis::AcidActivity)a;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Note density/activity");
+
+    // Octave
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(50);
+    int acidOct = sequencer->acidVoice.octaveOffset;
+    if (ImGui::DragInt("##aOct", &acidOct, 0.1f, -2, 2, "Oct%+d")) {
+        sequencer->acidVoice.octaveOffset = acidOct;
+    }
+
+    // MIDI Channel
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(45);
+    int acidMidiCh = sequencer->acidVoice.midiChannel + 1;
+    if (ImGui::DragInt("##aCh", &acidMidiCh, 0.1f, 1, 16, "Ch%d")) {
+        sequencer->acidVoice.midiChannel = acidMidiCh - 1;
+    }
+
+    // Manual mode parameters (pattern selection)
+    if (sequencer->acidVoice.mode == themis::ACID_MODE_MANUAL) {
+        // Rhythm pattern
+        ImGui::SetNextItemWidth(80);
+        char rhythmPatLabel[32];
+        themis::GetAcidPatternName(sequencer->acidVoice.rhythmPattern, 0, rhythmPatLabel, 16);
+        if (ImGui::BeginCombo("R##rpat", rhythmPatLabel)) {
+            for (int p = 0; p < themis::NUM_ACID_RHYTHM_PATTERNS; p++) {
+                char patName[32];
+                themis::GetAcidPatternName(p, 0, patName, 16);
+                if (ImGui::Selectable(patName, sequencer->acidVoice.rhythmPattern == p)) {
+                    sequencer->acidVoice.rhythmPattern = p;
+                    sequencer->acidState.currentRhythmPattern = p;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rhythm pattern preset");
+
+        // Melody pattern
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(80);
+        char melodyPatLabel[32];
+        themis::GetAcidPatternName(0, sequencer->acidVoice.melodyPattern, melodyPatLabel, 16);
+        // Extract just melody name (after '/')
+        const char* melName = melodyPatLabel;
+        const char* slash = strchr(melodyPatLabel, '/');
+        if (slash) melName = slash + 1;
+        if (ImGui::BeginCombo("M##mpat", melName)) {
+            for (int p = 0; p < themis::NUM_ACID_MELODY_PATTERNS; p++) {
+                char patName[32];
+                themis::GetAcidPatternName(0, p, patName, 16);
+                const char* mName = patName;
+                const char* sl = strchr(patName, '/');
+                if (sl) mName = sl + 1;
+                if (ImGui::Selectable(mName, sequencer->acidVoice.melodyPattern == p)) {
+                    sequencer->acidVoice.melodyPattern = p;
+                    sequencer->acidState.currentMelodyPattern = p;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Melody pattern preset");
+    }
+
+    // Show current pattern info if active
+    if (sequencer->acidVoice.active) {
+        ImGui::SameLine();
+        char patternName[32];
+        themis::GetAcidPatternName(
+            sequencer->acidState.currentRhythmPattern,
+            sequencer->acidState.currentMelodyPattern,
+            patternName, 32);
+        ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.1f, 1.0f), "[%s]", patternName);
     }
 
     ImGui::PopID();
@@ -958,6 +1235,8 @@ void ThemisUI::RenderGlobalControls()
     }
 }
 
+// RenderSynthParams() is implemented in ui_synth.cpp
+
 void ThemisUI::RenderOutputSection()
 {
     ImGui::Text("Audio Output");
@@ -1021,559 +1300,7 @@ void ThemisUI::RenderOutputSection()
     }
 }
 
-void ThemisUI::RenderPatternVisualization()
-{
-    ImGui::Text("Pattern Visualization (click pattern name to copy debug info)");
-
-    // Helper to render pattern string
-    auto RenderPatternString = [&](uint32_t pattern, int length) {
-        for (int i = 0; i < length && i < 32; i++) {
-            bool active = themis::IsStepActive(pattern, i);
-            bool isCurrent = (i == (sequencer->currentStep % length) && sequencer->isRunning);
-
-            if (isCurrent) {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-            }
-
-            ImGui::Text("%s", active ? "X" : ".");
-
-            if (isCurrent) {
-                ImGui::PopStyleColor();
-            }
-
-            if (i < length - 1) ImGui::SameLine(0, 2);
-            if (i == 15 && length > 16) {
-                ImGui::SameLine(0, 10);
-                ImGui::Text("|");
-                ImGui::SameLine(0, 10);
-            }
-        }
-    };
-
-    // Kick pattern - clickable
-    char kickDebug[512];
-    snprintf(kickDebug, sizeof(kickDebug),
-        "=== KICK DEBUG ===\n"
-        "Pattern Index: %d\n"
-        "Pattern Value: 0x%08X\n"
-        "Step: %d, Bar: %d\n",
-        sequencer->currentKickPattern,
-        themis::kickPatterns[sequencer->currentKickPattern],
-        sequencer->currentStep, sequencer->barCounter);
-
-    if (ImGui::Selectable("Kick", false, ImGuiSelectableFlags_None, ImVec2(40, 0))) {
-        SDL_SetClipboardText(kickDebug);
-    }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Click to copy debug info");
-    ImGui::SameLine();
-    ImGui::Text("(Pattern %d):", sequencer->currentKickPattern);
-    ImGui::SameLine();
-    RenderPatternString(themis::kickPatterns[sequencer->currentKickPattern], 32);
-
-    // Clap pattern - clickable
-    char clapDebug[512];
-    snprintf(clapDebug, sizeof(clapDebug),
-        "=== CLAP DEBUG ===\n"
-        "Pattern Index: %d\n"
-        "Pattern Value: 0x%08X\n"
-        "Step: %d, Bar: %d\n",
-        sequencer->currentClapPattern,
-        themis::clapPatterns[sequencer->currentClapPattern],
-        sequencer->currentStep, sequencer->barCounter);
-
-    if (ImGui::Selectable("Clap", false, ImGuiSelectableFlags_None, ImVec2(40, 0))) {
-        SDL_SetClipboardText(clapDebug);
-    }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Click to copy debug info");
-    ImGui::SameLine();
-    ImGui::Text("(Pattern %d):", sequencer->currentClapPattern);
-    ImGui::SameLine();
-    RenderPatternString(themis::clapPatterns[sequencer->currentClapPattern], 32);
-
-    ImGui::Separator();
-
-    // Helper lambda to render a single pattern row
-    auto RenderPatternRow = [&](uint32_t pattern, int length, char varLabel, bool isActive, bool isCurrent) {
-        int activeSteps = 0;
-        for (int i = 0; i < length && i < 32; i++) {
-            if (themis::IsStepActive(pattern, i)) activeSteps++;
-        }
-        bool isEmpty = (activeSteps == 0);
-
-        if (isEmpty) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-        } else if (!isActive) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-        } else if (!isCurrent) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
-        }
-
-        for (int i = 0; i < length && i < 32; i++) {
-            bool active = themis::IsStepActive(pattern, i);
-            bool isCurrentStep = (i == (sequencer->currentStep % length) && sequencer->isRunning && isCurrent);
-
-            if (isCurrentStep && !isEmpty) {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-            }
-
-            ImGui::Text("%s", active ? "X" : ".");
-
-            if (isCurrentStep && !isEmpty) {
-                ImGui::PopStyleColor();
-            }
-
-            if (i < length - 1) ImGui::SameLine(0, 2);
-        }
-
-        if (isEmpty || !isActive || !isCurrent) {
-            ImGui::PopStyleColor();
-        }
-
-        if (isEmpty) {
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), " EMPTY!");
-        }
-    };
-
-    // Generative voice patterns
-    for (int v = 0; v < 6; v++) {
-        themis::VoiceConfig* voice = &sequencer->generativeVoices[v];
-
-        // Get current variation
-        uint8_t var = themis::GetCurrentVariation(&voice->variation,
-                                                   sequencer->currentStep,
-                                                   sequencer->barCounter);
-        uint32_t activePattern = (var == 1) ? voice->patternB
-                               : (var == 2) ? voice->patternC
-                               : voice->pattern;
-
-        // Count active steps for debug
-        int activeSteps = 0;
-        for (int i = 0; i < voice->patternLength && i < 32; i++) {
-            if (themis::IsStepActive(activePattern, i)) activeSteps++;
-        }
-
-        // Create debug string for this voice
-        char voiceDebug[1024];
-        snprintf(voiceDebug, sizeof(voiceDebug),
-            "=== DRUM VOICE DEBUG ===\n"
-            "Voice: %s (index %d)\n"
-            "Active: %s\n"
-            "Rhythm Style: %s\n"
-            "Density: %s\n"
-            "Interaction: %s\n"
-            "Pattern Length: %d\n"
-            "Current Variation: %c\n"
-            "Variation Mode: %s\n"
-            "Pattern A: 0x%08X\n"
-            "Pattern B: 0x%08X\n"
-            "Pattern C: 0x%08X\n"
-            "Active Pattern: 0x%08X\n"
-            "Active Steps: %d\n"
-            "Step: %d, Bar: %d\n",
-            themis::drumNames[voice->voice], v,
-            voice->active ? "YES" : "NO",
-            themis::rhythmStyleNames[voice->rhythmStyle],
-            themis::densityNames[voice->density],
-            themis::interactionStyleNames[voice->interaction],
-            voice->patternLength,
-            var == 0 ? 'A' : (var == 1 ? 'B' : 'C'),
-            themis::variationModeNames[voice->variation.mode],
-            voice->pattern, voice->patternB, voice->patternC,
-            activePattern, activeSteps,
-            sequencer->currentStep, sequencer->barCounter);
-
-        // Clickable voice name
-        ImGui::PushID(v);
-        if (ImGui::Selectable(themis::drumNames[voice->voice], false, ImGuiSelectableFlags_None, ImVec2(50, 0))) {
-            SDL_SetClipboardText(voiceDebug);
-        }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Click to copy debug info");
-        ImGui::SameLine();
-
-        // Always show A, B, C patterns
-        ImGui::Text("[A]:");
-        ImGui::SameLine();
-        RenderPatternRow(voice->pattern, voice->patternLength, 'A', voice->active, var == 0);
-        ImGui::Text("      [B]:");
-        ImGui::SameLine();
-        RenderPatternRow(voice->patternB, voice->patternLength, 'B', voice->active, var == 1);
-        ImGui::Text("      [C]:");
-        ImGui::SameLine();
-        RenderPatternRow(voice->patternC, voice->patternLength, 'C', voice->active, var == 2);
-        ImGui::PopID();
-
-        // Show personality info on next line
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.8f, 1.0f),
-            "    %s | %s | L%d%s",
-            themis::rhythmStyleNames[voice->rhythmStyle],
-            themis::densityNames[voice->density],
-            voice->patternLength,
-            voice->interaction != themis::INTERACTION_NONE ?
-                (std::string(" | ") + themis::interactionStyleNames[voice->interaction] +
-                 " w/" + themis::drumNames[voice->interactionPartner]).c_str() : "");
-    }
-
-    ImGui::Separator();
-
-    // Melody voice patterns
-    themis::MelodyConfig* melodyVoices[2] = {
-        &sequencer->melodyVoice,
-        &sequencer->melodyMidiVoice
-    };
-    const char* melodyNames[2] = { "MelCV", "MelMIDI" };
-    const char* melodyFullNames[2] = { "Melody CV", "Melody MIDI" };
-
-    for (int m = 0; m < 2; m++) {
-        themis::MelodyConfig* melody = melodyVoices[m];
-
-        // Get current variation
-        uint8_t var = themis::GetCurrentVariation(&melody->variation,
-                                                   sequencer->currentStep,
-                                                   sequencer->barCounter);
-        uint32_t activePattern = (var == 1) ? melody->rhythmPatternB
-                               : (var == 2) ? melody->rhythmPatternC
-                               : melody->rhythmPattern;
-
-        // Count active steps for debug
-        int activeSteps = 0;
-        for (int i = 0; i < melody->patternLength && i < 32; i++) {
-            if (themis::IsStepActive(activePattern, i)) activeSteps++;
-        }
-        bool isEmpty = (activeSteps == 0);
-
-        // Create debug string for melody
-        char melodyDebug[1536];
-        snprintf(melodyDebug, sizeof(melodyDebug),
-            "=== MELODY VOICE DEBUG ===\n"
-            "Voice: %s\n"
-            "Active: %s\n"
-            "Style: %s\n"
-            "SubStyle: %d\n"
-            "Rhythm Style: %s\n"
-            "Density: %s\n"
-            "Pattern Length: %d\n"
-            "Current Variation: %c\n"
-            "Variation Mode: %s\n"
-            "Rhythm Pattern A: 0x%08X\n"
-            "Rhythm Pattern B: 0x%08X\n"
-            "Rhythm Pattern C: 0x%08X\n"
-            "Active Pattern: 0x%08X\n"
-            "Active Steps: %d\n"
-            "Scale: %s\n"
-            "Root: %s\n"
-            "Step: %d, Bar: %d\n"
-            "Note Sequence A: [%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d]\n"
-            "isEmpty: %s\n",
-            melodyFullNames[m],
-            melody->active ? "YES" : "NO",
-            themis::melodyStyleNames[melody->style],
-            melody->subStyle,
-            themis::rhythmStyleNames[melody->rhythmStyle],
-            themis::densityNames[melody->density],
-            melody->patternLength,
-            var == 0 ? 'A' : (var == 1 ? 'B' : 'C'),
-            themis::variationModeNames[melody->variation.mode],
-            melody->rhythmPattern, melody->rhythmPatternB, melody->rhythmPatternC,
-            activePattern, activeSteps,
-            themis::scaleNames[sequencer->melodyScale],
-            themis::rootNoteNames[sequencer->melodyRoot],
-            sequencer->currentStep, sequencer->barCounter,
-            melody->noteSequence[0], melody->noteSequence[1], melody->noteSequence[2], melody->noteSequence[3],
-            melody->noteSequence[4], melody->noteSequence[5], melody->noteSequence[6], melody->noteSequence[7],
-            melody->noteSequence[8], melody->noteSequence[9], melody->noteSequence[10], melody->noteSequence[11],
-            melody->noteSequence[12], melody->noteSequence[13], melody->noteSequence[14], melody->noteSequence[15],
-            isEmpty ? "YES" : "NO");
-
-        // Clickable melody name
-        ImGui::PushID(m + 100);
-        if (ImGui::Selectable(melodyNames[m], false, ImGuiSelectableFlags_None, ImVec2(55, 0))) {
-            SDL_SetClipboardText(melodyDebug);
-        }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Click to copy debug info");
-        ImGui::SameLine();
-
-        // Always show A, B, C patterns
-        ImGui::Text("[A]:");
-        ImGui::SameLine();
-        RenderPatternRow(melody->rhythmPattern, melody->patternLength, 'A', melody->active, var == 0);
-        ImGui::Text("        [B]:");
-        ImGui::SameLine();
-        RenderPatternRow(melody->rhythmPatternB, melody->patternLength, 'B', melody->active, var == 1);
-        ImGui::Text("        [C]:");
-        ImGui::SameLine();
-        RenderPatternRow(melody->rhythmPatternC, melody->patternLength, 'C', melody->active, var == 2);
-        ImGui::PopID();
-
-        // Show personality info on next line
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.8f, 1.0f),
-            "    %s | %s | %s | L%d",
-            themis::melodyStyleNames[melody->style],
-            themis::rhythmStyleNames[melody->rhythmStyle],
-            themis::densityNames[melody->density],
-            melody->patternLength);
-    }
-
-    ImGui::Separator();
-
-    // Poly Voice info
-    ImGui::PushID("PolyViz");
-    if (sequencer->polyVoice.active) {
-        const auto& prog = themis::progressions[sequencer->polyVoice.progressionIndex];
-
-        // Create debug string for poly voice
-        char polyDebug[512];
-        snprintf(polyDebug, sizeof(polyDebug),
-            "=== POLY VOICE DEBUG ===\n"
-            "Active: YES\n"
-            "Progression: %s\n"
-            "Chord Rate: %s\n"
-            "Current Chord: %d/%d\n"
-            "Steps Until Change: %d\n"
-            "Octave Offset: %d\n"
-            "Velocity: %d\n"
-            "Notes On: %s\n"
-            "Num Active Notes: %d\n",
-            prog.name,
-            themis::chordRateNames[sequencer->polyVoice.chordRate],
-            sequencer->polyState.currentChordIndex + 1, prog.length,
-            sequencer->polyState.stepsUntilChange,
-            sequencer->polyVoice.octaveOffset,
-            sequencer->polyVoice.velocity,
-            sequencer->polyState.notesOn ? "YES" : "NO",
-            sequencer->polyState.numActiveNotes);
-
-        // Clickable poly name
-        if (ImGui::Selectable("Poly", false, ImGuiSelectableFlags_None, ImVec2(40, 0))) {
-            SDL_SetClipboardText(polyDebug);
-        }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Click to copy debug info");
-        ImGui::SameLine();
-
-        // Show progression sequence
-        ImGui::Text("Prog: %s | ", prog.name);
-        ImGui::SameLine();
-
-        // Display chord sequence with current position highlighted
-        for (int c = 0; c < prog.length; c++) {
-            bool isCurrent = (c == sequencer->polyState.currentChordIndex);
-            if (isCurrent) {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-            }
-
-            // Show chord type abbreviation
-            const char* chordAbbrev[] = {"M", "m", "dim", "aug", "s2", "s4", "M7", "m7", "7", "d7", "m7b5", "+9", "m+9"};
-            int chordType = prog.steps[c].chordType;
-            ImGui::Text("%d%s", prog.steps[c].scaleDegree, chordAbbrev[chordType]);
-
-            if (isCurrent) {
-                ImGui::PopStyleColor();
-            }
-
-            if (c < prog.length - 1) {
-                ImGui::SameLine(0, 5);
-                ImGui::Text("-");
-                ImGui::SameLine(0, 5);
-            }
-        }
-
-        // Show timing info
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.8f, 1.0f),
-            "    Rate: %s | Oct: %+d | Steps to change: %d",
-            themis::chordRateNames[sequencer->polyVoice.chordRate],
-            sequencer->polyVoice.octaveOffset,
-            sequencer->polyState.stepsUntilChange);
-    } else {
-        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Poly   (inactive)");
-    }
-    ImGui::PopID();
-}
-
-void ThemisUI::RenderMixer()
-{
-    // Decay activity indicators
-    float activityDecay = 0.05f;
-    for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) {
-        if (drumActivity[i] > 0.0f) drumActivity[i] -= activityDecay;
-        if (drumActivity[i] < 0.0f) drumActivity[i] = 0.0f;
-    }
-    if (melodyCVActivity > 0.0f) melodyCVActivity -= activityDecay;
-    if (melodyCVActivity < 0.0f) melodyCVActivity = 0.0f;
-    if (melodyMidiActivity > 0.0f) melodyMidiActivity -= activityDecay;
-    if (melodyMidiActivity < 0.0f) melodyMidiActivity = 0.0f;
-    if (polyActivity > 0.0f) polyActivity -= activityDecay;
-    if (polyActivity < 0.0f) polyActivity = 0.0f;
-
-    // Compact channel strip helper lambda
-    auto RenderChannel = [](const char* name, bool* mute, bool* solo,
-                            float activity, bool shouldPlay, ImVec4 activeColor) {
-        ImGui::BeginGroup();
-
-        // Activity indicator (small square)
-        ImVec4 indicatorColor = shouldPlay
-            ? ImVec4(activeColor.x + activity * 0.5f, activeColor.y, activeColor.z, 1.0f)
-            : ImVec4(0.3f, 0.3f, 0.3f, 1.0f);
-        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, indicatorColor);
-        ImGui::ProgressBar(activity, ImVec2(50, 30), "");
-        ImGui::PopStyleColor();
-
-        // Channel name
-        ImGui::Text("%-6s", name);
-
-        // M/S buttons - capture state BEFORE button click to avoid push/pop mismatch
-        bool isMuted = *mute;
-        bool isSoloed = *solo;
-
-        if (isMuted) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
-        }
-        if (ImGui::SmallButton("M")) {
-            *mute = !(*mute);
-        }
-        if (isMuted) {
-            ImGui::PopStyleColor();
-        }
-
-        ImGui::SameLine();
-
-        if (isSoloed) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
-        }
-        if (ImGui::SmallButton("S")) {
-            *solo = !(*solo);
-        }
-        if (isSoloed) {
-            ImGui::PopStyleColor();
-        }
-
-        ImGui::EndGroup();
-        ImGui::SameLine(0, 8);
-    };
-
-    // Row 1: All channels
-    ImGui::Text("Channels:");
-    ImGui::SameLine(80);
-
-    for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) {
-        ImGui::PushID(i);
-        RenderChannel(themis::drumNames[i], &drumMute[i], &drumSolo[i],
-                     drumActivity[i], ShouldPlayDrum((themis::DrumVoice)i),
-                     ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
-        ImGui::PopID();
-    }
-
-    ImGui::PushID("MelCV");
-    RenderChannel("MelCV", &melodyCVMute, &melodyCVSolo,
-                 melodyCVActivity, ShouldPlayMelodyCV(),
-                 ImVec4(0.2f, 0.4f, 0.8f, 1.0f));
-    ImGui::PopID();
-
-    ImGui::PushID("MelMID");
-    RenderChannel("MelMID", &melodyMidiMute, &melodyMidiSolo,
-                 melodyMidiActivity, ShouldPlayMelodyMidi(),
-                 ImVec4(0.6f, 0.2f, 0.8f, 1.0f));
-    ImGui::PopID();
-
-    ImGui::PushID("Pads");
-    RenderChannel("Pads", &polyMute, &polySolo,
-                 polyActivity, ShouldPlayPoly(),
-                 ImVec4(0.8f, 0.6f, 0.2f, 1.0f));
-    ImGui::PopID();
-
-    ImGui::NewLine();
-
-    // Quick actions row
-    if (ImGui::SmallButton("Clear Mutes")) {
-        for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) drumMute[i] = false;
-        melodyCVMute = false;
-        melodyMidiMute = false;
-        polyMute = false;
-    }
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Clear Solos")) {
-        for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) drumSolo[i] = false;
-        melodyCVSolo = false;
-        melodyMidiSolo = false;
-        polySolo = false;
-    }
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Solo Drums")) {
-        for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) drumSolo[i] = true;
-        melodyCVSolo = false;
-        melodyMidiSolo = false;
-    }
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Solo Melody")) {
-        for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) drumSolo[i] = false;
-        melodyCVSolo = true;
-        melodyMidiSolo = true;
-    }
-
-    ImGui::Separator();
-
-    // Sound shaping section
-    ImGui::Text("Sound Shaping");
-
-    // Filter cutoff
-    float filterCutoff = themis_audio::g_audioEngine.GetFilterCutoff();
-    ImGui::SetNextItemWidth(200);
-    if (ImGui::SliderFloat("Filter", &filterCutoff, 0.0f, 1.0f, "%.2f")) {
-        themis_audio::g_audioEngine.SetFilterCutoff(filterCutoff);
-    }
-    ImGui::SameLine();
-    ImGui::TextDisabled("(?)");
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Low-pass filter cutoff: 0=dark, 1=bright");
-    }
-
-    ImGui::SameLine(0, 30);
-
-    // Decay amount
-    float decayAmount = themis_audio::g_audioEngine.GetDecayAmount();
-    ImGui::SetNextItemWidth(200);
-    if (ImGui::SliderFloat("Decay", &decayAmount, 0.0f, 1.0f, "%.2f")) {
-        themis_audio::g_audioEngine.SetDecayAmount(decayAmount);
-    }
-    ImGui::SameLine();
-    ImGui::TextDisabled("(?)");
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Envelope decay: 0=short/tight, 1=long/loose");
-    }
-
-    // Volume (moved here from Output tab for convenience)
-    ImGui::SameLine(0, 30);
-    float volume = themis_audio::g_audioEngine.GetVolume();
-    ImGui::SetNextItemWidth(150);
-    if (ImGui::SliderFloat("Volume", &volume, 0.0f, 1.0f, "%.2f")) {
-        themis_audio::g_audioEngine.SetVolume(volume);
-    }
-
-    // Level meter
-    ImGui::SameLine();
-    float level = themis_audio::g_audioEngine.GetPeakLevel();
-    ImGui::ProgressBar(level, ImVec2(80, 0), "");
-}
-
-void ThemisUI::TriggerDrumActivity(themis::DrumVoice voice)
-{
-    if (voice < themis::NUM_DRUM_VOICES) {
-        drumActivity[voice] = 1.0f;
-    }
-}
-
-void ThemisUI::TriggerMelodyCVActivity()
-{
-    melodyCVActivity = 1.0f;
-}
-
-void ThemisUI::TriggerMelodyMidiActivity()
-{
-    melodyMidiActivity = 1.0f;
-}
-
-void ThemisUI::TriggerPolyActivity()
-{
-    polyActivity = 1.0f;
-}
+// RenderPatternVisualization() is implemented in ui_pattern.cpp
+// RenderMixer() and TriggerActivity*() are implemented in ui_mixer.cpp
 
 } // namespace themis_ui

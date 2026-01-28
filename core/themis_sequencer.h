@@ -38,6 +38,14 @@ public:
     PolyVoiceConfig polyVoice;
     PolyVoiceState polyState;
 
+    // Rhythm player voice (supporting accompaniment)
+    RhythmPlayerConfig rhythmVoice;
+    RhythmPlayerState rhythmState;
+
+    // Acid voice (303-style bass lines)
+    AcidConfig acidVoice;
+    AcidState acidState;
+
     // Pattern indices
     uint8_t currentKickPattern = 0;
     uint8_t currentClapPattern = 0;
@@ -106,6 +114,24 @@ public:
      * @param noteOn True for note-on, false for note-off
      */
     std::function<void(const int8_t* notes, uint8_t count, bool noteOn)> onPolyTrigger;
+
+    /**
+     * @brief Called when rhythm player should trigger
+     * @param notes Array of MIDI note numbers
+     * @param count Number of notes
+     * @param velocity MIDI velocity (1-127)
+     * @param noteOn True for note-on, false for note-off
+     */
+    std::function<void(const int8_t* notes, uint8_t count, uint8_t velocity, bool noteOn)> onRhythmTrigger;
+
+    /**
+     * @brief Called when acid voice should trigger
+     * @param note MIDI note number
+     * @param velocity MIDI velocity (64 normal, 127 accent)
+     * @param noteOn True for note-on, false for note-off
+     * @param isSlide True if this note overlaps previous (for 303 slide)
+     */
+    std::function<void(int8_t note, uint8_t velocity, bool noteOn, bool isSlide)> onAcidTrigger;
 
     // ========================================================================
     // Methods
@@ -181,6 +207,16 @@ public:
     void RandomizePolyVoice();
 
     /**
+     * @brief Randomize rhythm player voice settings
+     */
+    void RandomizeRhythmVoice();
+
+    /**
+     * @brief Randomize acid voice settings
+     */
+    void RandomizeAcidVoice();
+
+    /**
      * @brief Get context about current chord for melody mapping
      * @return ChordContext with root, type, and diatonic status
      */
@@ -191,6 +227,16 @@ private:
      * @brief Process poly voice chord changes
      */
     void ProcessPolyVoice();
+
+    /**
+     * @brief Process rhythm player voice
+     */
+    void ProcessRhythmVoice();
+
+    /**
+     * @brief Process acid voice
+     */
+    void ProcessAcidVoice();
 
     /**
      * @brief Trigger new chord for poly voice

@@ -253,10 +253,13 @@ const int8_t scaleMinor[7] = {0, 2, 3, 5, 7, 8, 10};
 const int8_t scaleMinorBlues[6] = {0, 3, 5, 6, 7, 10};
 const int8_t scaleMinorPentatonic[5] = {0, 3, 5, 7, 10};
 const int8_t scaleGypsy[7] = {0, 2, 3, 6, 7, 8, 11};
-const int8_t scaleLengths[NUM_SCALE_TYPES] = {7, 6, 5, 7};
+const int8_t scaleWholeHalf[8] = {0, 2, 3, 5, 6, 8, 9, 11};   // W-H-W-H-W-H-W-H (diminished)
+const int8_t scaleHalfWhole[8] = {0, 1, 3, 4, 6, 7, 9, 10};   // H-W-H-W-H-W-H-W (dominant diminished)
+const int8_t scaleWholeTone[6] = {0, 2, 4, 6, 8, 10};          // W-W-W-W-W-W (augmented/dreamy)
+const int8_t scaleLengths[NUM_SCALE_TYPES] = {7, 6, 5, 7, 8, 8, 6};
 
 const char* scaleNames[NUM_SCALE_TYPES] = {
-    "Minor", "MinBlue", "MinPent", "Gypsy"
+    "Minor", "MinBlue", "MinPent", "Gypsy", "W-H Dim", "H-W Dim", "WhlTone"
 };
 
 // ============================================================================

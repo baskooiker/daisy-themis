@@ -133,15 +133,15 @@ static void SetupCallbacks()
 
     // Poly voice (chords) callback
     g_sequencer.onPolyTrigger = [](const int8_t* notes, uint8_t count, bool noteOn) {
-        // Trigger activity indicator
-        themis_ui::g_ui.TriggerPolyActivity();
-
-        // Check mixer solo/mute state
-        if (!themis_ui::g_ui.ShouldPlayPoly()) {
-            return;
-        }
-
         if (noteOn) {
+            // Trigger activity indicator
+            themis_ui::g_ui.TriggerPolyActivity();
+
+            // Check mixer solo/mute state - only block note-ons
+            if (!themis_ui::g_ui.ShouldPlayPoly()) {
+                return;
+            }
+
             // Trigger synth notes
             themis_audio::g_audioEngine.TriggerPolyChord(notes, count,
                                                           g_sequencer.polyVoice.velocity);
@@ -154,7 +154,7 @@ static void SetupCallbacks()
                 }
             }
         } else {
-            // Release synth notes
+            // Always allow note-offs through to prevent hanging notes
             themis_audio::g_audioEngine.ReleasePolyChord(notes, count);
 
             // Send MIDI note-offs
@@ -162,6 +162,80 @@ static void SetupCallbacks()
                 for (uint8_t i = 0; i < count; i++) {
                     themis::g_platform->SendMidiNoteOff(1, notes[i]);
                 }
+            }
+        }
+    };
+
+    // Rhythm player callback
+    g_sequencer.onRhythmTrigger = [](const int8_t* notes, uint8_t count, uint8_t velocity, bool noteOn) {
+        if (noteOn) {
+            // Trigger activity indicator
+            if (count > 0) {
+                themis_ui::g_ui.TriggerRhythmActivity();
+            }
+
+            // Check mixer solo/mute state - only block note-ons
+            if (!themis_ui::g_ui.ShouldPlayRhythm()) {
+                return;
+            }
+
+            // Trigger synth notes
+            themis_audio::g_audioEngine.TriggerRhythmNotes(notes, count, velocity);
+
+            // Send MIDI note-ons
+            if (themis::g_platform) {
+                for (uint8_t i = 0; i < count; i++) {
+                    themis::g_platform->SendMidiNoteOn(
+                        g_sequencer.rhythmVoice.midiChannel,
+                        notes[i],
+                        velocity);
+                }
+            }
+        } else {
+            // Always allow note-offs through to prevent hanging notes
+            themis_audio::g_audioEngine.ReleaseRhythmNotes(notes, count);
+
+            // Send MIDI note-offs
+            if (themis::g_platform) {
+                for (uint8_t i = 0; i < count; i++) {
+                    themis::g_platform->SendMidiNoteOff(
+                        g_sequencer.rhythmVoice.midiChannel,
+                        notes[i]);
+                }
+            }
+        }
+    };
+
+    // Acid voice callback
+    g_sequencer.onAcidTrigger = [](int8_t note, uint8_t velocity, bool noteOn, bool isSlide) {
+        if (noteOn) {
+            // Trigger activity indicator
+            themis_ui::g_ui.TriggerAcidActivity();
+
+            // Check mixer solo/mute state - only block note-ons
+            if (!themis_ui::g_ui.ShouldPlayAcid()) {
+                return;
+            }
+
+            // Trigger synth note
+            themis_audio::g_audioEngine.TriggerAcid(note, velocity, isSlide);
+
+            // Send MIDI note-on
+            if (themis::g_platform) {
+                themis::g_platform->SendMidiNoteOn(
+                    g_sequencer.acidVoice.midiChannel,
+                    note,
+                    velocity);
+            }
+        } else {
+            // Always allow note-offs through to prevent hanging notes
+            themis_audio::g_audioEngine.StopAcid(note);
+
+            // Send MIDI note-off
+            if (themis::g_platform) {
+                themis::g_platform->SendMidiNoteOff(
+                    g_sequencer.acidVoice.midiChannel,
+                    note);
             }
         }
     };
@@ -300,6 +374,31 @@ int main(int argc, char* argv[])
         themis_ui::g_ui.melodyMidiSolo = g_settings.melodyMidiSolo;
         themis_ui::g_ui.polyMute = g_settings.polyMute;
         themis_ui::g_ui.polySolo = g_settings.polySolo;
+
+        // Apply voice activation settings to sequencer
+        g_sequencer.melodyVoice.active = g_settings.melodyCVActive;
+        g_sequencer.melodyMidiVoice.active = g_settings.melodyMidiActive;
+        g_sequencer.polyVoice.active = g_settings.polyActive;
+
+        // Apply rhythm player settings
+        g_sequencer.rhythmVoice.active = g_settings.rhythmActive;
+        themis_ui::g_ui.rhythmMute = g_settings.rhythmMute;
+        themis_ui::g_ui.rhythmSolo = g_settings.rhythmSolo;
+        g_sequencer.rhythmVoice.mode = (themis::RhythmPlayerMode)g_settings.rhythmMode;
+        g_sequencer.rhythmVoice.playStyle = (themis::RhythmPlayStyle)g_settings.rhythmPlayStyle;
+        g_sequencer.rhythmVoice.midiChannel = g_settings.rhythmMidiChannel;
+        g_sequencer.rhythmVoice.octaveOffset = g_settings.rhythmOctaveOffset;
+
+        // Apply acid voice settings
+        g_sequencer.acidVoice.active = g_settings.acidActive;
+        themis_ui::g_ui.acidMute = g_settings.acidMute;
+        themis_ui::g_ui.acidSolo = g_settings.acidSolo;
+        g_sequencer.acidVoice.mode = (themis::AcidMode)g_settings.acidMode;
+        g_sequencer.acidVoice.rhythmPattern = g_settings.acidRhythmPattern;
+        g_sequencer.acidVoice.melodyPattern = g_settings.acidMelodyPattern;
+        g_sequencer.acidVoice.activity = (themis::AcidActivity)g_settings.acidActivity;
+        g_sequencer.acidVoice.midiChannel = g_settings.acidMidiChannel;
+        g_sequencer.acidVoice.octaveOffset = g_settings.acidOctaveOffset;
     } else {
         std::cout << "No config file found, using defaults" << std::endl;
     }
@@ -411,6 +510,31 @@ int main(int argc, char* argv[])
     g_settings.melodyMidiSolo = themis_ui::g_ui.melodyMidiSolo;
     g_settings.polyMute = themis_ui::g_ui.polyMute;
     g_settings.polySolo = themis_ui::g_ui.polySolo;
+
+    // Save voice activation settings from sequencer
+    g_settings.melodyCVActive = g_sequencer.melodyVoice.active;
+    g_settings.melodyMidiActive = g_sequencer.melodyMidiVoice.active;
+    g_settings.polyActive = g_sequencer.polyVoice.active;
+
+    // Save rhythm player settings
+    g_settings.rhythmActive = g_sequencer.rhythmVoice.active;
+    g_settings.rhythmMute = themis_ui::g_ui.rhythmMute;
+    g_settings.rhythmSolo = themis_ui::g_ui.rhythmSolo;
+    g_settings.rhythmMode = g_sequencer.rhythmVoice.mode;
+    g_settings.rhythmPlayStyle = g_sequencer.rhythmVoice.playStyle;
+    g_settings.rhythmMidiChannel = g_sequencer.rhythmVoice.midiChannel;
+    g_settings.rhythmOctaveOffset = g_sequencer.rhythmVoice.octaveOffset;
+
+    // Save acid voice settings
+    g_settings.acidActive = g_sequencer.acidVoice.active;
+    g_settings.acidMute = themis_ui::g_ui.acidMute;
+    g_settings.acidSolo = themis_ui::g_ui.acidSolo;
+    g_settings.acidMode = g_sequencer.acidVoice.mode;
+    g_settings.acidRhythmPattern = g_sequencer.acidVoice.rhythmPattern;
+    g_settings.acidMelodyPattern = g_sequencer.acidVoice.melodyPattern;
+    g_settings.acidActivity = g_sequencer.acidVoice.activity;
+    g_settings.acidMidiChannel = g_sequencer.acidVoice.midiChannel;
+    g_settings.acidOctaveOffset = g_sequencer.acidVoice.octaveOffset;
 
     if (themis_config::SaveSettings(g_settings)) {
         std::cout << "Settings saved to " << themis_config::GetConfigPath() << std::endl;

@@ -9,6 +9,8 @@
 #include "themis_patterns.h"
 #include "themis_melody.h"
 #include "themis_chords.h"
+#include "themis_rhythm.h"
+#include "themis_acid.h"
 
 namespace themis {
 
@@ -101,7 +103,7 @@ void Sequencer::Init()
     melodyRoot = 0;
 
     // Initialize poly voice
-    polyVoice.active = false;
+    polyVoice.active = true;  // Active by default
     polyVoice.progressionIndex = 0;
     polyVoice.chordRate = CHORD_RATE_1_BAR;
     polyVoice.velocity = 80;
@@ -109,6 +111,14 @@ void Sequencer::Init()
     polyVoice.progressionB = 1;
     polyVoice.variationMode = VAR_MODE_OFF;
     polyState.Init();
+
+    // Initialize rhythm player voice
+    rhythmVoice.Init();
+    rhythmState.Init();
+
+    // Initialize acid voice
+    acidVoice.Init();
+    acidState.Init();
 
     // Initialize groove amounts
     for(int i = 0; i < NUM_DRUM_VOICES; i++) {
@@ -164,6 +174,20 @@ void Sequencer::Stop()
     }
     // Release any held poly chord notes
     ReleasePolyChord();
+
+    // Release any held rhythm player notes
+    if(rhythmState.numActiveNotes > 0 && onRhythmTrigger) {
+        onRhythmTrigger(rhythmState.activeNotes, rhythmState.numActiveNotes, 0, false);
+        rhythmState.numActiveNotes = 0;
+        rhythmState.noteDuration = 0;
+    }
+
+    // Release any held acid voice note
+    if(acidState.currentNote >= 0 && onAcidTrigger) {
+        onAcidTrigger(acidState.currentNote, 64, false, false);
+        acidState.currentNote = -1;
+        acidState.gateStepsRemaining = 0;
+    }
 }
 
 // ============================================================================
@@ -471,12 +495,26 @@ void Sequencer::RandomizeAll()
     }
     ReleasePolyChord();
 
+    // Release rhythm player notes
+    if(rhythmState.numActiveNotes > 0 && onRhythmTrigger) {
+        onRhythmTrigger(rhythmState.activeNotes, rhythmState.numActiveNotes, 0, false);
+        rhythmState.numActiveNotes = 0;
+    }
+
+    // Release acid voice note
+    if(acidState.currentNote >= 0 && onAcidTrigger) {
+        onAcidTrigger(acidState.currentNote, 64, false, false);
+        acidState.currentNote = -1;
+    }
+
     // Randomize personalities FIRST so patterns are generated with correct interactions
     RandomizeVoicePersonalities();
     RandomizePatterns();
     RandomizeGroove();
     RandomizeMelodyPersonality();
     RandomizePolyVoice();
+    RandomizeRhythmVoice();
+    RandomizeAcidVoice();
 }
 
 void Sequencer::ScheduleFill()
@@ -699,6 +737,8 @@ void Sequencer::ProcessStep(float sampleRate)
     ProcessDrumPatterns(sampleRate);
     ProcessMelodyPatterns();
     ProcessPolyVoice();
+    ProcessRhythmVoice();
+    ProcessAcidVoice();
 
     // Advance step
     currentStep++;
@@ -793,8 +833,17 @@ void Sequencer::ProcessPolyVoice()
             }
         }
 
-        polyState.currentChordIndex = (polyState.currentChordIndex + 1) %
-                                       progressions[progIndex].length;
+        uint8_t nextChordIndex = (polyState.currentChordIndex + 1) %
+                                  progressions[progIndex].length;
+
+        // If we've wrapped around to chord 0 and there's a pending progression change, apply it
+        if (nextChordIndex == 0 && polyState.pendingProgressionIndex >= 0) {
+            polyVoice.progressionIndex = (uint8_t)polyState.pendingProgressionIndex;
+            polyState.pendingProgressionIndex = -1;  // Clear pending
+            progIndex = polyVoice.progressionIndex;
+        }
+
+        polyState.currentChordIndex = nextChordIndex;
 
         // Trigger new chord
         TriggerPolyChord();
@@ -933,6 +982,265 @@ void Sequencer::RandomizePolyVoice()
 
     // Reset state for new progression
     polyState.Init();
+}
+
+// ============================================================================
+// RHYTHM PLAYER VOICE
+// ============================================================================
+
+void Sequencer::ProcessRhythmVoice()
+{
+    if (!rhythmVoice.active) {
+        // Release any held notes when deactivated
+        if (rhythmState.numActiveNotes > 0 && onRhythmTrigger) {
+            onRhythmTrigger(rhythmState.activeNotes, rhythmState.numActiveNotes, 0, false);
+            rhythmState.numActiveNotes = 0;
+            rhythmState.noteDuration = 0;
+        }
+        return;
+    }
+
+    // Get chord context
+    ChordContext chordCtx = GetCurrentChordContext();
+
+    // Check if kick is active this step
+    bool kickActive = IsStepActive(kickPatterns[currentKickPattern], currentStep);
+
+    // Get random seed for this step
+    uint32_t seed = g_platform ? g_platform->GetRandomSeed() : (currentStep * 54321);
+    seed ^= (uint32_t)currentStep << 8;
+    seed ^= (uint32_t)barCounter << 16;
+
+    // Handle note-off for previous notes
+    if (rhythmState.noteDuration == 1 && rhythmState.numActiveNotes > 0) {
+        if (onRhythmTrigger) {
+            onRhythmTrigger(rhythmState.activeNotes, rhythmState.numActiveNotes, 0, false);
+        }
+        rhythmState.numActiveNotes = 0;
+    }
+
+    // Check morph mode randomization timer
+    if (rhythmVoice.mode == RHYTHM_MODE_MORPH && rhythmState.randomizeTimer == 0) {
+        RandomizeRhythmParams(rhythmVoice, rhythmState, seed ^ 0xFEDCBA98);
+    }
+
+    // Process rhythm step
+    int8_t notes[6];
+    uint8_t numNotes = 0;
+
+    bool triggered = ProcessRhythmStep(
+        rhythmVoice,
+        rhythmState,
+        chordCtx,
+        kickActive,
+        currentStep,
+        seed,
+        notes,
+        numNotes
+    );
+
+    // Trigger notes if any were generated
+    if (triggered && numNotes > 0 && onRhythmTrigger) {
+        uint8_t velocity = CalculateRhythmVelocity(rhythmState, currentStep, seed ^ 0x87654321);
+        onRhythmTrigger(notes, numNotes, velocity, true);
+    }
+}
+
+void Sequencer::RandomizeRhythmVoice()
+{
+    uint32_t seed = g_platform ? g_platform->GetRandomSeed() : 12345;
+
+    // Release any held notes
+    if (rhythmState.numActiveNotes > 0 && onRhythmTrigger) {
+        onRhythmTrigger(rhythmState.activeNotes, rhythmState.numActiveNotes, 0, false);
+    }
+
+    // Randomize mode (30% manual, 70% morph)
+    rhythmVoice.mode = ((seed % 100) < 30) ? RHYTHM_MODE_MANUAL : RHYTHM_MODE_MORPH;
+
+    // Randomize octave offset (-1 to +1)
+    rhythmVoice.octaveOffset = ((seed >> 4) % 3) - 1;
+
+    // If morph mode, randomize all parameters
+    if (rhythmVoice.mode == RHYTHM_MODE_MORPH) {
+        RandomizeRhythmParams(rhythmVoice, rhythmState, seed);
+    } else {
+        // Manual mode - set moderate defaults
+        rhythmVoice.playStyle = (RhythmPlayStyle)((seed >> 8) % NUM_RHYTHM_PLAY_STYLES);
+        rhythmVoice.activity = ACTIVITY_MODERATE;
+        rhythmVoice.articulation = ARTICULATION_NORMAL;
+        rhythmVoice.arpDirection = ARP_UP;
+        rhythmVoice.followKick = ((seed >> 12) & 0x01) == 0;
+    }
+
+    // Reset state
+    rhythmState.Init();
+
+    // Set initial style
+    rhythmState.currentStyle = rhythmVoice.playStyle;
+    rhythmState.targetStyle = rhythmVoice.playStyle;
+
+    // Set initial intensity based on activity
+    switch (rhythmVoice.activity) {
+        case ACTIVITY_SPARSE:
+            rhythmState.intensity = 0.3f;
+            rhythmState.intensityTarget = 0.35f;
+            break;
+        case ACTIVITY_BUSY:
+            rhythmState.intensity = 0.65f;
+            rhythmState.intensityTarget = 0.7f;
+            break;
+        default:
+            rhythmState.intensity = 0.5f;
+            rhythmState.intensityTarget = 0.5f;
+            break;
+    }
+}
+
+// ============================================================================
+// ACID VOICE
+// ============================================================================
+
+void Sequencer::ProcessAcidVoice()
+{
+    if (!acidVoice.active) {
+        // Release any held note when deactivated
+        if (acidState.currentNote >= 0 && onAcidTrigger) {
+            onAcidTrigger(acidState.currentNote, 64, false, false);
+            acidState.currentNote = -1;
+            acidState.gateStepsRemaining = 0;
+        }
+        return;
+    }
+
+    // Get chord context
+    ChordContext chordCtx = GetCurrentChordContext();
+
+    // Get random seed for this step
+    uint32_t seed = g_platform ? g_platform->GetRandomSeed() : (currentStep * 67890);
+    seed ^= (uint32_t)currentStep << 12;
+    seed ^= (uint32_t)barCounter << 20;
+
+    // Handle note-off for previous note (unless slide is active)
+    if (acidState.gateStepsRemaining == 1 && acidState.currentNote >= 0 && !acidState.slideActive) {
+        if (onAcidTrigger) {
+            onAcidTrigger(acidState.currentNote, 64, false, false);
+        }
+        acidState.currentNote = -1;
+    }
+
+    // Decrement gate counter
+    if (acidState.gateStepsRemaining > 0) {
+        acidState.gateStepsRemaining--;
+    }
+
+    // Check auto mode pattern randomization
+    if (acidVoice.mode == ACID_MODE_AUTO) {
+        RandomizeAcidPatterns(acidState, acidVoice, seed ^ 0x12345678);
+    }
+
+    // Process acid step
+    int8_t note;
+    uint8_t velocity;
+    bool slide;
+    uint8_t gateLength;
+
+    bool triggered = ProcessAcidStep(
+        acidVoice,
+        acidState,
+        chordCtx,
+        melodyRoot,
+        currentStep,
+        seed,
+        note,
+        velocity,
+        slide,
+        gateLength
+    );
+
+    // Trigger note if one was generated
+    if (triggered && note >= 0 && onAcidTrigger) {
+        // For slides: don't release previous note before triggering new one
+        // The overlapping notes trigger the 303's slide behavior
+        bool isSlideNote = acidState.slideActive && acidState.previousNote >= 0;
+
+        // If NOT a slide, release previous note first
+        if (!isSlideNote && acidState.currentNote >= 0) {
+            onAcidTrigger(acidState.currentNote, 64, false, false);
+        }
+
+        // Trigger the new note
+        onAcidTrigger(note, velocity, true, isSlideNote);
+
+        // Update state
+        acidState.currentNote = note;
+        acidState.gateStepsRemaining = gateLength;
+
+        // If this note should slide, we'll keep it active until the next note
+        acidState.slideActive = slide;
+    }
+}
+
+void Sequencer::RandomizeAcidVoice()
+{
+    uint32_t seed = g_platform ? g_platform->GetRandomSeed() : 12345;
+
+    // Release any held note
+    if (acidState.currentNote >= 0 && onAcidTrigger) {
+        onAcidTrigger(acidState.currentNote, 64, false, false);
+    }
+
+    // Randomize mode (40% manual, 60% auto)
+    acidVoice.mode = ((seed % 100) < 40) ? ACID_MODE_MANUAL : ACID_MODE_AUTO;
+
+    // Randomize octave offset (-1 to 0, bass register)
+    acidVoice.octaveOffset = ((seed >> 4) % 2) - 1;
+
+    // Randomize pattern selection
+    acidVoice.rhythmPattern = (seed >> 8) % NUM_ACID_RHYTHM_PATTERNS;
+    acidVoice.melodyPattern = (seed >> 12) % NUM_ACID_MELODY_PATTERNS;
+
+    // Randomize activity (favor moderate)
+    int actRoll = (seed >> 16) % 100;
+    if (actRoll < 25)
+        acidVoice.activity = ACID_ACTIVITY_SPARSE;
+    else if (actRoll < 75)
+        acidVoice.activity = ACID_ACTIVITY_MODERATE;
+    else
+        acidVoice.activity = ACID_ACTIVITY_BUSY;
+
+    // Randomize probabilities based on activity
+    switch (acidVoice.activity) {
+        case ACID_ACTIVITY_SPARSE:
+            acidVoice.triggerProb = 70 + ((seed >> 20) % 20);   // 70-90%
+            acidVoice.accentProb = 10 + ((seed >> 22) % 15);    // 10-25%
+            acidVoice.slideProb = 15 + ((seed >> 24) % 20);     // 15-35%
+            acidVoice.octaveUpProb = 5 + ((seed >> 26) % 10);   // 5-15%
+            acidVoice.octaveDownProb = 5 + ((seed >> 28) % 10); // 5-15%
+            acidVoice.fillProb = 20 + ((seed >> 30) % 20);      // 20-40%
+            break;
+        case ACID_ACTIVITY_BUSY:
+            acidVoice.triggerProb = 95 + ((seed >> 20) % 6);    // 95-100%
+            acidVoice.accentProb = 25 + ((seed >> 22) % 25);    // 25-50%
+            acidVoice.slideProb = 35 + ((seed >> 24) % 30);     // 35-65%
+            acidVoice.octaveUpProb = 20 + ((seed >> 26) % 15);  // 20-35%
+            acidVoice.octaveDownProb = 10 + ((seed >> 28) % 15);// 10-25%
+            acidVoice.fillProb = 50 + ((seed >> 30) % 30);      // 50-80%
+            break;
+        default:  // MODERATE
+            acidVoice.triggerProb = 85 + ((seed >> 20) % 15);   // 85-100%
+            acidVoice.accentProb = 15 + ((seed >> 22) % 20);    // 15-35%
+            acidVoice.slideProb = 25 + ((seed >> 24) % 25);     // 25-50%
+            acidVoice.octaveUpProb = 10 + ((seed >> 26) % 15);  // 10-25%
+            acidVoice.octaveDownProb = 8 + ((seed >> 28) % 12); // 8-20%
+            acidVoice.fillProb = 35 + ((seed >> 30) % 25);      // 35-60%
+            break;
+    }
+
+    // Reset state
+    acidState.Init();
+    acidState.currentRhythmPattern = acidVoice.rhythmPattern;
+    acidState.currentMelodyPattern = acidVoice.melodyPattern;
 }
 
 } // namespace themis
