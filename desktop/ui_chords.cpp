@@ -79,15 +79,15 @@ void ThemisUI::RenderChordsTab()
     ImGui::Text("| Root: %s", rootNoteNames[sequencer->melodyRoot]);
 
     ImGui::SameLine();
-    const ChordProgression& currentProg = progressions[sequencer->polyVoice.progressionIndex];
+    const ChordProgression& currentProg = progressions[sequencer->chordVoice.progressionIndex];
     ImGui::Text("| Prog: %s [%s]", currentProg.name, progCategoryNames[currentProg.category]);
 
     // Chord rate and duration
     ImGui::SameLine();
-    ImGui::TextDisabled("| Rate: %s", chordRateNames[sequencer->polyVoice.chordRate]);
+    ImGui::TextDisabled("| Rate: %s", chordRateNames[sequencer->chordVoice.chordRate]);
     ImGui::SameLine();
     ImGui::TextDisabled("| Duration: %s",
-        GetChordDurationString(currentProg.length, sequencer->polyVoice.chordRate));
+        GetChordDurationString(currentProg.length, sequencer->chordVoice.chordRate));
 
     // Transition indicator
     if (sequencer->chordRandomizerState.inTransition) {
@@ -109,7 +109,7 @@ void ThemisUI::RenderChordsTab()
         const ProgressionStep& step = currentProg.steps[i];
 
         // Highlight current chord
-        if (i == sequencer->polyState.currentChordIndex && sequencer->polyVoice.active) {
+        if (i == sequencer->chordState.currentChordIndex && sequencer->chordVoice.active) {
             ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "[%s%s]",
                 GetScaleDegreeName(step.scaleDegree, step.isDiatonic),
                 chordTypeNames[step.chordType]);
@@ -136,16 +136,16 @@ void ThemisUI::RenderChordsTab()
 
     ImGui::SameLine();
     if (ImGui::Button("Randomize Chords")) {
-        sequencer->RandomizePolyVoice();
+        sequencer->RandomizeChordVoice();
     }
 
     // Chord rate selector
     ImGui::SameLine();
     ImGui::SetNextItemWidth(80);
-    if (ImGui::BeginCombo("Rate", chordRateNames[sequencer->polyVoice.chordRate])) {
+    if (ImGui::BeginCombo("Rate", chordRateNames[sequencer->chordVoice.chordRate])) {
         for (int r = 0; r < NUM_CHORD_RATES; r++) {
-            if (ImGui::Selectable(chordRateNames[r], sequencer->polyVoice.chordRate == r)) {
-                sequencer->polyVoice.chordRate = r;
+            if (ImGui::Selectable(chordRateNames[r], sequencer->chordVoice.chordRate == r)) {
+                sequencer->chordVoice.chordRate = r;
             }
         }
         ImGui::EndCombo();
@@ -288,7 +288,7 @@ void ThemisUI::RenderChordsTab()
                     ImGui::SameLine();
 
                     // Highlight if currently playing
-                    if (progIdx == sequencer->polyVoice.progressionIndex) {
+                    if (progIdx == sequencer->chordVoice.progressionIndex) {
                         ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "%s", prog.name);
                     } else {
                         ImGui::Text("%s", prog.name);
@@ -297,13 +297,13 @@ void ThemisUI::RenderChordsTab()
                     // Show chord count and duration
                     ImGui::SameLine();
                     ImGui::TextDisabled("(%d chords, %s)", prog.length,
-                        GetChordDurationString(prog.length, sequencer->polyVoice.chordRate));
+                        GetChordDurationString(prog.length, sequencer->chordVoice.chordRate));
 
                     // Use button - select this progression
                     ImGui::SameLine();
                     if (ImGui::SmallButton("Use")) {
-                        if (progIdx != sequencer->polyVoice.progressionIndex) {
-                            sequencer->polyState.pendingProgressionIndex = progIdx;
+                        if (progIdx != sequencer->chordVoice.progressionIndex) {
+                            sequencer->chordState.pendingProgressionIndex = progIdx;
                             // Also update vibe if needed
                             if (prog.vibe != sequencer->chordRandomizerState.currentVibe) {
                                 sequencer->chordRandomizerState.currentVibe = prog.vibe;
@@ -315,7 +315,7 @@ void ThemisUI::RenderChordsTab()
                     }
 
                     // Show pending indicator
-                    if (sequencer->polyState.pendingProgressionIndex == progIdx) {
+                    if (sequencer->chordState.pendingProgressionIndex == progIdx) {
                         ImGui::SameLine();
                         ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "(pending)");
                     }

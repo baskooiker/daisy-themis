@@ -62,7 +62,7 @@ bool ThemisUI::IsAnySoloActive() const
     for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) {
         if (drumSolo[i]) return true;
     }
-    return melodySolo || polySolo || rhythmSolo || bassSolo;
+    return melodySolo || chordSolo || rhythmSolo || bassSolo;
 }
 
 bool ThemisUI::ShouldPlayDrum(themis::DrumVoice voice) const
@@ -85,12 +85,12 @@ bool ThemisUI::ShouldPlayMelody() const
     return true;
 }
 
-bool ThemisUI::ShouldPlayPoly() const
+bool ThemisUI::ShouldPlayChords() const
 {
-    if (polyMute) return false;
+    if (chordMute) return false;
 
     if (IsAnySoloActive()) {
-        return polySolo;
+        return chordSolo;
     }
     return true;
 }
@@ -348,39 +348,39 @@ void ThemisUI::RenderVoicesAndPatterns()
     ImGui::Spacing();
     ImGui::Separator();
 
-    // Poly Voice section header
-    ImGui::Text("POLY VOICE (CHORDS)");
+    // Chord Voice section header
+    ImGui::Text("CHORD VOICE");
     ImGui::SameLine();
-    if (ImGui::SmallButton("Rnd Poly")) {
-        sequencer->RandomizePolyVoice();
+    if (ImGui::SmallButton("Rnd Chords")) {
+        sequencer->RandomizeChordVoice();
     }
 
     ImGui::Separator();
 
-    // Compact poly voice controls
-    ImGui::PushID("PolyCompact");
+    // Compact chord voice controls
+    ImGui::PushID("ChordCompact");
 
     // Active toggle
-    ImGui::Checkbox("Poly", &sequencer->polyVoice.active);
+    ImGui::Checkbox("Chords", &sequencer->chordVoice.active);
 
     // Progression - changes are pending until end of current progression
     ImGui::SameLine();
     ImGui::SetNextItemWidth(80);
     // Show current progression, or pending if one is set
-    uint8_t displayProgIndex = sequencer->polyVoice.progressionIndex;
-    bool hasPending = (sequencer->polyState.pendingProgressionIndex >= 0);
+    uint8_t displayProgIndex = sequencer->chordVoice.progressionIndex;
+    bool hasPending = (sequencer->chordState.pendingProgressionIndex >= 0);
     if (hasPending) {
-        displayProgIndex = (uint8_t)sequencer->polyState.pendingProgressionIndex;
+        displayProgIndex = (uint8_t)sequencer->chordState.pendingProgressionIndex;
     }
     if (ImGui::BeginCombo("##prog", themis::progressions[displayProgIndex].name)) {
         for (int p = 0; p < themis::NUM_PROGRESSIONS; p++) {
             if (ImGui::Selectable(themis::progressions[p].name, displayProgIndex == p)) {
                 // Set as pending - will switch at end of current progression
-                if (p != sequencer->polyVoice.progressionIndex) {
-                    sequencer->polyState.pendingProgressionIndex = p;
+                if (p != sequencer->chordVoice.progressionIndex) {
+                    sequencer->chordState.pendingProgressionIndex = p;
                 } else {
                     // If selecting current, cancel pending
-                    sequencer->polyState.pendingProgressionIndex = -1;
+                    sequencer->chordState.pendingProgressionIndex = -1;
                 }
             }
         }
@@ -393,11 +393,11 @@ void ThemisUI::RenderVoicesAndPatterns()
     // Rate
     ImGui::SameLine();
     ImGui::SetNextItemWidth(65);
-    if (ImGui::BeginCombo("##rate", themis::chordRateNames[sequencer->polyVoice.chordRate])) {
+    if (ImGui::BeginCombo("##rate", themis::chordRateNames[sequencer->chordVoice.chordRate])) {
         for (int r = 0; r < themis::NUM_CHORD_RATES; r++) {
             if (ImGui::Selectable(themis::chordRateNames[r],
-                                   sequencer->polyVoice.chordRate == r)) {
-                sequencer->polyVoice.chordRate = r;
+                                   sequencer->chordVoice.chordRate == r)) {
+                sequencer->chordVoice.chordRate = r;
             }
         }
         ImGui::EndCombo();
@@ -406,22 +406,22 @@ void ThemisUI::RenderVoicesAndPatterns()
     // Octave
     ImGui::SameLine();
     ImGui::SetNextItemWidth(50);
-    int oct = sequencer->polyVoice.octaveOffset;
+    int oct = sequencer->chordVoice.octaveOffset;
     if (ImGui::DragInt("##oct", &oct, 0.1f, -2, 2, "Oct%+d")) {
-        sequencer->polyVoice.octaveOffset = oct;
+        sequencer->chordVoice.octaveOffset = oct;
     }
-    if (ArrowKeyAdjust(oct, -2, 2)) sequencer->polyVoice.octaveOffset = oct;
+    if (ArrowKeyAdjust(oct, -2, 2)) sequencer->chordVoice.octaveOffset = oct;
 
     // Show current chord info (and pending indicator)
-    if (sequencer->polyVoice.active) {
-        const auto& prog = themis::progressions[sequencer->polyVoice.progressionIndex];
+    if (sequencer->chordVoice.active) {
+        const auto& prog = themis::progressions[sequencer->chordVoice.progressionIndex];
         ImGui::SameLine();
         if (hasPending) {
             ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "[%d/%d->]",
-                              sequencer->polyState.currentChordIndex + 1, prog.length);
+                              sequencer->chordState.currentChordIndex + 1, prog.length);
         } else {
             ImGui::TextColored(ImVec4(0.8f, 0.6f, 0.2f, 1.0f), "[%d/%d]",
-                              sequencer->polyState.currentChordIndex + 1, prog.length);
+                              sequencer->chordState.currentChordIndex + 1, prog.length);
         }
     }
 
@@ -823,9 +823,9 @@ void ThemisUI::RenderCompactMelodyRow(themis::MelodyConfig* voice, const char* n
     if (isMidi) {
         ImGui::SameLine();
         ImGui::SetNextItemWidth(45);
-        int ch = sequencer->melodyMidiChannel + 1;
+        int ch = sequencer->melodyChannel + 1;
         if (ImGui::DragInt("##mCh", &ch, 0.1f, 1, 16, "Ch%d")) {
-            sequencer->melodyMidiChannel = ch - 1;
+            sequencer->melodyChannel = ch - 1;
         }
     }
 
@@ -1105,27 +1105,27 @@ void ThemisUI::RenderMelodyVoices()
     ImGui::Separator();
     ImGui::Spacing();
 
-    // Poly Voice (Pads/Chords) panel
-    if (ImGui::CollapsingHeader("Poly Voice (Pads)", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::PushID("PolyVoice");
+    // Chord Voice (Pads/Chords) panel
+    if (ImGui::CollapsingHeader("Chord Voice (Pads)", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::PushID("ChordVoice");
         ImGui::Indent();
 
         // Active toggle
-        ImGui::Checkbox("Active", &sequencer->polyVoice.active);
+        ImGui::Checkbox("Active", &sequencer->chordVoice.active);
 
         ImGui::SameLine();
-        if (ImGui::Button("Randomize##Poly")) {
-            sequencer->RandomizePolyVoice();
+        if (ImGui::Button("Randomize##Chords")) {
+            sequencer->RandomizeChordVoice();
         }
 
         // Progression selector
         ImGui::SetNextItemWidth(150);
-        if (ImGui::BeginCombo("Progression", themis::progressions[sequencer->polyVoice.progressionIndex].name)) {
+        if (ImGui::BeginCombo("Progression", themis::progressions[sequencer->chordVoice.progressionIndex].name)) {
             for (int p = 0; p < themis::NUM_PROGRESSIONS; p++) {
                 if (ImGui::Selectable(themis::progressions[p].name,
-                                       sequencer->polyVoice.progressionIndex == p)) {
-                    sequencer->polyVoice.progressionIndex = p;
-                    sequencer->polyState.Init();
+                                       sequencer->chordVoice.progressionIndex == p)) {
+                    sequencer->chordVoice.progressionIndex = p;
+                    sequencer->chordState.Init();
                 }
             }
             ImGui::EndCombo();
@@ -1134,11 +1134,11 @@ void ThemisUI::RenderMelodyVoices()
         // Chord rate
         ImGui::SameLine();
         ImGui::SetNextItemWidth(80);
-        if (ImGui::BeginCombo("Rate", themis::chordRateNames[sequencer->polyVoice.chordRate])) {
+        if (ImGui::BeginCombo("Rate", themis::chordRateNames[sequencer->chordVoice.chordRate])) {
             for (int r = 0; r < themis::NUM_CHORD_RATES; r++) {
                 if (ImGui::Selectable(themis::chordRateNames[r],
-                                       sequencer->polyVoice.chordRate == r)) {
-                    sequencer->polyVoice.chordRate = r;
+                                       sequencer->chordVoice.chordRate == r)) {
+                    sequencer->chordVoice.chordRate = r;
                 }
             }
             ImGui::EndCombo();
@@ -1146,39 +1146,39 @@ void ThemisUI::RenderMelodyVoices()
 
         // Octave offset
         ImGui::SetNextItemWidth(60);
-        int octave = sequencer->polyVoice.octaveOffset;
+        int octave = sequencer->chordVoice.octaveOffset;
         if (ImGui::InputInt("Octave", &octave)) {
             if (octave < -2) octave = -2;
             if (octave > 2) octave = 2;
-            sequencer->polyVoice.octaveOffset = octave;
+            sequencer->chordVoice.octaveOffset = octave;
         }
 
         // Velocity
         ImGui::SameLine();
         ImGui::SetNextItemWidth(80);
-        int vel = sequencer->polyVoice.velocity;
+        int vel = sequencer->chordVoice.velocity;
         if (ImGui::SliderInt("Velocity", &vel, 1, 127)) {
-            sequencer->polyVoice.velocity = vel;
+            sequencer->chordVoice.velocity = vel;
         }
 
         // Variation mode
         ImGui::SetNextItemWidth(60);
         const char* varModes[] = {"Off", "A/B"};
-        int varMode = (sequencer->polyVoice.variationMode == themis::VAR_MODE_OFF) ? 0 : 1;
+        int varMode = (sequencer->chordVoice.variationMode == themis::VAR_MODE_OFF) ? 0 : 1;
         if (ImGui::Combo("Variation", &varMode, varModes, 2)) {
-            sequencer->polyVoice.variationMode = (varMode == 0)
+            sequencer->chordVoice.variationMode = (varMode == 0)
                 ? themis::VAR_MODE_OFF : themis::VAR_MODE_AB;
         }
 
         // B Progression (if variation is on)
-        if (sequencer->polyVoice.variationMode != themis::VAR_MODE_OFF) {
+        if (sequencer->chordVoice.variationMode != themis::VAR_MODE_OFF) {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(150);
-            if (ImGui::BeginCombo("B Prog", themis::progressions[sequencer->polyVoice.progressionB].name)) {
+            if (ImGui::BeginCombo("B Prog", themis::progressions[sequencer->chordVoice.progressionB].name)) {
                 for (int p = 0; p < themis::NUM_PROGRESSIONS; p++) {
                     if (ImGui::Selectable(themis::progressions[p].name,
-                                           sequencer->polyVoice.progressionB == p)) {
-                        sequencer->polyVoice.progressionB = p;
+                                           sequencer->chordVoice.progressionB == p)) {
+                        sequencer->chordVoice.progressionB = p;
                     }
                 }
                 ImGui::EndCombo();
@@ -1186,9 +1186,9 @@ void ThemisUI::RenderMelodyVoices()
         }
 
         // Show current chord info
-        if (sequencer->polyVoice.active) {
-            const auto& prog = themis::progressions[sequencer->polyVoice.progressionIndex];
-            ImGui::Text("Current: Chord %d/%d", sequencer->polyState.currentChordIndex + 1, prog.length);
+        if (sequencer->chordVoice.active) {
+            const auto& prog = themis::progressions[sequencer->chordVoice.progressionIndex];
+            ImGui::Text("Current: Chord %d/%d", sequencer->chordState.currentChordIndex + 1, prog.length);
         }
 
         ImGui::Unindent();
@@ -1209,11 +1209,11 @@ void ThemisUI::RenderMelodyPanel(themis::MelodyConfig* voice, const char* name, 
         if (isMidi) {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(60);
-            int ch = sequencer->melodyMidiChannel + 1;
+            int ch = sequencer->melodyChannel + 1;
             if (ImGui::InputInt("MIDI Ch", &ch)) {
                 if (ch < 1) ch = 1;
                 if (ch > 16) ch = 16;
-                sequencer->melodyMidiChannel = ch - 1;
+                sequencer->melodyChannel = ch - 1;
             }
         }
 

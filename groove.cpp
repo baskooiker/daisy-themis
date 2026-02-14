@@ -266,7 +266,7 @@ void ProcessMelodyQueue()
     if(midiMelodyNoteOn && globalSampleCounter >= midiMelodyNoteOffSample)
     {
         uint8_t noteOff[3] = {
-            static_cast<uint8_t>(0x80 | melodyMidiChannel),
+            static_cast<uint8_t>(0x80 | melodyChannel),
             lastMidiMelodyNote,
             0
         };
@@ -299,7 +299,7 @@ void ProcessMelodyQueue()
                 if(midiMelodyNoteOn)
                 {
                     uint8_t noteOff[3] = {
-                        static_cast<uint8_t>(0x80 | melodyMidiChannel),
+                        static_cast<uint8_t>(0x80 | melodyChannel),
                         lastMidiMelodyNote,
                         0
                     };
@@ -312,7 +312,7 @@ void ProcessMelodyQueue()
 
                 // Send note-on
                 uint8_t noteOn[3] = {
-                    static_cast<uint8_t>(0x90 | melodyMidiChannel),
+                    static_cast<uint8_t>(0x90 | melodyChannel),
                     midiNote,
                     100  // Fixed velocity for melody
                 };
@@ -374,7 +374,7 @@ void SendMelodyNoteOff()
     if(midiMelodyNoteOn)
     {
         uint8_t noteOff[3] = {
-            static_cast<uint8_t>(0x80 | melodyMidiChannel),
+            static_cast<uint8_t>(0x80 | melodyChannel),
             lastMidiMelodyNote,
             0
         };
@@ -392,17 +392,17 @@ void SendMelodyNoteOff()
 }
 
 // ============================================================================
-// POLY VOICE (CHORDS) MIDI OUTPUT
+// CHORD VOICE MIDI OUTPUT
 // ============================================================================
 
-void InitPolyVoice()
+void InitChordVoice()
 {
-    polyState.Init();
-    polyNotesOn = false;
-    polyNumActiveNotes = 0;
+    chordState.Init();
+    chordNotesOn = false;
+    chordNumActiveNotes = 0;
     for(int i = 0; i < 6; i++)
     {
-        polyActiveNotes[i] = -1;
+        chordActiveNotes[i] = -1;
     }
 }
 
@@ -430,63 +430,63 @@ uint8_t GetChordNotes(int8_t rootNote, ChordType chordType, int8_t octaveOffset,
     return numNotes;
 }
 
-void SendPolyChordOn(const int8_t* notes, uint8_t numNotes, uint8_t velocity)
+void SendChordOn(const int8_t* notes, uint8_t numNotes, uint8_t velocity)
 {
     // Store active notes for note-off later
-    polyNumActiveNotes = numNotes;
+    chordNumActiveNotes = numNotes;
     for(int i = 0; i < 6; i++)
     {
         if(i < numNotes)
-            polyActiveNotes[i] = notes[i];
+            chordActiveNotes[i] = notes[i];
         else
-            polyActiveNotes[i] = -1;
+            chordActiveNotes[i] = -1;
     }
 
     // Send note-on for each note in the chord
     for(uint8_t i = 0; i < numNotes; i++)
     {
         uint8_t noteOn[3] = {
-            static_cast<uint8_t>(0x90 | polyVoice.midiChannel),
+            static_cast<uint8_t>(0x90 | chordVoice.midiChannel),
             static_cast<uint8_t>(notes[i]),
             velocity
         };
         hw.midi.SendMessage(noteOn, 3);
     }
 
-    polyNotesOn = true;
+    chordNotesOn = true;
 }
 
-void SendPolyNoteOff()
+void SendChordNoteOff()
 {
-    if(!polyNotesOn)
+    if(!chordNotesOn)
         return;
 
     // Send note-off for all active notes
-    for(uint8_t i = 0; i < polyNumActiveNotes; i++)
+    for(uint8_t i = 0; i < chordNumActiveNotes; i++)
     {
-        if(polyActiveNotes[i] >= 0)
+        if(chordActiveNotes[i] >= 0)
         {
             uint8_t noteOff[3] = {
-                static_cast<uint8_t>(0x80 | polyVoice.midiChannel),
-                static_cast<uint8_t>(polyActiveNotes[i]),
+                static_cast<uint8_t>(0x80 | chordVoice.midiChannel),
+                static_cast<uint8_t>(chordActiveNotes[i]),
                 0
             };
             hw.midi.SendMessage(noteOff, 3);
-            polyActiveNotes[i] = -1;
+            chordActiveNotes[i] = -1;
         }
     }
 
-    polyNotesOn = false;
-    polyNumActiveNotes = 0;
+    chordNotesOn = false;
+    chordNumActiveNotes = 0;
 }
 
-void ProcessPolyVoiceStep(uint8_t step)
+void ProcessChordStep(uint8_t step)
 {
-    if(!polyVoice.active)
+    if(!chordVoice.active)
         return;
 
     // Get chord rate in steps
-    uint8_t rateSteps = chordRateSteps[polyVoice.chordRate];
+    uint8_t rateSteps = chordRateSteps[chordVoice.chordRate];
 
     // Check if it's time to change chords
     // Change occurs on step 0, and then at intervals based on rate
@@ -506,13 +506,13 @@ void ProcessPolyVoiceStep(uint8_t step)
     if(shouldChange)
     {
         // Get current progression
-        const ChordProgression& prog = progressions[polyVoice.progressionIndex];
+        const ChordProgression& prog = progressions[chordVoice.progressionIndex];
 
         // Send note-off for previous chord
-        SendPolyNoteOff();
+        SendChordNoteOff();
 
         // Get current chord from progression
-        const ProgressionStep& chordStep = prog.steps[polyState.currentChordIndex];
+        const ProgressionStep& chordStep = prog.steps[chordState.currentChordIndex];
 
         // Calculate root note
         int8_t rootNote;
@@ -530,19 +530,19 @@ void ProcessPolyVoiceStep(uint8_t step)
         // Get chord notes
         int8_t chordNotes[6];
         uint8_t numNotes = GetChordNotes(rootNote, chordStep.chordType,
-                                          polyVoice.octaveOffset, chordNotes);
+                                          chordVoice.octaveOffset, chordNotes);
 
         // Send note-on for new chord
         if(numNotes > 0)
         {
-            SendPolyChordOn(chordNotes, numNotes, polyVoice.velocity);
+            SendChordOn(chordNotes, numNotes, chordVoice.velocity);
         }
 
         // Advance to next chord in progression
-        polyState.currentChordIndex++;
-        if(polyState.currentChordIndex >= prog.numChords)
+        chordState.currentChordIndex++;
+        if(chordState.currentChordIndex >= prog.numChords)
         {
-            polyState.currentChordIndex = 0;
+            chordState.currentChordIndex = 0;
 
             // Notify rhythm player of chord cycle boundary
             if(rhythmPlayerConfig.active && rhythmPlayerConfig.mode == themis::RHYTHM_MODE_MORPH

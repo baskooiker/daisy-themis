@@ -10,7 +10,7 @@ namespace themis_ui {
 void ThemisUI::RenderMixer()
 {
     // Track effective play states BEFORE any UI changes
-    bool wasPolyPlaying = ShouldPlayPoly();
+    bool wasChordsPlaying = ShouldPlayChords();
     bool wasRhythmPlaying = ShouldPlayRhythm();
     bool wasBassPlaying = ShouldPlayBass();
 
@@ -22,8 +22,8 @@ void ThemisUI::RenderMixer()
     }
     if (melodyActivity > 0.0f) melodyActivity -= activityDecay;
     if (melodyActivity < 0.0f) melodyActivity = 0.0f;
-    if (polyActivity > 0.0f) polyActivity -= activityDecay;
-    if (polyActivity < 0.0f) polyActivity = 0.0f;
+    if (chordActivity > 0.0f) chordActivity -= activityDecay;
+    if (chordActivity < 0.0f) chordActivity = 0.0f;
     if (rhythmActivity > 0.0f) rhythmActivity -= activityDecay;
     if (rhythmActivity < 0.0f) rhythmActivity = 0.0f;
     if (bassActivity > 0.0f) bassActivity -= activityDecay;
@@ -94,8 +94,8 @@ void ThemisUI::RenderMixer()
     ImGui::PopID();
 
     ImGui::PushID("Pads");
-    RenderChannel("Pads", &polyMute, &polySolo,
-                 polyActivity, ShouldPlayPoly(),
+    RenderChannel("Pads", &chordMute, &chordSolo,
+                 chordActivity, ShouldPlayChords(),
                  ImVec4(0.8f, 0.6f, 0.2f, 1.0f));
     ImGui::PopID();
 
@@ -112,8 +112,8 @@ void ThemisUI::RenderMixer()
     ImGui::PopID();
 
     // Stop notes when effective playing state changes from true to false
-    if (wasPolyPlaying && !ShouldPlayPoly()) {
-        themis_audio::g_audioEngine.StopAllPolyNotes();
+    if (wasChordsPlaying && !ShouldPlayChords()) {
+        themis_audio::g_audioEngine.StopAllChordNotes();
     }
     if (wasRhythmPlaying && !ShouldPlayRhythm()) {
         themis_audio::g_audioEngine.StopAllRhythmNotes();
@@ -128,7 +128,7 @@ void ThemisUI::RenderMixer()
     if (ImGui::SmallButton("Clear Mutes")) {
         for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) drumMute[i] = false;
         melodyMute = false;
-        polyMute = false;
+        chordMute = false;
         rhythmMute = false;
         bassMute = false;
     }
@@ -136,7 +136,7 @@ void ThemisUI::RenderMixer()
     if (ImGui::SmallButton("Clear Solos")) {
         for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) drumSolo[i] = false;
         melodySolo = false;
-        polySolo = false;
+        chordSolo = false;
         rhythmSolo = false;
         bassSolo = false;
     }
@@ -144,11 +144,11 @@ void ThemisUI::RenderMixer()
     if (ImGui::SmallButton("Solo Drums")) {
         for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) drumSolo[i] = true;
         melodySolo = false;
-        polySolo = false;
+        chordSolo = false;
         rhythmSolo = false;
         bassSolo = false;
         // Stop melodic voices immediately
-        themis_audio::g_audioEngine.StopAllPolyNotes();
+        themis_audio::g_audioEngine.StopAllChordNotes();
         themis_audio::g_audioEngine.StopAllRhythmNotes();
         themis_audio::g_audioEngine.StopAllBassNotes();
     }
@@ -156,11 +156,11 @@ void ThemisUI::RenderMixer()
     if (ImGui::SmallButton("Solo Melody")) {
         for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) drumSolo[i] = false;
         melodySolo = true;
-        polySolo = false;
+        chordSolo = false;
         rhythmSolo = false;
         bassSolo = false;
         // Stop polyphonic melodic voices immediately
-        themis_audio::g_audioEngine.StopAllPolyNotes();
+        themis_audio::g_audioEngine.StopAllChordNotes();
         themis_audio::g_audioEngine.StopAllRhythmNotes();
         themis_audio::g_audioEngine.StopAllBassNotes();
     }
@@ -222,9 +222,9 @@ void ThemisUI::TriggerMelodyActivity()
     melodyActivity = 1.0f;
 }
 
-void ThemisUI::TriggerPolyActivity()
+void ThemisUI::TriggerChordActivity()
 {
-    polyActivity = 1.0f;
+    chordActivity = 1.0f;
 }
 
 void ThemisUI::TriggerRhythmActivity()

@@ -724,7 +724,7 @@ void ProcessDrumPatterns()
             if(midiMelodyNoteOn)
             {
                 uint8_t noteOff[3] = {
-                    static_cast<uint8_t>(0x80 | melodyMidiChannel),
+                    static_cast<uint8_t>(0x80 | melodyChannel),
                     lastMidiMelodyNote,
                     0
                 };
@@ -733,7 +733,7 @@ void ProcessDrumPatterns()
 
             // Send note-on for middle C
             uint8_t noteOn[3] = {
-                static_cast<uint8_t>(0x90 | melodyMidiChannel),
+                static_cast<uint8_t>(0x90 | melodyChannel),
                 middleC_midi,
                 100
             };
@@ -807,14 +807,14 @@ void ProcessDrumPatterns()
     // Process bass voice
     if(bassVoiceConfig.active && !tuneModeEnabled)
     {
-        // Build chord context from firmware poly state
+        // Build chord context from firmware chord state
         themis::ChordContext bassChordCtx;
-        if(polyVoice.active && polyNotesOn)
+        if(chordVoice.active && chordNotesOn)
         {
-            const ChordProgression& prog = progressions[polyVoice.progressionIndex];
+            const ChordProgression& prog = progressions[chordVoice.progressionIndex];
             // currentChordIndex points to the chord that was just triggered
-            // (it gets incremented at end of ProcessPolyVoiceStep)
-            uint8_t chordIdx = polyState.currentChordIndex;
+            // (it gets incremented at end of ProcessChordStep)
+            uint8_t chordIdx = chordState.currentChordIndex;
             if(chordIdx > 0) chordIdx--; // Point to current, not next
             else chordIdx = prog.numChords - 1; // Wrap around
             const ProgressionStep& chordStep = prog.steps[chordIdx];
@@ -949,12 +949,12 @@ void ProcessDrumPatterns()
     // Process rhythm player voice
     if(rhythmPlayerConfig.active && !tuneModeEnabled)
     {
-        // Build chord context from firmware poly state
+        // Build chord context from firmware chord state
         themis::ChordContext rhythmChordCtx;
-        if(polyVoice.active && polyNotesOn)
+        if(chordVoice.active && chordNotesOn)
         {
-            const ChordProgression& prog = progressions[polyVoice.progressionIndex];
-            uint8_t chordIdx = polyState.currentChordIndex;
+            const ChordProgression& prog = progressions[chordVoice.progressionIndex];
+            uint8_t chordIdx = chordState.currentChordIndex;
             if(chordIdx > 0) chordIdx--;
             else chordIdx = prog.numChords - 1;
             const ProgressionStep& chordStep = prog.steps[chordIdx];
@@ -1054,8 +1054,8 @@ void ProcessDrumPatterns()
         }
     }
 
-    // Process poly voice (chords)
-    ProcessPolyVoiceStep(currentStep);
+    // Process chord voice
+    ProcessChordStep(currentStep);
 
     // Advance step
     currentStep++;

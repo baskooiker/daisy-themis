@@ -56,19 +56,19 @@ struct Settings {
     // MIDI settings
     int midiPort = -1;
     std::string midiPortName;
-    int melodyMidiChannel = 0;     // 0-indexed (displayed as 1-16)
+    int melodyChannel = 0;     // 0-indexed (displayed as 1-16)
 
-    // Mixer mute/solo settings (11 drum voices + melody + poly)
+    // Mixer mute/solo settings (11 drum voices + melody + chord)
     bool drumMute[11] = {false};
     bool drumSolo[11] = {false};
     bool melodyMute = false;
     bool melodySolo = false;
-    bool polyMute = false;
-    bool polySolo = false;
+    bool chordMute = false;
+    bool chordSolo = false;
 
     // Voice activation states
     bool melodyActive = true;
-    bool polyActive = true;
+    bool chordActive = true;
 
     // Rhythm player settings
     bool rhythmActive = true;

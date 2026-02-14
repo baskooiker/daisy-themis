@@ -302,10 +302,10 @@ public:
     void TriggerMelodyMidi(int8_t note, uint8_t velocity);
     void StopMelodyMidi();
 
-    // Poly voice (pads/chords)
-    void TriggerPolyChord(const int8_t* notes, uint8_t count, uint8_t velocity);
-    void ReleasePolyChord(const int8_t* notes, uint8_t count);
-    void StopAllPolyNotes();
+    // Chord voice (pads/chords)
+    void TriggerChordNotes(const int8_t* notes, uint8_t count, uint8_t velocity);
+    void ReleaseChordNotes(const int8_t* notes, uint8_t count);
+    void StopAllChordNotes();
 
     // Rhythm player voice
     void TriggerRhythmNotes(const int8_t* notes, uint8_t count, uint8_t velocity);
@@ -432,7 +432,7 @@ private:
     bool melodyMidiActive = false;
     float melodyMidiFilterState = 0.0f;
 
-    // Poly voice (pads)
+    // Chord voice (pads)
     PadSynth padSynth;
 
     // Rhythm player voice

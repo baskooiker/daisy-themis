@@ -24,15 +24,15 @@ void SaveSettings()
     settings.melodyRoot = melodyRoot;
     settings.cvMelodyStyle = (uint8_t)melodyMidiVoice.style;  // Both voices share style
     settings.midiMelodyStyle = (uint8_t)melodyMidiVoice.style;
-    settings.midiMelChannel = melodyMidiChannel;
+    settings.melodyChannelStore = melodyChannel;
     settings.melodyFreezeEnabled = melodyFreezeEnabled ? 1 : 0;
 
-    // Poly voice settings
-    settings.polyActive = polyVoice.active ? 1 : 0;
-    settings.polyProgression = polyVoice.progressionIndex;
-    settings.polyRate = polyVoice.chordRate;
-    settings.polyOctave = polyVoice.octaveOffset;
-    settings.polyMidiChannel = polyVoice.midiChannel;
+    // Chord voice settings
+    settings.chordActive = chordVoice.active ? 1 : 0;
+    settings.chordProgression = chordVoice.progressionIndex;
+    settings.chordRateIdx = chordVoice.chordRate;
+    settings.chordOctave = chordVoice.octaveOffset;
+    settings.chordMidiChannel = chordVoice.midiChannel;
 
     // MIDI channel settings
     settings.drumMidiChannel = drumMidiChannel;
@@ -116,55 +116,55 @@ void LoadSettings()
             melodyMidiVoice.style = MELODY_SUPPORTING;
         }
 
-        if(settings.midiMelChannel < 16)
+        if(settings.melodyChannelStore < 16)
         {
-            melodyMidiChannel = settings.midiMelChannel;
+            melodyChannel = settings.melodyChannelStore;
         }
         else
         {
-            melodyMidiChannel = 0; // Default to channel 1
+            melodyChannel = 0; // Default to channel 1
         }
 
         melodyFreezeEnabled = (settings.melodyFreezeEnabled != 0);
 
-        // Load poly voice settings
-        polyVoice.active = (settings.polyActive != 0);
+        // Load chord voice settings
+        chordVoice.active = (settings.chordActive != 0);
 
-        if(settings.polyProgression < NUM_PROGRESSIONS)
+        if(settings.chordProgression < NUM_PROGRESSIONS)
         {
-            polyVoice.progressionIndex = settings.polyProgression;
+            chordVoice.progressionIndex = settings.chordProgression;
         }
         else
         {
-            polyVoice.progressionIndex = 0;
+            chordVoice.progressionIndex = 0;
         }
 
-        if(settings.polyRate < NUM_CHORD_RATES)
+        if(settings.chordRateIdx < NUM_CHORD_RATES)
         {
-            polyVoice.chordRate = settings.polyRate;
+            chordVoice.chordRate = settings.chordRateIdx;
         }
         else
         {
-            polyVoice.chordRate = CHORD_RATE_1_BAR;
+            chordVoice.chordRate = CHORD_RATE_1_BAR;
         }
 
         // Clamp octave offset to valid range
-        if(settings.polyOctave >= -2 && settings.polyOctave <= 2)
+        if(settings.chordOctave >= -2 && settings.chordOctave <= 2)
         {
-            polyVoice.octaveOffset = settings.polyOctave;
+            chordVoice.octaveOffset = settings.chordOctave;
         }
         else
         {
-            polyVoice.octaveOffset = 0;
+            chordVoice.octaveOffset = 0;
         }
 
-        if(settings.polyMidiChannel < 16)
+        if(settings.chordMidiChannel < 16)
         {
-            polyVoice.midiChannel = settings.polyMidiChannel;
+            chordVoice.midiChannel = settings.chordMidiChannel;
         }
         else
         {
-            polyVoice.midiChannel = 1;  // Default to channel 2
+            chordVoice.midiChannel = 1;  // Default to channel 2
         }
 
         // Load MIDI channel settings (validate: > 15 means uninitialized flash)
@@ -209,15 +209,15 @@ void LoadSettings()
         melodyRoot = 0;
         melodyVoice.style = MELODY_SUPPORTING;
         melodyMidiVoice.style = MELODY_SUPPORTING;
-        melodyMidiChannel = 0;
+        melodyChannel = 0;
         melodyFreezeEnabled = false;
 
-        // Poly voice defaults
-        polyVoice.active = false;
-        polyVoice.progressionIndex = 0;
-        polyVoice.chordRate = CHORD_RATE_1_BAR;
-        polyVoice.octaveOffset = 0;
-        polyVoice.midiChannel = 1;  // Default to channel 2
+        // Chord voice defaults
+        chordVoice.active = false;
+        chordVoice.progressionIndex = 0;
+        chordVoice.chordRate = CHORD_RATE_1_BAR;
+        chordVoice.octaveOffset = 0;
+        chordVoice.midiChannel = 1;  // Default to channel 2
 
         // MIDI channel defaults
         drumMidiChannel = 9;
@@ -322,8 +322,8 @@ void ToggleRunState()
             // Randomize groove at start
             RandomizeGroove();
 
-            // Initialize poly voice
-            InitPolyVoice();
+            // Initialize chord voice
+            InitChordVoice();
 
             // Initialize bass voice
             bassVoiceConfig.Init();
@@ -348,7 +348,7 @@ void ToggleRunState()
         else
         {
             SendMelodyNoteOff();  // Send note-off before stopping
-            SendPolyNoteOff();    // Send poly chord note-off before stopping
+            SendChordNoteOff();    // Send chord note-off before stopping
             // Send bass note-off before stopping
             if(bassNotePlaying)
             {
@@ -442,7 +442,7 @@ void HandleMidiMessage(MidiEvent m)
                     isRunning = false;
                     lastMidiClockTime = System::GetNow();
                     SendMelodyNoteOff();  // Send note-off before stopping
-                    SendPolyNoteOff();    // Send poly chord note-off before stopping
+                    SendChordNoteOff();    // Send chord note-off before stopping
                     // Send bass note-off before stopping
                     if(bassNotePlaying)
                     {
@@ -554,7 +554,7 @@ void ProcessControls()
                 else if(currentConfigOption == CONFIG_SYSTEM_MENU)
                 {
                     currentDisplayState = DISPLAY_SYSTEM_MENU;
-                    currentSystemOption = SYSTEM_MEL_MIDI_CH;
+                    currentSystemOption = SYSTEM_MELODY_CH;
                     systemScrollOffset = 0;
                 }
                 else if(currentConfigOption == CONFIG_HARMONY_MENU)
@@ -704,11 +704,11 @@ void ProcessControls()
                 int ch;
                 switch(currentSystemOption)
                 {
-                    case SYSTEM_MEL_MIDI_CH:
-                        ch = (int)melodyMidiChannel + inc;
+                    case SYSTEM_MELODY_CH:
+                        ch = (int)melodyChannel + inc;
                         if(ch < 0) ch = 0;
                         if(ch > 15) ch = 15;
-                        melodyMidiChannel = (uint8_t)ch;
+                        melodyChannel = (uint8_t)ch;
                         break;
                     case SYSTEM_DRUM_MIDI_CH:
                         ch = (int)drumMidiChannel + inc;
@@ -813,20 +813,20 @@ void ProcessControls()
                     }
                     case HARMONY_PROGRESSION:
                     {
-                        SendPolyNoteOff();
-                        int prog = (int)polyVoice.progressionIndex + inc;
+                        SendChordNoteOff();
+                        int prog = (int)chordVoice.progressionIndex + inc;
                         if(prog < 0) prog = 0;
                         if(prog >= NUM_PROGRESSIONS) prog = NUM_PROGRESSIONS - 1;
-                        polyVoice.progressionIndex = (uint8_t)prog;
-                        polyState.currentChordIndex = 0;
+                        chordVoice.progressionIndex = (uint8_t)prog;
+                        chordState.currentChordIndex = 0;
                         break;
                     }
                     case HARMONY_RATE:
                     {
-                        int rate = (int)polyVoice.chordRate + inc;
+                        int rate = (int)chordVoice.chordRate + inc;
                         if(rate < 0) rate = 0;
                         if(rate >= NUM_CHORD_RATES) rate = NUM_CHORD_RATES - 1;
-                        polyVoice.chordRate = (uint8_t)rate;
+                        chordVoice.chordRate = (uint8_t)rate;
                         break;
                     }
                     default:

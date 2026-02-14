@@ -94,7 +94,7 @@ static void SetupCallbacks()
 
         // Send note-off for previous note before triggering new one
         if (melodyMidiNoteActive && themis::g_platform) {
-            themis::g_platform->SendMidiNoteOff(g_sequencer.melodyMidiChannel, lastMelodyMidiNote);
+            themis::g_platform->SendMidiNoteOff(g_sequencer.melodyChannel, lastMelodyMidiNote);
         }
 
         // Play internal synth
@@ -106,7 +106,7 @@ static void SetupCallbacks()
         lastMelodyMidiNote = midiNote;
         melodyMidiNoteActive = true;
         if (themis::g_platform) {
-            themis::g_platform->SendMidiNoteOn(g_sequencer.melodyMidiChannel, midiNote, 100);
+            themis::g_platform->SendMidiNoteOn(g_sequencer.melodyChannel, midiNote, 100);
         }
     };
 
@@ -114,36 +114,36 @@ static void SetupCallbacks()
     g_sequencer.onMelodyNoteOff = []() {
         themis_audio::g_audioEngine.StopMelodyMidi();
         if (melodyMidiNoteActive && themis::g_platform) {
-            themis::g_platform->SendMidiNoteOff(g_sequencer.melodyMidiChannel, lastMelodyMidiNote);
+            themis::g_platform->SendMidiNoteOff(g_sequencer.melodyChannel, lastMelodyMidiNote);
             melodyMidiNoteActive = false;
         }
     };
 
-    // Poly voice (chords) callback
-    g_sequencer.onPolyTrigger = [](const int8_t* notes, uint8_t count, bool noteOn) {
+    // Chord voice callback
+    g_sequencer.onChordTrigger = [](const int8_t* notes, uint8_t count, bool noteOn) {
         if (noteOn) {
             // Trigger activity indicator
-            themis_ui::g_ui.TriggerPolyActivity();
+            themis_ui::g_ui.TriggerChordActivity();
 
             // Check mixer solo/mute state - only block note-ons
-            if (!themis_ui::g_ui.ShouldPlayPoly()) {
+            if (!themis_ui::g_ui.ShouldPlayChords()) {
                 return;
             }
 
             // Trigger synth notes
-            themis_audio::g_audioEngine.TriggerPolyChord(notes, count,
-                                                          g_sequencer.polyVoice.velocity);
+            themis_audio::g_audioEngine.TriggerChordNotes(notes, count,
+                                                          g_sequencer.chordVoice.velocity);
 
             // Send MIDI note-ons
             if (themis::g_platform) {
                 for (uint8_t i = 0; i < count; i++) {
                     themis::g_platform->SendMidiNoteOn(1, notes[i],
-                                                        g_sequencer.polyVoice.velocity);
+                                                        g_sequencer.chordVoice.velocity);
                 }
             }
         } else {
             // Always allow note-offs through to prevent hanging notes
-            themis_audio::g_audioEngine.ReleasePolyChord(notes, count);
+            themis_audio::g_audioEngine.ReleaseChordNotes(notes, count);
 
             // Send MIDI note-offs
             if (themis::g_platform) {
@@ -358,13 +358,13 @@ int main(int argc, char* argv[])
         }
         themis_ui::g_ui.melodyMute = g_settings.melodyMute;
         themis_ui::g_ui.melodySolo = g_settings.melodySolo;
-        themis_ui::g_ui.polyMute = g_settings.polyMute;
-        themis_ui::g_ui.polySolo = g_settings.polySolo;
+        themis_ui::g_ui.chordMute = g_settings.chordMute;
+        themis_ui::g_ui.chordSolo = g_settings.chordSolo;
 
         // Apply voice activation settings to sequencer
         g_sequencer.melodyVoice.active = g_settings.melodyActive;
-        g_sequencer.melodyMidiChannel = g_settings.melodyMidiChannel;
-        g_sequencer.polyVoice.active = g_settings.polyActive;
+        g_sequencer.melodyChannel = g_settings.melodyChannel;
+        g_sequencer.chordVoice.active = g_settings.chordActive;
 
         // Apply rhythm player settings
         g_sequencer.rhythmVoice.active = g_settings.rhythmActive;
@@ -393,9 +393,9 @@ int main(int argc, char* argv[])
         for (int i = 0; i < themis::NUM_VIBE_TYPES; i++) {
             g_sequencer.chordRandomizer.enabledProgressions[i] = g_settings.chordEnabledProgressions[i];
         }
-        g_sequencer.polyVoice.progressionIndex = g_settings.chordProgressionIndex < themis::NUM_PROGRESSIONS ? g_settings.chordProgressionIndex : 0;
-        g_sequencer.polyVoice.chordRate = g_settings.chordRate;
-        g_sequencer.polyVoice.octaveOffset = g_settings.chordOctaveOffset;
+        g_sequencer.chordVoice.progressionIndex = g_settings.chordProgressionIndex < themis::NUM_PROGRESSIONS ? g_settings.chordProgressionIndex : 0;
+        g_sequencer.chordVoice.chordRate = g_settings.chordRate;
+        g_sequencer.chordVoice.octaveOffset = g_settings.chordOctaveOffset;
     } else {
         std::cout << "No config file found, using defaults" << std::endl;
     }
@@ -508,13 +508,13 @@ int main(int argc, char* argv[])
     }
     g_settings.melodyMute = themis_ui::g_ui.melodyMute;
     g_settings.melodySolo = themis_ui::g_ui.melodySolo;
-    g_settings.polyMute = themis_ui::g_ui.polyMute;
-    g_settings.polySolo = themis_ui::g_ui.polySolo;
+    g_settings.chordMute = themis_ui::g_ui.chordMute;
+    g_settings.chordSolo = themis_ui::g_ui.chordSolo;
 
     // Save voice activation settings from sequencer
     g_settings.melodyActive = g_sequencer.melodyVoice.active;
-    g_settings.melodyMidiChannel = g_sequencer.melodyMidiChannel;
-    g_settings.polyActive = g_sequencer.polyVoice.active;
+    g_settings.melodyChannel = g_sequencer.melodyChannel;
+    g_settings.chordActive = g_sequencer.chordVoice.active;
 
     // Save rhythm player settings
     g_settings.rhythmActive = g_sequencer.rhythmVoice.active;
@@ -543,9 +543,9 @@ int main(int argc, char* argv[])
     for (int i = 0; i < themis::NUM_VIBE_TYPES; i++) {
         g_settings.chordEnabledProgressions[i] = g_sequencer.chordRandomizer.enabledProgressions[i];
     }
-    g_settings.chordProgressionIndex = g_sequencer.polyVoice.progressionIndex;
-    g_settings.chordRate = g_sequencer.polyVoice.chordRate;
-    g_settings.chordOctaveOffset = g_sequencer.polyVoice.octaveOffset;
+    g_settings.chordProgressionIndex = g_sequencer.chordVoice.progressionIndex;
+    g_settings.chordRate = g_sequencer.chordVoice.chordRate;
+    g_settings.chordOctaveOffset = g_sequencer.chordVoice.octaveOffset;
 
     if (themis_config::SaveSettings(g_settings)) {
         std::cout << "Settings saved to " << themis_config::GetConfigPath() << std::endl;

@@ -125,20 +125,20 @@ bool LoadSettings(Settings& settings)
             settings.midiPort = std::stoi(value);
         } else if (key == "midi_port_name") {
             settings.midiPortName = value;
-        } else if (key == "melody_midi_channel") {
-            settings.melodyMidiChannel = std::stoi(value);
+        } else if (key == "melody_channel") {
+            settings.melodyChannel = std::stoi(value);
         } else if (key == "melody_mute") {
             settings.melodyMute = (value == "true" || value == "1");
         } else if (key == "melody_solo") {
             settings.melodySolo = (value == "true" || value == "1");
-        } else if (key == "poly_mute") {
-            settings.polyMute = (value == "true" || value == "1");
-        } else if (key == "poly_solo") {
-            settings.polySolo = (value == "true" || value == "1");
+        } else if (key == "chord_mute") {
+            settings.chordMute = (value == "true" || value == "1");
+        } else if (key == "chord_solo") {
+            settings.chordSolo = (value == "true" || value == "1");
         } else if (key == "melody_active") {
             settings.melodyActive = (value == "true" || value == "1");
-        } else if (key == "poly_active") {
-            settings.polyActive = (value == "true" || value == "1");
+        } else if (key == "chord_active") {
+            settings.chordActive = (value == "true" || value == "1");
         } else if (key == "rhythm_active") {
             settings.rhythmActive = (value == "true" || value == "1");
         } else if (key == "rhythm_mute") {
@@ -249,7 +249,7 @@ bool SaveSettings(const Settings& settings)
     file << "[midi]\n";
     file << "midi_port=" << settings.midiPort << "\n";
     file << "midi_port_name=" << settings.midiPortName << "\n";
-    file << "melody_midi_channel=" << settings.melodyMidiChannel << "\n\n";
+    file << "melody_channel=" << settings.melodyChannel << "\n\n";
 
     file << "[mixer]\n";
     for (int i = 0; i < 11; i++) {
@@ -258,12 +258,12 @@ bool SaveSettings(const Settings& settings)
     }
     file << "melody_mute=" << (settings.melodyMute ? "true" : "false") << "\n";
     file << "melody_solo=" << (settings.melodySolo ? "true" : "false") << "\n";
-    file << "poly_mute=" << (settings.polyMute ? "true" : "false") << "\n";
-    file << "poly_solo=" << (settings.polySolo ? "true" : "false") << "\n\n";
+    file << "chord_mute=" << (settings.chordMute ? "true" : "false") << "\n";
+    file << "chord_solo=" << (settings.chordSolo ? "true" : "false") << "\n\n";
 
     file << "[voices]\n";
     file << "melody_active=" << (settings.melodyActive ? "true" : "false") << "\n";
-    file << "poly_active=" << (settings.polyActive ? "true" : "false") << "\n\n";
+    file << "chord_active=" << (settings.chordActive ? "true" : "false") << "\n\n";
 
     file << "[rhythm]\n";
     file << "rhythm_active=" << (settings.rhythmActive ? "true" : "false") << "\n";

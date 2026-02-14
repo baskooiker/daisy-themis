@@ -773,7 +773,7 @@ void AudioEngine::StopMelodyMidi()
     melodyMidiActive = false;
 }
 
-void AudioEngine::TriggerPolyChord(const int8_t* notes, uint8_t count, uint8_t velocity)
+void AudioEngine::TriggerChordNotes(const int8_t* notes, uint8_t count, uint8_t velocity)
 {
     std::lock_guard<std::mutex> lock(synthMutex);
     for (uint8_t i = 0; i < count && i < 6; i++) {
@@ -781,7 +781,7 @@ void AudioEngine::TriggerPolyChord(const int8_t* notes, uint8_t count, uint8_t v
     }
 }
 
-void AudioEngine::ReleasePolyChord(const int8_t* notes, uint8_t count)
+void AudioEngine::ReleaseChordNotes(const int8_t* notes, uint8_t count)
 {
     std::lock_guard<std::mutex> lock(synthMutex);
     for (uint8_t i = 0; i < count && i < 6; i++) {
@@ -789,7 +789,7 @@ void AudioEngine::ReleasePolyChord(const int8_t* notes, uint8_t count)
     }
 }
 
-void AudioEngine::StopAllPolyNotes()
+void AudioEngine::StopAllChordNotes()
 {
     std::lock_guard<std::mutex> lock(synthMutex);
     padSynth.AllNotesOff();

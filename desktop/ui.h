@@ -36,8 +36,8 @@ public:
     bool drumSolo[themis::NUM_DRUM_VOICES] = {false};
     bool melodyMute = false;
     bool melodySolo = false;
-    bool polyMute = false;
-    bool polySolo = false;
+    bool chordMute = false;
+    bool chordSolo = false;
     bool rhythmMute = false;
     bool rhythmSolo = false;
     bool bassMute = false;
@@ -52,8 +52,8 @@ public:
     // Check if melody should sound
     bool ShouldPlayMelody() const;
 
-    // Check if poly voice should sound
-    bool ShouldPlayPoly() const;
+    // Check if chord voice should sound
+    bool ShouldPlayChords() const;
 
     // Check if rhythm player should sound
     bool ShouldPlayRhythm() const;
@@ -64,7 +64,7 @@ public:
     // Activity triggers (call from audio callbacks)
     void TriggerDrumActivity(themis::DrumVoice voice);
     void TriggerMelodyActivity();
-    void TriggerPolyActivity();
+    void TriggerChordActivity();
     void TriggerRhythmActivity();
     void TriggerBassActivity();
 
@@ -78,7 +78,7 @@ private:
     // Trigger activity indicators (for visual feedback)
     float drumActivity[themis::NUM_DRUM_VOICES] = {0.0f};
     float melodyActivity = 0.0f;
-    float polyActivity = 0.0f;
+    float chordActivity = 0.0f;
     float rhythmActivity = 0.0f;
     float bassActivity = 0.0f;
 

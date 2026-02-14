@@ -225,7 +225,7 @@ enum MelodyVoiceType
 };
 
 // ============================================================================
-// POLY VOICE (CHORDS) ENUMS
+// CHORD VOICE ENUMS
 // ============================================================================
 
 /**
@@ -317,8 +317,8 @@ enum HarmonyOption
 {
     HARMONY_SCALE,          ///< Shared melody scale
     HARMONY_ROOT,           ///< Shared melody root note
-    HARMONY_PROGRESSION,    ///< Poly voice progression
-    HARMONY_RATE,           ///< Poly voice chord rate
+    HARMONY_PROGRESSION,    ///< Chord voice progression
+    HARMONY_RATE,           ///< Chord voice chord rate
     HARMONY_BACK,
     NUM_HARMONY_OPTIONS
 };
@@ -371,7 +371,7 @@ enum FreezeOption
  */
 enum SystemOption
 {
-    SYSTEM_MEL_MIDI_CH,     ///< melodyMidiChannel
+    SYSTEM_MELODY_CH,     ///< melodyMidiChannel
     SYSTEM_DRUM_MIDI_CH,    ///< drumMidiChannel
     SYSTEM_BASS_MIDI_CH,    ///< bassVoiceConfig.midiChannel
     SYSTEM_RHYTHM_MIDI_CH,  ///< rhythmPlayerConfig.midiChannel
@@ -536,13 +536,13 @@ struct PersistentSettings
     uint8_t melodyRoot;         ///< Root note (0-11)
     uint8_t cvMelodyStyle;      ///< MelodyStyle for CV voice
     uint8_t midiMelodyStyle;    ///< MelodyStyle for MIDI voice
-    uint8_t midiMelChannel;     ///< MIDI channel (0-15)
+    uint8_t melodyChannelStore;     ///< MIDI channel (0-15)
     uint8_t melodyFreezeEnabled;///< Melody freeze state
-    uint8_t polyActive;         ///< Poly voice enabled
-    uint8_t polyProgression;    ///< Poly voice progression index
-    uint8_t polyRate;           ///< Poly voice chord rate
-    int8_t polyOctave;          ///< Poly voice octave offset
-    uint8_t polyMidiChannel;    ///< Poly voice MIDI channel
+    uint8_t chordActive;         ///< Chord voice enabled
+    uint8_t chordProgression;    ///< Chord voice progression index
+    uint8_t chordRateIdx;           ///< Chord voice chord rate
+    int8_t chordOctave;          ///< Chord voice octave offset
+    uint8_t chordMidiChannel;    ///< Chord voice MIDI channel
     uint8_t drumMidiChannel;    ///< Drum MIDI channel (default 9)
     uint8_t bassMidiChannel;    ///< Bass MIDI channel (default 4)
     uint8_t rhythmMidiChannel;  ///< Rhythm MIDI channel (default 3)
@@ -552,7 +552,7 @@ struct PersistentSettings
     uint8_t bassOctave;         ///< Bass voice octave offset (stored as int8_t)
     uint8_t rhythmOctave;       ///< Rhythm player octave offset (stored as int8_t)
     uint8_t rhythmMode;         ///< Rhythm player mode (0=Manual, 1=Morph)
-    uint8_t voiceActiveBits;    ///< Bitmask: bit0=cvMel, bit1=midiMel, bit2=poly, bit3=bass, bit4=rhythm
+    uint8_t voiceActiveBits;    ///< Bitmask: bit0=cvMel, bit1=midiMel, bit2=chord, bit3=bass, bit4=rhythm
     uint8_t reserved[2];        ///< Padding to 32 bytes
 };
 
@@ -581,7 +581,7 @@ struct TuringMachine
 };
 
 // ============================================================================
-// POLY VOICE (CHORDS) STRUCTS
+// CHORD VOICE STRUCTS
 // ============================================================================
 
 /**
@@ -617,12 +617,12 @@ struct ChordProgression
 };
 
 /**
- * @struct PolyVoiceConfig
- * @brief Configuration for poly voice (chords/pads)
+ * @struct ChordVoiceConfig
+ * @brief Configuration for chord voice (chords/pads)
  */
-struct PolyVoiceConfig
+struct ChordVoiceConfig
 {
-    bool active;                ///< Is poly voice enabled
+    bool active;                ///< Is chord voice enabled
     uint8_t progressionIndex;   ///< Current progression (0-15)
     uint8_t chordRate;          ///< ChordRate enum value
     uint8_t velocity;           ///< MIDI velocity (0-127)
@@ -631,10 +631,10 @@ struct PolyVoiceConfig
 };
 
 /**
- * @struct PolyVoiceState
- * @brief Runtime state for poly voice
+ * @struct ChordVoiceState
+ * @brief Runtime state for chord voice
  */
-struct PolyVoiceState
+struct ChordVoiceState
 {
     uint8_t currentChordIndex;  ///< Current chord in progression (0-7)
     uint8_t stepsUntilChange;   ///< Steps until next chord

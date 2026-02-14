@@ -120,7 +120,7 @@ enum ArpSubStyle
  * @brief Melody compatibility mode for chord-aware mapping
  *
  * Controls how melody notes are quantized to harmonize with current chord.
- * Applied at trigger time when poly voice is active.
+ * Applied at trigger time when chord voice is active.
  */
 enum MelodyCompatMode
 {
@@ -246,7 +246,7 @@ struct MelodyConfig
     MelodyCompatMode compatMode;  ///< How melody notes map to current chord
 };
 
-struct PolyVoiceConfig
+struct ChordVoiceConfig
 {
     bool active;
 
@@ -263,7 +263,7 @@ struct PolyVoiceConfig
     VariationMode variationMode;  // Off, AB, ABC
 };
 
-struct PolyVoiceState
+struct ChordVoiceState
 {
     uint8_t currentChordIndex;    // Which chord in progression (0-7)
     uint8_t stepsUntilChange;     // Countdown to next chord

@@ -153,7 +153,7 @@ int configScrollOffset = 0;
 
 // Submenu state
 FreezeOption currentFreezeOption = FREEZE_ALL;
-SystemOption currentSystemOption = SYSTEM_MEL_MIDI_CH;
+SystemOption currentSystemOption = SYSTEM_MELODY_CH;
 HarmonyOption currentHarmonyOption = HARMONY_SCALE;
 VoiceMenuItem currentVoiceMenuItem = VOICE_MELODY;
 VoiceDetailItem currentVoiceDetail = VDETAIL_ACTIVE;
@@ -316,7 +316,7 @@ MelodyConfig melodyMidiVoice = {
 
 ScaleType melodyScale = SCALE_MINOR;
 uint8_t melodyRoot = 0;
-uint8_t melodyMidiChannel = 0;
+uint8_t melodyChannel = 0;
 uint8_t lastMidiMelodyNote = 0;
 bool midiMelodyNoteOn = false;
 uint64_t midiMelodyNoteOffSample = 0;
@@ -324,10 +324,10 @@ bool melodyFreezeEnabled = false;
 bool tuneModeEnabled = false;
 
 // ============================================================================
-// POLY VOICE (CHORDS)
+// CHORD VOICE
 // ============================================================================
 
-PolyVoiceConfig polyVoice = {
+ChordVoiceConfig chordVoice = {
     false,      // active
     0,          // progressionIndex (Pop progression)
     CHORD_RATE_1_BAR,  // chordRate
@@ -336,11 +336,11 @@ PolyVoiceConfig polyVoice = {
     1           // midiChannel (channel 2, 0-indexed)
 };
 
-PolyVoiceState polyState;
+ChordVoiceState chordState;
 
-int8_t polyActiveNotes[6] = {-1, -1, -1, -1, -1, -1};
-uint8_t polyNumActiveNotes = 0;
-bool polyNotesOn = false;
+int8_t chordActiveNotes[6] = {-1, -1, -1, -1, -1, -1};
+uint8_t chordNumActiveNotes = 0;
+bool chordNotesOn = false;
 
 // Chord shapes: intervals from root
 const ChordShape chordShapes[NUM_CHORD_TYPES] = {

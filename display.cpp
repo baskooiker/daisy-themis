@@ -66,7 +66,7 @@ void UpdateDisplay()
                 hw.display.SetCursor(0, 32);
                 sprintf(buffer, "MIDI: %s Ch:%d",
                         melodyStyleNames[melodyMidiVoice.style],
-                        melodyMidiChannel + 1);
+                        melodyChannel + 1);
                 hw.display.WriteString(buffer, Font_6x8, true);
             }
             break;
@@ -308,7 +308,7 @@ void UpdateDisplay()
                 else
                 {
                     uint8_t ch = 0;
-                    if(i == SYSTEM_MEL_MIDI_CH) ch = melodyMidiChannel;
+                    if(i == SYSTEM_MELODY_CH) ch = melodyChannel;
                     else if(i == SYSTEM_DRUM_MIDI_CH) ch = drumMidiChannel;
                     else if(i == SYSTEM_BASS_MIDI_CH) ch = bassMidiChannel;
                     else if(i == SYSTEM_RHYTHM_MIDI_CH) ch = rhythmMidiChannel;
@@ -343,7 +343,7 @@ void UpdateDisplay()
                 else
                 {
                     uint8_t ch = 0;
-                    if(i == SYSTEM_MEL_MIDI_CH) ch = melodyMidiChannel;
+                    if(i == SYSTEM_MELODY_CH) ch = melodyChannel;
                     else if(i == SYSTEM_DRUM_MIDI_CH) ch = drumMidiChannel;
                     else if(i == SYSTEM_BASS_MIDI_CH) ch = bassMidiChannel;
                     else if(i == SYSTEM_RHYTHM_MIDI_CH) ch = rhythmMidiChannel;
@@ -374,8 +374,8 @@ void UpdateDisplay()
                 const char* val = "";
                 if(i == HARMONY_SCALE) val = scaleNames[melodyScale];
                 else if(i == HARMONY_ROOT) val = rootNoteNames[melodyRoot];
-                else if(i == HARMONY_PROGRESSION) val = progressions[polyVoice.progressionIndex].name;
-                else if(i == HARMONY_RATE) val = chordRateNames[polyVoice.chordRate];
+                else if(i == HARMONY_PROGRESSION) val = progressions[chordVoice.progressionIndex].name;
+                else if(i == HARMONY_RATE) val = chordRateNames[chordVoice.chordRate];
 
                 if(i == HARMONY_BACK)
                     sprintf(buffer, "%s%s", (i == currentHarmonyOption) ? ">" : " ", harmonyOptionNames[i]);
@@ -405,8 +405,8 @@ void UpdateDisplay()
                 const char* val = "";
                 if(i == HARMONY_SCALE) val = scaleNames[melodyScale];
                 else if(i == HARMONY_ROOT) val = rootNoteNames[melodyRoot];
-                else if(i == HARMONY_PROGRESSION) val = progressions[polyVoice.progressionIndex].name;
-                else if(i == HARMONY_RATE) val = chordRateNames[polyVoice.chordRate];
+                else if(i == HARMONY_PROGRESSION) val = progressions[chordVoice.progressionIndex].name;
+                else if(i == HARMONY_RATE) val = chordRateNames[chordVoice.chordRate];
 
                 if(i == HARMONY_BACK)
                     sprintf(buffer, " %s", harmonyOptionNames[i]);

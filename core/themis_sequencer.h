@@ -32,11 +32,11 @@ public:
     MelodyConfig melodyVoice;
     ScaleType melodyScale = SCALE_MINOR;
     uint8_t melodyRoot = 0;
-    uint8_t melodyMidiChannel = 0;  ///< MIDI channel for melody voice (0-15)
+    uint8_t melodyChannel = 0;  ///< MIDI channel for melody voice (0-15)
 
-    // Poly voice (chords/pads)
-    PolyVoiceConfig polyVoice;
-    PolyVoiceState polyState;
+    // Chord voice (chords/pads)
+    ChordVoiceConfig chordVoice;
+    ChordVoiceState chordState;
 
     // Chord randomizer (vibe-based chord progression system)
     ChordRandomizerConfig chordRandomizer;
@@ -110,12 +110,12 @@ public:
     std::function<void()> onMelodyNoteOff;
 
     /**
-     * @brief Called when poly voice chord notes should trigger
+     * @brief Called when chord voice notes should trigger
      * @param notes Array of MIDI note numbers
      * @param count Number of notes in chord
      * @param noteOn True for note-on, false for note-off
      */
-    std::function<void(const int8_t* notes, uint8_t count, bool noteOn)> onPolyTrigger;
+    std::function<void(const int8_t* notes, uint8_t count, bool noteOn)> onChordTrigger;
 
     /**
      * @brief Called when rhythm player should trigger
@@ -203,9 +203,9 @@ public:
     void ScheduleFill();
 
     /**
-     * @brief Randomize poly voice settings
+     * @brief Randomize chord voice settings
      */
-    void RandomizePolyVoice();
+    void RandomizeChordVoice();
 
     /**
      * @brief Randomize rhythm player voice settings
@@ -255,9 +255,9 @@ private:
      */
     void SelectSteadyChordFromVibe(VibeType vibe, uint32_t seed);
     /**
-     * @brief Process poly voice chord changes
+     * @brief Process chord voice changes
      */
-    void ProcessPolyVoice();
+    void ProcessChordVoice();
 
     /**
      * @brief Process rhythm player voice
@@ -270,14 +270,14 @@ private:
     void ProcessBassVoice();
 
     /**
-     * @brief Trigger new chord for poly voice
+     * @brief Trigger new chord
      */
-    void TriggerPolyChord();
+    void TriggerChord();
 
     /**
-     * @brief Release currently held poly voice notes
+     * @brief Release currently held chord voice notes
      */
-    void ReleasePolyChord();
+    void ReleaseChord();
     /**
      * @brief Calculate groove offset in samples for a voice/step
      */

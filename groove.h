@@ -133,7 +133,7 @@ void TriggerDrum(DrumVoice voice, uint8_t velocity = 100);
 void SendMelodyNoteOff();
 
 // ============================================================================
-// POLY VOICE (CHORDS) MIDI OUTPUT
+// CHORD VOICE MIDI OUTPUT
 // ============================================================================
 
 /**
@@ -152,28 +152,28 @@ uint8_t GetChordNotes(int8_t rootNote, ChordType chordType, int8_t octaveOffset,
  * @param numNotes Number of notes to send
  * @param velocity MIDI velocity (1-127)
  */
-void SendPolyChordOn(const int8_t* notes, uint8_t numNotes, uint8_t velocity);
+void SendChordOn(const int8_t* notes, uint8_t numNotes, uint8_t velocity);
 
 /**
- * @brief Send note-off for all currently active poly voice notes
+ * @brief Send note-off for all currently active chord voice notes
  *
  * Call this when stopping the sequencer, changing chords, or
- * before deactivating the poly voice.
+ * before deactivating the chord voice.
  */
-void SendPolyNoteOff();
+void SendChordNoteOff();
 
 /**
- * @brief Process poly voice for the current step
+ * @brief Process chord voice for the current step
  * @param step Current step in the pattern (0-31)
  *
  * Handles chord progression timing and triggers chord changes
  * based on the configured chord rate.
  */
-void ProcessPolyVoiceStep(uint8_t step);
+void ProcessChordStep(uint8_t step);
 
 /**
- * @brief Initialize poly voice state
+ * @brief Initialize chord voice state
  */
-void InitPolyVoice();
+void InitChordVoice();
 
 #endif // THEMIS_GROOVE_H

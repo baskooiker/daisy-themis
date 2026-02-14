@@ -83,15 +83,15 @@ void Sequencer::Init()
     melodyScale = SCALE_MINOR;
     melodyRoot = 0;
 
-    // Initialize poly voice
-    polyVoice.active = true;  // Active by default
-    polyVoice.progressionIndex = 0;
-    polyVoice.chordRate = CHORD_RATE_1_BAR;
-    polyVoice.velocity = 80;
-    polyVoice.octaveOffset = 0;
-    polyVoice.progressionB = 1;
-    polyVoice.variationMode = VAR_MODE_OFF;
-    polyState.Init();
+    // Initialize chord voice
+    chordVoice.active = true;  // Active by default
+    chordVoice.progressionIndex = 0;
+    chordVoice.chordRate = CHORD_RATE_1_BAR;
+    chordVoice.velocity = 80;
+    chordVoice.octaveOffset = 0;
+    chordVoice.progressionB = 1;
+    chordVoice.variationMode = VAR_MODE_OFF;
+    chordState.Init();
 
     // Initialize chord randomizer
     chordRandomizer.Init();
@@ -143,11 +143,11 @@ void Sequencer::Start()
     barCounter = 0;
     cycleCounter = 0;
 
-    // Reset poly voice state so chord progression starts from beginning
-    polyState.currentChordIndex = 0;
-    polyState.stepsUntilChange = 0;  // Will be initialized on first step
-    polyState.notesOn = false;
-    polyState.numActiveNotes = 0;
+    // Reset chord voice state so chord progression starts from beginning
+    chordState.currentChordIndex = 0;
+    chordState.stepsUntilChange = 0;  // Will be initialized on first step
+    chordState.notesOn = false;
+    chordState.numActiveNotes = 0;
 
     // Reset rhythm player state
     rhythmState.barPosition = 0;
@@ -170,8 +170,8 @@ void Sequencer::Stop()
     if(onMelodyNoteOff) {
         onMelodyNoteOff();
     }
-    // Release any held poly chord notes
-    ReleasePolyChord();
+    // Release any held chord voice notes
+    ReleaseChord();
 
     // Release any held rhythm player notes
     if(rhythmState.numActiveNotes > 0 && onRhythmTrigger) {
@@ -496,7 +496,7 @@ void Sequencer::RandomizeAll()
     if(onMelodyNoteOff) {
         onMelodyNoteOff();
     }
-    ReleasePolyChord();
+    ReleaseChord();
 
     // Release rhythm player notes
     if(rhythmState.numActiveNotes > 0 && onRhythmTrigger) {
@@ -515,7 +515,7 @@ void Sequencer::RandomizeAll()
     RandomizePatterns();
     RandomizeGroove();
     RandomizeMelodyPersonality();
-    RandomizePolyVoice();
+    RandomizeChordVoice();
     RandomizeRhythmVoice();
     RandomizeBassVoice();
 }
@@ -643,9 +643,9 @@ void Sequencer::ProcessDrumPatterns(float sampleRate)
 
 void Sequencer::ProcessMelodyPatterns()
 {
-    // Get chord context if poly is active
+    // Get chord context if chord voice is active
     ChordContext chordCtx;
-    bool useChordMapping = polyVoice.active;
+    bool useChordMapping = chordVoice.active;
     if (useChordMapping) {
         chordCtx = GetCurrentChordContext();
     }
@@ -672,7 +672,7 @@ void Sequencer::ProcessMelodyPatterns()
         {
             int8_t note = activeNotes[melodyStep];
 
-            // Apply chord-aware mapping when poly voice is active
+            // Apply chord-aware mapping when chord voice is active
             if (useChordMapping) {
                 note = MapNoteToChord(note, chordCtx, melodyVoice.compatMode);
             }
@@ -706,7 +706,7 @@ void Sequencer::ProcessStep(float sampleRate)
     // Process patterns
     ProcessDrumPatterns(sampleRate);
     ProcessMelodyPatterns();
-    ProcessPolyVoice();
+    ProcessChordVoice();
     ProcessRhythmVoice();
     ProcessBassVoice();
 
@@ -758,135 +758,135 @@ void Sequencer::ProcessStep(float sampleRate)
 }
 
 // ============================================================================
-// POLY VOICE
+// CHORD VOICE
 // ============================================================================
 
-void Sequencer::ProcessPolyVoice()
+void Sequencer::ProcessChordVoice()
 {
     // If voice was deactivated while notes are playing, release them
-    if (!polyVoice.active) {
-        if (polyState.notesOn) {
-            ReleasePolyChord();
+    if (!chordVoice.active) {
+        if (chordState.notesOn) {
+            ReleaseChord();
         }
         return;
     }
 
-    uint8_t stepsPerChord = chordRateSteps[polyVoice.chordRate];
+    uint8_t stepsPerChord = chordRateSteps[chordVoice.chordRate];
 
     // Initialize on first step
-    if (polyState.stepsUntilChange == 0 && !polyState.notesOn) {
-        polyState.stepsUntilChange = stepsPerChord;
-        TriggerPolyChord();
+    if (chordState.stepsUntilChange == 0 && !chordState.notesOn) {
+        chordState.stepsUntilChange = stepsPerChord;
+        TriggerChord();
         return;
     }
 
     // Check if we need to release notes (1 step before chord change)
-    if (polyState.notesOn && polyState.stepsUntilChange == 1) {
-        ReleasePolyChord();
+    if (chordState.notesOn && chordState.stepsUntilChange == 1) {
+        ReleaseChord();
     }
 
     // Decrement countdown
-    polyState.stepsUntilChange--;
+    chordState.stepsUntilChange--;
 
     // Check if it's time for a new chord
-    if (polyState.stepsUntilChange == 0) {
+    if (chordState.stepsUntilChange == 0) {
         // Advance to next chord in progression
-        uint8_t progIndex = polyVoice.progressionIndex;
+        uint8_t progIndex = chordVoice.progressionIndex;
 
         // Handle variation
-        if (polyVoice.variationMode != VAR_MODE_OFF) {
+        if (chordVoice.variationMode != VAR_MODE_OFF) {
             // Simple A/B switching based on bar
             if ((barCounter % 2) == 1) {
-                progIndex = polyVoice.progressionB;
+                progIndex = chordVoice.progressionB;
             }
         }
 
-        uint8_t nextChordIndex = (polyState.currentChordIndex + 1) %
+        uint8_t nextChordIndex = (chordState.currentChordIndex + 1) %
                                   progressions[progIndex].length;
 
         // If we've wrapped around to chord 0, process chord randomization
         if (nextChordIndex == 0) {
             // First apply any pending manual progression change
-            if (polyState.pendingProgressionIndex >= 0) {
-                polyVoice.progressionIndex = (uint8_t)polyState.pendingProgressionIndex;
-                polyState.pendingProgressionIndex = -1;  // Clear pending
-                progIndex = polyVoice.progressionIndex;
+            if (chordState.pendingProgressionIndex >= 0) {
+                chordVoice.progressionIndex = (uint8_t)chordState.pendingProgressionIndex;
+                chordState.pendingProgressionIndex = -1;  // Clear pending
+                progIndex = chordVoice.progressionIndex;
             } else {
                 // Otherwise, process automatic randomization
                 ProcessChordRandomization();
-                progIndex = polyVoice.progressionIndex;
+                progIndex = chordVoice.progressionIndex;
             }
 
             // Notify rhythm voice of chord progression cycle
             NotifyRhythmOfChordCycle();
         }
 
-        polyState.currentChordIndex = nextChordIndex;
+        chordState.currentChordIndex = nextChordIndex;
 
         // Trigger new chord
-        TriggerPolyChord();
+        TriggerChord();
 
         // Reset countdown
-        polyState.stepsUntilChange = stepsPerChord;
+        chordState.stepsUntilChange = stepsPerChord;
     }
 }
 
-void Sequencer::TriggerPolyChord()
+void Sequencer::TriggerChord()
 {
     // First release any currently held notes
-    if (polyState.notesOn) {
-        ReleasePolyChord();
+    if (chordState.notesOn) {
+        ReleaseChord();
     }
 
     // Get the correct progression based on variation
-    uint8_t progIndex = polyVoice.progressionIndex;
-    if (polyVoice.variationMode != VAR_MODE_OFF && (barCounter % 2) == 1) {
-        progIndex = polyVoice.progressionB;
+    uint8_t progIndex = chordVoice.progressionIndex;
+    if (chordVoice.variationMode != VAR_MODE_OFF && (barCounter % 2) == 1) {
+        progIndex = chordVoice.progressionB;
     }
 
     // Get the chord notes
     int8_t notes[6];
     uint8_t count = GetChordNotes(
         &progressions[progIndex],
-        polyState.currentChordIndex,
+        chordState.currentChordIndex,
         melodyRoot,
         melodyScale,
-        polyVoice.octaveOffset,
+        chordVoice.octaveOffset,
         notes
     );
 
     // Store active notes for later release
-    polyState.numActiveNotes = count;
+    chordState.numActiveNotes = count;
     for (int i = 0; i < count && i < 6; i++) {
-        polyState.activeNotes[i] = notes[i];
+        chordState.activeNotes[i] = notes[i];
     }
-    polyState.notesOn = true;
+    chordState.notesOn = true;
 
     // Trigger callback
-    if (onPolyTrigger) {
-        onPolyTrigger(notes, count, true);  // noteOn = true
+    if (onChordTrigger) {
+        onChordTrigger(notes, count, true);  // noteOn = true
     }
 }
 
-void Sequencer::ReleasePolyChord()
+void Sequencer::ReleaseChord()
 {
-    if (!polyState.notesOn) return;
+    if (!chordState.notesOn) return;
 
     // Send note-offs for all active notes
-    if (onPolyTrigger) {
-        onPolyTrigger(polyState.activeNotes, polyState.numActiveNotes, false);
+    if (onChordTrigger) {
+        onChordTrigger(chordState.activeNotes, chordState.numActiveNotes, false);
     }
 
-    polyState.notesOn = false;
-    polyState.numActiveNotes = 0;
+    chordState.notesOn = false;
+    chordState.numActiveNotes = 0;
 }
 
 ChordContext Sequencer::GetCurrentChordContext() const
 {
     ChordContext ctx;
 
-    // Default to global root if poly voice is inactive
-    if (!polyVoice.active || polyState.numActiveNotes == 0) {
+    // Default to global root if chord voice is inactive
+    if (!chordVoice.active || chordState.numActiveNotes == 0) {
         ctx.chordRoot = melodyRoot;
         ctx.chordType = CHORD_MINOR;  // Default assumption for minor scales
         ctx.isDiatonic = true;
@@ -894,13 +894,13 @@ ChordContext Sequencer::GetCurrentChordContext() const
     }
 
     // Get the current progression based on variation
-    uint8_t progIndex = polyVoice.progressionIndex;
-    if (polyVoice.variationMode != VAR_MODE_OFF && (barCounter % 2) == 1) {
-        progIndex = polyVoice.progressionB;
+    uint8_t progIndex = chordVoice.progressionIndex;
+    if (chordVoice.variationMode != VAR_MODE_OFF && (barCounter % 2) == 1) {
+        progIndex = chordVoice.progressionB;
     }
 
     const ChordProgression& prog = progressions[progIndex];
-    const ProgressionStep& step = prog.steps[polyState.currentChordIndex];
+    const ProgressionStep& step = prog.steps[chordState.currentChordIndex];
 
     // Calculate the chord root
     if (step.isDiatonic) {
@@ -921,11 +921,11 @@ ChordContext Sequencer::GetCurrentChordContext() const
     return ctx;
 }
 
-void Sequencer::RandomizePolyVoice()
+void Sequencer::RandomizeChordVoice()
 {
     // IMPORTANT: Release any currently playing notes before randomizing
     // to prevent hanging notes
-    ReleasePolyChord();
+    ReleaseChord();
 
     uint32_t seed = g_platform ? g_platform->GetRandomSeed() : 12345;
 
@@ -939,38 +939,38 @@ void Sequencer::RandomizePolyVoice()
     // Randomize chord rate (favor 1 bar and half bar)
     int rateRoll = (seed >> 8) % 100;
     if (rateRoll < 20)
-        polyVoice.chordRate = CHORD_RATE_2_BARS;
+        chordVoice.chordRate = CHORD_RATE_2_BARS;
     else if (rateRoll < 60)
-        polyVoice.chordRate = CHORD_RATE_1_BAR;
+        chordVoice.chordRate = CHORD_RATE_1_BAR;
     else if (rateRoll < 90)
-        polyVoice.chordRate = CHORD_RATE_HALF_BAR;
+        chordVoice.chordRate = CHORD_RATE_HALF_BAR;
     else
-        polyVoice.chordRate = CHORD_RATE_QUARTER;
+        chordVoice.chordRate = CHORD_RATE_QUARTER;
 
     // Randomize octave offset (-1 to +1)
-    polyVoice.octaveOffset = ((seed >> 16) % 3) - 1;
+    chordVoice.octaveOffset = ((seed >> 16) % 3) - 1;
 
     // Randomize B progression (different from A, same vibe)
     uint8_t vibeIndices[32];
     uint8_t vibeCount = GetProgressionsForVibe(vibe, vibeIndices, 32);
     if (vibeCount > 1) {
         uint8_t bIdx = (seed >> 20) % vibeCount;
-        if (vibeIndices[bIdx] == polyVoice.progressionIndex && vibeCount > 1) {
+        if (vibeIndices[bIdx] == chordVoice.progressionIndex && vibeCount > 1) {
             bIdx = (bIdx + 1) % vibeCount;
         }
-        polyVoice.progressionB = vibeIndices[bIdx];
+        chordVoice.progressionB = vibeIndices[bIdx];
     } else {
-        polyVoice.progressionB = polyVoice.progressionIndex;
+        chordVoice.progressionB = chordVoice.progressionIndex;
     }
 
     // Randomize variation mode (50% off, 50% AB)
-    polyVoice.variationMode = ((seed >> 24) % 2) == 0 ? VAR_MODE_OFF : VAR_MODE_AB;
+    chordVoice.variationMode = ((seed >> 24) % 2) == 0 ? VAR_MODE_OFF : VAR_MODE_AB;
 
     // Randomize velocity (70-110)
-    polyVoice.velocity = 70 + ((seed >> 28) % 41);
+    chordVoice.velocity = 70 + ((seed >> 28) % 41);
 
     // Reset state for new progression
-    polyState.Init();
+    chordState.Init();
 
     // Reset chord randomizer state
     chordRandomizerState.inTransition = false;
@@ -1258,15 +1258,15 @@ void Sequencer::SelectProgressionFromVibe(VibeType vibe, uint32_t seed)
 
     if (enabledCount == 0) {
         // All disabled, use first in vibe
-        polyVoice.progressionIndex = indices[0];
+        chordVoice.progressionIndex = indices[0];
     } else {
-        polyVoice.progressionIndex = enabledIndices[seed % enabledCount];
+        chordVoice.progressionIndex = enabledIndices[seed % enabledCount];
     }
 }
 
 void Sequencer::SelectSteadyChordFromVibe(VibeType vibe, uint32_t seed)
 {
-    polyVoice.progressionIndex = GetSteadyChordForVibe(vibe, seed);
+    chordVoice.progressionIndex = GetSteadyChordForVibe(vibe, seed);
 }
 
 void Sequencer::TransitionToVibe(VibeType newVibe, uint32_t seed)
@@ -1287,7 +1287,7 @@ void Sequencer::TransitionToVibe(VibeType newVibe, uint32_t seed)
     chordRandomizerState.inTransition = true;
     // Steady chords have length 1, so cycles needed = 8 bars / (bars per cycle)
     // Bars per cycle = chordRateSteps[rate] / 32
-    uint8_t barsPerCycle = chordRateSteps[polyVoice.chordRate] / 32;
+    uint8_t barsPerCycle = chordRateSteps[chordVoice.chordRate] / 32;
     if (barsPerCycle == 0) barsPerCycle = 1;  // Minimum 1 for quarter-bar rate
     chordRandomizerState.transitionBarsRemaining = 8 / barsPerCycle;
     if (chordRandomizerState.transitionBarsRemaining < 2) {
@@ -1363,7 +1363,7 @@ void Sequencer::ProcessChordRandomization()
         chordRandomizerState.inTransition = true;
 
         // Calculate transition duration
-        uint8_t barsPerCycle = chordRateSteps[polyVoice.chordRate] / 32;
+        uint8_t barsPerCycle = chordRateSteps[chordVoice.chordRate] / 32;
         if (barsPerCycle == 0) barsPerCycle = 1;
         chordRandomizerState.transitionBarsRemaining = 8 / barsPerCycle;
         if (chordRandomizerState.transitionBarsRemaining < 2) {
@@ -1439,7 +1439,7 @@ void Sequencer::ProcessChordRandomization()
         chordRandomizerState.inTransition = true;
 
         // Calculate transition duration in cycles (similar to TransitionToVibe)
-        uint8_t barsPerCycle = chordRateSteps[polyVoice.chordRate] / 32;
+        uint8_t barsPerCycle = chordRateSteps[chordVoice.chordRate] / 32;
         if (barsPerCycle == 0) barsPerCycle = 1;
         chordRandomizerState.transitionBarsRemaining = 8 / barsPerCycle;
         if (chordRandomizerState.transitionBarsRemaining < 2) {

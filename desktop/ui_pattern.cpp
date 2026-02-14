@@ -299,15 +299,15 @@ void ThemisUI::RenderPatternVisualization()
 
     ImGui::Separator();
 
-    // Poly Voice info
-    ImGui::PushID("PolyViz");
-    if (sequencer->polyVoice.active) {
-        const auto& prog = themis::progressions[sequencer->polyVoice.progressionIndex];
+    // Chord Voice info
+    ImGui::PushID("ChordViz");
+    if (sequencer->chordVoice.active) {
+        const auto& prog = themis::progressions[sequencer->chordVoice.progressionIndex];
 
-        // Create debug string for poly voice
-        char polyDebug[512];
-        snprintf(polyDebug, sizeof(polyDebug),
-            "=== POLY VOICE DEBUG ===\n"
+        // Create debug string for chord voice
+        char chordDebug[512];
+        snprintf(chordDebug, sizeof(chordDebug),
+            "=== CHORD VOICE DEBUG ===\n"
             "Active: YES\n"
             "Progression: %s\n"
             "Chord Rate: %s\n"
@@ -318,17 +318,17 @@ void ThemisUI::RenderPatternVisualization()
             "Notes On: %s\n"
             "Num Active Notes: %d\n",
             prog.name,
-            themis::chordRateNames[sequencer->polyVoice.chordRate],
-            sequencer->polyState.currentChordIndex + 1, prog.length,
-            sequencer->polyState.stepsUntilChange,
-            sequencer->polyVoice.octaveOffset,
-            sequencer->polyVoice.velocity,
-            sequencer->polyState.notesOn ? "YES" : "NO",
-            sequencer->polyState.numActiveNotes);
+            themis::chordRateNames[sequencer->chordVoice.chordRate],
+            sequencer->chordState.currentChordIndex + 1, prog.length,
+            sequencer->chordState.stepsUntilChange,
+            sequencer->chordVoice.octaveOffset,
+            sequencer->chordVoice.velocity,
+            sequencer->chordState.notesOn ? "YES" : "NO",
+            sequencer->chordState.numActiveNotes);
 
-        // Clickable poly name
-        if (ImGui::Selectable("Poly", false, ImGuiSelectableFlags_None, ImVec2(40, 0))) {
-            SDL_SetClipboardText(polyDebug);
+        // Clickable chord name
+        if (ImGui::Selectable("Chords", false, ImGuiSelectableFlags_None, ImVec2(50, 0))) {
+            SDL_SetClipboardText(chordDebug);
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Click to copy debug info");
         ImGui::SameLine();
@@ -339,7 +339,7 @@ void ThemisUI::RenderPatternVisualization()
 
         // Display chord sequence with current position highlighted
         for (int c = 0; c < prog.length; c++) {
-            bool isCurrent = (c == sequencer->polyState.currentChordIndex);
+            bool isCurrent = (c == sequencer->chordState.currentChordIndex);
             if (isCurrent) {
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
             }
@@ -363,11 +363,11 @@ void ThemisUI::RenderPatternVisualization()
         // Show timing info
         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.8f, 1.0f),
             "    Rate: %s | Oct: %+d | Steps to change: %d",
-            themis::chordRateNames[sequencer->polyVoice.chordRate],
-            sequencer->polyVoice.octaveOffset,
-            sequencer->polyState.stepsUntilChange);
+            themis::chordRateNames[sequencer->chordVoice.chordRate],
+            sequencer->chordVoice.octaveOffset,
+            sequencer->chordState.stepsUntilChange);
     } else {
-        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Poly   (inactive)");
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Chords (inactive)");
     }
     ImGui::PopID();
 

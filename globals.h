@@ -161,7 +161,7 @@ extern MelodyConfig melodyVoice;
 extern MelodyConfig melodyMidiVoice;
 extern ScaleType melodyScale;
 extern uint8_t melodyRoot;
-extern uint8_t melodyMidiChannel;
+extern uint8_t melodyChannel;
 extern uint8_t lastMidiMelodyNote;
 extern bool midiMelodyNoteOn;
 extern uint64_t midiMelodyNoteOffSample;  // When to send note-off (sample time)
@@ -177,14 +177,14 @@ extern TuringMachine turingCV3;
 extern TuringMachine turingCV4;
 
 // ============================================================================
-// POLY VOICE (CHORDS)
+// CHORD VOICE
 // ============================================================================
 
-extern PolyVoiceConfig polyVoice;
-extern PolyVoiceState polyState;
-extern int8_t polyActiveNotes[6];      // Currently held MIDI notes
-extern uint8_t polyNumActiveNotes;     // Number of active notes
-extern bool polyNotesOn;               // Are notes currently held
+extern ChordVoiceConfig chordVoice;
+extern ChordVoiceState chordState;
+extern int8_t chordActiveNotes[6];      // Currently held MIDI notes
+extern uint8_t chordNumActiveNotes;     // Number of active notes
+extern bool chordNotesOn;               // Are notes currently held
 
 // Chord data
 extern const ChordShape chordShapes[NUM_CHORD_TYPES];
