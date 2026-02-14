@@ -158,6 +158,21 @@ const BassPitchPattern bassPitchPatterns[NUM_BASS_PITCH_PATTERNS] = {
 #undef AD
 
 // ============================================================================
+// BASS FILL PATTERNS (8-step half-bar fills, MSB = step 0)
+// ============================================================================
+
+const uint8_t bassFillsHalf[NUM_BASS_FILLS] = {
+    0b11111111,  // 0: Run      — every step
+    0b00011111,  // 1: Build    — builds into downbeat
+    0b10101111,  // 2: Skip     — sparse then dense
+    0b10110111,  // 3: Bounce   — syncopated
+    0b11001110,  // 4: Stutter  — stuttered pairs
+    0b10111011,  // 5: Gallop   — galloping feel
+    0b01010111,  // 6: Offbeat  — offbeat buildup
+    0b11010110,  // 7: Broken   — broken rhythm
+};
+
+// ============================================================================
 // PITCH RESOLUTION
 // ============================================================================
 
@@ -219,30 +234,13 @@ int8_t ResolveBassPitchType(BassPitchType type, int8_t baseNote, const ChordCont
 // CORE FUNCTIONS
 // ============================================================================
 
-bool ProcessBassStep(
+int8_t CalculateBassNote(
     const BassConfig& config,
-    BassState& state,
+    const BassState& state,
     const ChordContext& chordCtx,
     int8_t melodyRoot,
-    uint8_t step,
-    int8_t& outNote,
-    uint8_t& outVelocity,
-    uint8_t& outGateLength)
+    uint8_t step)
 {
-    // Get current rhythm pattern
-    uint8_t patIdx = state.currentPattern;
-    if (patIdx >= NUM_BASS_PATTERNS) patIdx = 0;
-
-    const BassPattern& pattern = bassPatterns[patIdx];
-
-    // Wrap step to rhythm pattern length (independent of pitch length)
-    uint8_t rhythmStep = step % pattern.length;
-
-    // Check if this step triggers
-    if (!IsStepActiveVar(pattern.triggers, rhythmStep, pattern.length)) {
-        return false;
-    }
-
     // Calculate root note: melodyRoot + chordRoot, with octave offset
     int8_t rootSemitone = melodyRoot + chordCtx.chordRoot;
     // Normalize to 0-11
@@ -267,7 +265,34 @@ bool ProcessBassStep(
         }
     }
 
-    outNote = note;
+    return note;
+}
+
+bool ProcessBassStep(
+    const BassConfig& config,
+    BassState& state,
+    const ChordContext& chordCtx,
+    int8_t melodyRoot,
+    uint8_t step,
+    int8_t& outNote,
+    uint8_t& outVelocity,
+    uint8_t& outGateLength)
+{
+    // Get current rhythm pattern
+    uint8_t patIdx = state.currentPattern;
+    if (patIdx >= NUM_BASS_PATTERNS) patIdx = 0;
+
+    const BassPattern& pattern = bassPatterns[patIdx];
+
+    // Wrap step to rhythm pattern length (independent of pitch length)
+    uint8_t rhythmStep = step % pattern.length;
+
+    // Check if this step triggers
+    if (!IsStepActiveVar(pattern.triggers, rhythmStep, pattern.length)) {
+        return false;
+    }
+
+    outNote = CalculateBassNote(config, state, chordCtx, melodyRoot, step);
 
     // Determine accent
     bool hasAccent = IsStepActiveVar(pattern.accents, rhythmStep, pattern.length);

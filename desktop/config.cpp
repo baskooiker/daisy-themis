@@ -161,6 +161,10 @@ bool LoadSettings(Settings& settings)
             settings.bassSolo = (value == "true" || value == "1");
         } else if (key == "bass_freeze_pattern") {
             settings.bassFreezePattern = (value == "true" || value == "1");
+        } else if (key == "bass_fills_enabled") {
+            settings.bassFillsEnabled = (value == "true" || value == "1");
+        } else if (key == "bass_octave_random") {
+            settings.bassOctaveRandom = std::stoi(value);
         } else if (key == "bass_midi_channel") {
             settings.bassMidiChannel = std::stoi(value);
         } else if (key == "bass_octave_offset") {
@@ -198,6 +202,8 @@ bool LoadSettings(Settings& settings)
             settings.chordRate = std::stoi(value);
         } else if (key == "chord_octave_offset") {
             settings.chordOctaveOffset = std::stoi(value);
+        } else if (key == "chord_midi_channel") {
+            settings.chordMidiChannel = std::stoi(value);
         }
 
         // Synth parameters for each voice
@@ -279,6 +285,8 @@ bool SaveSettings(const Settings& settings)
     file << "bass_mute=" << (settings.bassMute ? "true" : "false") << "\n";
     file << "bass_solo=" << (settings.bassSolo ? "true" : "false") << "\n";
     file << "bass_freeze_pattern=" << (settings.bassFreezePattern ? "true" : "false") << "\n";
+    file << "bass_fills_enabled=" << (settings.bassFillsEnabled ? "true" : "false") << "\n";
+    file << "bass_octave_random=" << settings.bassOctaveRandom << "\n";
     file << "bass_midi_channel=" << settings.bassMidiChannel << "\n";
     file << "bass_octave_offset=" << settings.bassOctaveOffset << "\n";
     file << "bass_rhythm_variation_mode=" << settings.bassRhythmVariationMode << "\n";
@@ -294,7 +302,8 @@ bool SaveSettings(const Settings& settings)
     }
     file << "chord_progression_index=" << settings.chordProgressionIndex << "\n";
     file << "chord_rate=" << settings.chordRate << "\n";
-    file << "chord_octave_offset=" << settings.chordOctaveOffset << "\n\n";
+    file << "chord_octave_offset=" << settings.chordOctaveOffset << "\n";
+    file << "chord_midi_channel=" << settings.chordMidiChannel << "\n\n";
 
     file << "[synth_params]\n";
     SaveSynthParams(file, "kick_synth", settings.kickSynth);

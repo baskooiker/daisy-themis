@@ -89,6 +89,7 @@ void Sequencer::Init()
     chordVoice.chordRate = CHORD_RATE_1_BAR;
     chordVoice.velocity = 80;
     chordVoice.octaveOffset = 0;
+    chordVoice.midiChannel = 1;  // Default: channel 2 (0-indexed)
     chordVoice.progressionB = 1;
     chordVoice.variationMode = VAR_MODE_OFF;
     chordState.Init();
@@ -643,6 +644,14 @@ void Sequencer::ProcessDrumPatterns(float sampleRate)
 
 void Sequencer::ProcessMelodyPatterns()
 {
+    // Release melody note if voice is deactivated
+    if (!melodyVoice.active) {
+        if (onMelodyNoteOff) {
+            onMelodyNoteOff();
+        }
+        return;
+    }
+
     // Get chord context if chord voice is active
     ChordContext chordCtx;
     bool useChordMapping = chordVoice.active;
@@ -734,6 +743,7 @@ void Sequencer::ProcessStep(float sampleRate)
 
             barCounter = 0;
             fillActive = false;
+            bassState.fillActive = false;
             cycleCounter++;
 
             if(cycleCounter >= personalityChangeInterval)
@@ -1121,6 +1131,27 @@ void Sequencer::ProcessBassVoice()
         bassState.gateStepsRemaining--;
     }
 
+    // Schedule bass fill at start of 4-bar periods (barCounter 1 and 3)
+    uint8_t totalStep = (barCounter * 32) + currentStep;
+    if (currentStep == 0 && (barCounter == 1 || barCounter == 3) && bassVoice.fillsEnabled) {
+        uint32_t fillSeed = g_platform ? g_platform->GetRandomSeed() : 12345;
+        if ((fillSeed % 100) < 30) {
+            bassState.fillActive = true;
+            bassState.fillPatternIndex = (fillSeed >> 8) % NUM_BASS_FILLS;
+            bassState.fillStartStep = totalStep + 24;  // Last 8 steps of this 2-bar block
+        }
+    }
+
+    // Check if we're in the 8-step fill window
+    bool inFill = bassState.fillActive
+                  && (totalStep >= bassState.fillStartStep)
+                  && (totalStep < bassState.fillStartStep + 8);
+
+    // Clear fill flag once the window has passed
+    if (bassState.fillActive && totalStep >= bassState.fillStartStep + 8) {
+        bassState.fillActive = false;
+    }
+
     // Determine active patterns based on independent variations
     uint8_t savedPattern = bassState.currentPattern;
     uint8_t savedPitchPattern = bassState.currentPitchPattern;
@@ -1141,25 +1172,49 @@ void Sequencer::ProcessBassVoice()
         }
     }
 
-    // Process bass step
     int8_t note;
     uint8_t velocity;
     uint8_t gateLength;
+    bool triggered;
 
-    bool triggered = ProcessBassStep(
-        bassVoice,
-        bassState,
-        chordCtx,
-        melodyRoot,
-        currentStep,
-        note,
-        velocity,
-        gateLength
-    );
+    if (inFill) {
+        // Fill mode: use fill pattern for rhythm, normal pitch calculation
+        uint8_t fillStep = totalStep - bassState.fillStartStep;
+        triggered = (fillStep < 8) && IsStepActive8(bassFillsHalf[bassState.fillPatternIndex], fillStep);
+        if (triggered) {
+            note = CalculateBassNote(bassVoice, bassState, chordCtx, melodyRoot, currentStep);
+            velocity = 90;   // Fill velocity: between normal (70) and accent (120)
+            gateLength = 1;  // Short/punchy
+        }
+    } else {
+        // Normal mode
+        triggered = ProcessBassStep(
+            bassVoice,
+            bassState,
+            chordCtx,
+            melodyRoot,
+            currentStep,
+            note,
+            velocity,
+            gateLength
+        );
+    }
 
     // Restore A pattern indices
     bassState.currentPattern = savedPattern;
     bassState.currentPitchPattern = savedPitchPattern;
+
+    // Apply octave randomization
+    if (triggered && bassVoice.octaveRandomAmount > 0) {
+        uint32_t hash = (currentStep * 2654435761u) ^ ((uint32_t)barCounter * 40503u) ^ generationSeed;
+        uint8_t roll = hash % 100;
+        uint8_t p1 = bassVoice.octaveRandomAmount * 40 / 100;
+        uint8_t p2 = (bassVoice.octaveRandomAmount > 50)
+                     ? (bassVoice.octaveRandomAmount - 50) * 20 / 100 : 0;
+        if (roll < p2) note += 24;
+        else if (roll < p1 + p2) note += 12;
+        while (note > 96) note -= 12;  // Clamp
+    }
 
     // Trigger note if one was generated
     if (triggered && note >= 0 && onBassTrigger) {
@@ -1200,6 +1255,9 @@ void Sequencer::RandomizeBassVoice()
     uint32_t pitchVarSeed = seed ^ 0xDEADBEEF;
     bassVoice.pitchVariation.mode = ((pitchVarSeed >> 6) % 2 == 0) ? VAR_MODE_OFF : VAR_MODE_AB;
     bassVoice.pitchVariation.sequence = (VariationSequence)((pitchVarSeed >> 8) % 4);
+
+    // Randomize fill pattern index
+    bassState.fillPatternIndex = (seed >> 12) % NUM_BASS_FILLS;
 
     // Randomize pattern (after Init so it doesn't get overwritten)
     RandomizeBassPattern(bassState, bassVoice, seed);

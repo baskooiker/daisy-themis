@@ -239,6 +239,29 @@ void ThemisUI::RenderTransportControls()
 
     ImGui::SameLine();
 
+    // Panic button - send all note-offs on all MIDI channels
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.15f, 0.15f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 0.1f, 0.1f, 1.0f));
+    if (ImGui::Button("Panic")) {
+        // Stop the sequencer (releases tracked notes normally)
+        if (sequencer->isRunning) {
+            sequencer->Stop();
+        }
+        // Send note-off for all 128 notes on all 16 MIDI channels
+        if (themis::g_platform) {
+            for (uint8_t ch = 0; ch < 16; ch++) {
+                for (uint8_t note = 0; note < 128; note++) {
+                    themis::g_platform->SendMidiNoteOff(ch, note);
+                }
+            }
+        }
+    }
+    ImGui::PopStyleColor(3);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop sequencer and send all note-offs on all MIDI channels");
+
+    ImGui::SameLine();
+
     // BPM control
     ImGui::SetNextItemWidth(80);
     ImGui::DragFloat("BPM", &sequencer->bpm, 1.0f, 20.0f, 300.0f, "%.0f");
@@ -412,6 +435,15 @@ void ThemisUI::RenderVoicesAndPatterns()
     }
     if (ArrowKeyAdjust(oct, -2, 2)) sequencer->chordVoice.octaveOffset = oct;
 
+    // MIDI Channel
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(45);
+    int chordMidiCh = sequencer->chordVoice.midiChannel + 1;
+    if (ImGui::DragInt("##cCh", &chordMidiCh, 0.1f, 1, 16, "Ch%d")) {
+        sequencer->chordVoice.midiChannel = chordMidiCh - 1;
+    }
+    if (ArrowKeyAdjust(chordMidiCh, 1, 16)) sequencer->chordVoice.midiChannel = chordMidiCh - 1;
+
     // Show current chord info (and pending indicator)
     if (sequencer->chordVoice.active) {
         const auto& prog = themis::progressions[sequencer->chordVoice.progressionIndex];
@@ -575,12 +607,27 @@ void ThemisUI::RenderVoicesAndPatterns()
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Prevent automatic pattern changes");
 
     ImGui::SameLine();
+    ImGui::Checkbox("Fills##bass", &sequencer->bassVoice.fillsEnabled);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Enable bass fills at phrase boundaries (~30%% chance)");
+
+    ImGui::SameLine();
     ImGui::SetNextItemWidth(50);
     int bassOct = sequencer->bassVoice.octaveOffset;
     if (ImGui::DragInt("##bOct", &bassOct, 0.1f, -2, 2, "Oct%+d")) {
         sequencer->bassVoice.octaveOffset = bassOct;
     }
     if (ArrowKeyAdjust(bassOct, -2, 2)) sequencer->bassVoice.octaveOffset = bassOct;
+
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(55);
+    int bassOctRnd = sequencer->bassVoice.octaveRandomAmount;
+    if (ImGui::DragInt("##bOctRnd", &bassOctRnd, 0.5f, 0, 100, "Rnd%d")) {
+        if (bassOctRnd < 0) bassOctRnd = 0;
+        if (bassOctRnd > 100) bassOctRnd = 100;
+        sequencer->bassVoice.octaveRandomAmount = bassOctRnd;
+    }
+    if (ArrowKeyAdjust(bassOctRnd, 0, 100)) sequencer->bassVoice.octaveRandomAmount = bassOctRnd;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Octave randomization amount (0=off, 100=max)");
 
     ImGui::SameLine();
     ImGui::SetNextItemWidth(45);

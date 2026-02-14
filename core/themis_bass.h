@@ -22,6 +22,7 @@ namespace themis {
 
 constexpr uint8_t NUM_BASS_PATTERNS = 22;
 constexpr uint8_t NUM_BASS_PITCH_PATTERNS = 16;
+constexpr uint8_t NUM_BASS_FILLS = 8;
 
 /**
  * @brief Count set bits in a 32-bit pattern (up to 'length' bits from MSB)
@@ -80,10 +81,31 @@ struct BassPitchPattern
 
 extern const BassPattern bassPatterns[NUM_BASS_PATTERNS];
 extern const BassPitchPattern bassPitchPatterns[NUM_BASS_PITCH_PATTERNS];
+extern const uint8_t bassFillsHalf[NUM_BASS_FILLS];
 
 // ============================================================================
 // CORE FUNCTIONS
 // ============================================================================
+
+/**
+ * @brief Calculate bass note for a given step (pitch only, no trigger check)
+ *
+ * Extracts pitch calculation from ProcessBassStep so both normal and fill
+ * paths can share the same note logic.
+ *
+ * @param config Bass voice configuration
+ * @param state Bass voice runtime state
+ * @param chordCtx Current chord context
+ * @param melodyRoot Global melody root note
+ * @param step Current sequencer step (0-31)
+ * @return MIDI note number
+ */
+int8_t CalculateBassNote(
+    const BassConfig& config,
+    const BassState& state,
+    const ChordContext& chordCtx,
+    int8_t melodyRoot,
+    uint8_t step);
 
 /**
  * @brief Resolve a pitch type to a MIDI note offset from root

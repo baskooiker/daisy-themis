@@ -81,20 +81,23 @@ static void SetupCallbacks()
 
     // Melody trigger callback
     static uint8_t lastMelodyMidiNote = 0;
+    static uint8_t lastMelodyMidiChannel = 0;
     static bool melodyMidiNoteActive = false;
 
     g_sequencer.onMelodyTrigger = [](int8_t note) {
         // Trigger activity indicator
         themis_ui::g_ui.TriggerMelodyActivity();
 
-        // Check mixer solo/mute state
-        if (!themis_ui::g_ui.ShouldPlayMelody()) {
-            return;
+        // Always send note-off for previous note first (even when muted)
+        // to prevent hanging notes when mute state changes mid-note
+        if (melodyMidiNoteActive && themis::g_platform) {
+            themis::g_platform->SendMidiNoteOff(lastMelodyMidiChannel, lastMelodyMidiNote);
+            melodyMidiNoteActive = false;
         }
 
-        // Send note-off for previous note before triggering new one
-        if (melodyMidiNoteActive && themis::g_platform) {
-            themis::g_platform->SendMidiNoteOff(g_sequencer.melodyChannel, lastMelodyMidiNote);
+        // Check mixer solo/mute state - only block new note-ons
+        if (!themis_ui::g_ui.ShouldPlayMelody()) {
+            return;
         }
 
         // Play internal synth
@@ -104,6 +107,7 @@ static void SetupCallbacks()
         uint8_t midiNote = 36 + note;  // C2 = 36
         if (midiNote > 127) midiNote = 127;
         lastMelodyMidiNote = midiNote;
+        lastMelodyMidiChannel = g_sequencer.melodyChannel;
         melodyMidiNoteActive = true;
         if (themis::g_platform) {
             themis::g_platform->SendMidiNoteOn(g_sequencer.melodyChannel, midiNote, 100);
@@ -114,12 +118,13 @@ static void SetupCallbacks()
     g_sequencer.onMelodyNoteOff = []() {
         themis_audio::g_audioEngine.StopMelodyMidi();
         if (melodyMidiNoteActive && themis::g_platform) {
-            themis::g_platform->SendMidiNoteOff(g_sequencer.melodyChannel, lastMelodyMidiNote);
+            themis::g_platform->SendMidiNoteOff(lastMelodyMidiChannel, lastMelodyMidiNote);
             melodyMidiNoteActive = false;
         }
     };
 
     // Chord voice callback
+    static uint8_t lastChordMidiChannel = 1;
     g_sequencer.onChordTrigger = [](const int8_t* notes, uint8_t count, bool noteOn) {
         if (noteOn) {
             // Trigger activity indicator
@@ -134,27 +139,33 @@ static void SetupCallbacks()
             themis_audio::g_audioEngine.TriggerChordNotes(notes, count,
                                                           g_sequencer.chordVoice.velocity);
 
+            // Store the channel these notes are sent on
+            lastChordMidiChannel = g_sequencer.chordVoice.midiChannel;
+
             // Send MIDI note-ons
             if (themis::g_platform) {
                 for (uint8_t i = 0; i < count; i++) {
-                    themis::g_platform->SendMidiNoteOn(1, notes[i],
-                                                        g_sequencer.chordVoice.velocity);
+                    themis::g_platform->SendMidiNoteOn(
+                        lastChordMidiChannel, notes[i],
+                        g_sequencer.chordVoice.velocity);
                 }
             }
         } else {
             // Always allow note-offs through to prevent hanging notes
             themis_audio::g_audioEngine.ReleaseChordNotes(notes, count);
 
-            // Send MIDI note-offs
+            // Send MIDI note-offs on the channel they were originally sent on
             if (themis::g_platform) {
                 for (uint8_t i = 0; i < count; i++) {
-                    themis::g_platform->SendMidiNoteOff(1, notes[i]);
+                    themis::g_platform->SendMidiNoteOff(
+                        lastChordMidiChannel, notes[i]);
                 }
             }
         }
     };
 
     // Rhythm player callback
+    static uint8_t lastRhythmMidiChannel = 3;
     g_sequencer.onRhythmTrigger = [](const int8_t* notes, uint8_t count, uint8_t velocity, bool noteOn) {
         if (noteOn) {
             // Trigger activity indicator
@@ -170,11 +181,14 @@ static void SetupCallbacks()
             // Trigger synth notes
             themis_audio::g_audioEngine.TriggerRhythmNotes(notes, count, velocity);
 
+            // Store the channel these notes are sent on
+            lastRhythmMidiChannel = g_sequencer.rhythmVoice.midiChannel;
+
             // Send MIDI note-ons
             if (themis::g_platform) {
                 for (uint8_t i = 0; i < count; i++) {
                     themis::g_platform->SendMidiNoteOn(
-                        g_sequencer.rhythmVoice.midiChannel,
+                        lastRhythmMidiChannel,
                         notes[i],
                         velocity);
                 }
@@ -183,11 +197,11 @@ static void SetupCallbacks()
             // Always allow note-offs through to prevent hanging notes
             themis_audio::g_audioEngine.ReleaseRhythmNotes(notes, count);
 
-            // Send MIDI note-offs
+            // Send MIDI note-offs on the channel they were originally sent on
             if (themis::g_platform) {
                 for (uint8_t i = 0; i < count; i++) {
                     themis::g_platform->SendMidiNoteOff(
-                        g_sequencer.rhythmVoice.midiChannel,
+                        lastRhythmMidiChannel,
                         notes[i]);
                 }
             }
@@ -195,6 +209,7 @@ static void SetupCallbacks()
     };
 
     // Bass voice callback
+    static uint8_t lastBassMidiChannel = 4;
     g_sequencer.onBassTrigger = [](int8_t note, uint8_t velocity, bool noteOn) {
         if (noteOn) {
             // Trigger activity indicator
@@ -208,10 +223,13 @@ static void SetupCallbacks()
             // Trigger synth note
             themis_audio::g_audioEngine.TriggerBass(note, velocity);
 
+            // Store the channel this note is sent on
+            lastBassMidiChannel = g_sequencer.bassVoice.midiChannel;
+
             // Send MIDI note-on
             if (themis::g_platform) {
                 themis::g_platform->SendMidiNoteOn(
-                    g_sequencer.bassVoice.midiChannel,
+                    lastBassMidiChannel,
                     note,
                     velocity);
             }
@@ -219,10 +237,10 @@ static void SetupCallbacks()
             // Always allow note-offs through to prevent hanging notes
             themis_audio::g_audioEngine.StopBass(note);
 
-            // Send MIDI note-off
+            // Send MIDI note-off on the channel it was originally sent on
             if (themis::g_platform) {
                 themis::g_platform->SendMidiNoteOff(
-                    g_sequencer.bassVoice.midiChannel,
+                    lastBassMidiChannel,
                     note);
             }
         }
@@ -380,6 +398,8 @@ int main(int argc, char* argv[])
         themis_ui::g_ui.bassMute = g_settings.bassMute;
         themis_ui::g_ui.bassSolo = g_settings.bassSolo;
         g_sequencer.bassVoice.freezePattern = g_settings.bassFreezePattern;
+        g_sequencer.bassVoice.fillsEnabled = g_settings.bassFillsEnabled;
+        g_sequencer.bassVoice.octaveRandomAmount = g_settings.bassOctaveRandom;
         g_sequencer.bassVoice.midiChannel = g_settings.bassMidiChannel;
         g_sequencer.bassVoice.octaveOffset = g_settings.bassOctaveOffset;
         g_sequencer.bassVoice.rhythmVariation.mode = (themis::VariationMode)(g_settings.bassRhythmVariationMode < themis::NUM_VARIATION_MODES ? g_settings.bassRhythmVariationMode : 0);
@@ -396,6 +416,7 @@ int main(int argc, char* argv[])
         g_sequencer.chordVoice.progressionIndex = g_settings.chordProgressionIndex < themis::NUM_PROGRESSIONS ? g_settings.chordProgressionIndex : 0;
         g_sequencer.chordVoice.chordRate = g_settings.chordRate;
         g_sequencer.chordVoice.octaveOffset = g_settings.chordOctaveOffset;
+        g_sequencer.chordVoice.midiChannel = g_settings.chordMidiChannel;
     } else {
         std::cout << "No config file found, using defaults" << std::endl;
     }
@@ -530,6 +551,8 @@ int main(int argc, char* argv[])
     g_settings.bassMute = themis_ui::g_ui.bassMute;
     g_settings.bassSolo = themis_ui::g_ui.bassSolo;
     g_settings.bassFreezePattern = g_sequencer.bassVoice.freezePattern;
+    g_settings.bassFillsEnabled = g_sequencer.bassVoice.fillsEnabled;
+    g_settings.bassOctaveRandom = g_sequencer.bassVoice.octaveRandomAmount;
     g_settings.bassMidiChannel = g_sequencer.bassVoice.midiChannel;
     g_settings.bassOctaveOffset = g_sequencer.bassVoice.octaveOffset;
     g_settings.bassRhythmVariationMode = g_sequencer.bassVoice.rhythmVariation.mode;
@@ -546,6 +569,7 @@ int main(int argc, char* argv[])
     g_settings.chordProgressionIndex = g_sequencer.chordVoice.progressionIndex;
     g_settings.chordRate = g_sequencer.chordVoice.chordRate;
     g_settings.chordOctaveOffset = g_sequencer.chordVoice.octaveOffset;
+    g_settings.chordMidiChannel = g_sequencer.chordVoice.midiChannel;
 
     if (themis_config::SaveSettings(g_settings)) {
         std::cout << "Settings saved to " << themis_config::GetConfigPath() << std::endl;

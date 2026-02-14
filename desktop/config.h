@@ -84,6 +84,8 @@ struct Settings {
     bool bassMute = false;
     bool bassSolo = false;
     bool bassFreezePattern = false;
+    bool bassFillsEnabled = true;
+    int bassOctaveRandom = 0;
     int bassMidiChannel = 4;   // 0-indexed
     int bassOctaveOffset = -1;
     int bassRhythmVariationMode = 0;     // 0=Off, 1=AB
@@ -108,6 +110,7 @@ struct Settings {
     int chordProgressionIndex = 0;
     int chordRate = 1;  // CHORD_RATE_1_BAR
     int chordOctaveOffset = 0;
+    int chordMidiChannel = 1;  // 0-indexed (displayed as 1-16)
 };
 
 /**

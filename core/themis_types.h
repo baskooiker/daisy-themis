@@ -257,6 +257,7 @@ struct ChordVoiceConfig
     // Sound shaping
     uint8_t velocity;             // 0-127
     int8_t octaveOffset;          // -2 to +2, shifts all chord notes
+    uint8_t midiChannel;          // MIDI output channel (0-15)
 
     // Variation
     uint8_t progressionB;         // Alternative progression for B variation
@@ -682,6 +683,8 @@ struct BassConfig
     uint8_t patternIndex;           ///< Current pattern index (0-15)
     uint8_t pitchPatternIndex;      ///< Current pitch pattern index
     bool freezePattern;             ///< Prevent random pattern selection
+    bool fillsEnabled;              ///< Enable bass fills at phrase boundaries
+    uint8_t octaveRandomAmount;     ///< Octave randomization amount (0-100)
     VariationConfig rhythmVariation; ///< AB variation for rhythm patterns
     VariationConfig pitchVariation;  ///< AB variation for pitch patterns (independent)
 
@@ -693,6 +696,8 @@ struct BassConfig
         patternIndex = 0;
         pitchPatternIndex = 0;
         freezePattern = false;
+        fillsEnabled = true;
+        octaveRandomAmount = 0;
         rhythmVariation.mode = VAR_MODE_OFF;
         rhythmVariation.sequence = VAR_SEQ_AAAB;
         rhythmVariation.granularity = VAR_GRAN_BAR;
@@ -715,6 +720,9 @@ struct BassState
     int8_t currentNote;             ///< Currently playing MIDI note (-1 if none)
     uint8_t gateStepsRemaining;     ///< Steps until note-off
     uint8_t chordCyclesUntilChange; ///< Chord cycles remaining before next pattern change
+    bool fillActive;                ///< Is a bass fill currently scheduled
+    uint8_t fillPatternIndex;       ///< Which fill pattern to use
+    uint8_t fillStartStep;          ///< Total step where fill begins
 
     void Init()
     {
@@ -725,6 +733,9 @@ struct BassState
         currentNote = -1;
         gateStepsRemaining = 0;
         chordCyclesUntilChange = 0;
+        fillActive = false;
+        fillPatternIndex = 0;
+        fillStartStep = 0;
     }
 };
 
