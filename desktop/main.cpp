@@ -18,6 +18,7 @@
 
 #include "themis_platform.h"
 #include "themis_sequencer.h"
+#include "themis_chords.h"
 #include "themis_data.h"
 #include "platform_desktop.h"
 #include "audio.h"
@@ -79,55 +80,42 @@ static void SetupCallbacks()
     };
 
     // Melody trigger callback
-    g_sequencer.onMelodyTrigger = [](int8_t note, bool isMidi) {
-        if (isMidi) {
-            // Trigger activity indicator
-            themis_ui::g_ui.TriggerMelodyMidiActivity();
+    static uint8_t lastMelodyMidiNote = 0;
+    static bool melodyMidiNoteActive = false;
 
-            // Check mixer solo/mute state
-            if (!themis_ui::g_ui.ShouldPlayMelodyMidi()) {
-                return;
-            }
+    g_sequencer.onMelodyTrigger = [](int8_t note) {
+        // Trigger activity indicator
+        themis_ui::g_ui.TriggerMelodyActivity();
 
-            // Play internal synth for MIDI melody
-            themis_audio::g_audioEngine.TriggerMelodyMidi(note, 100);
+        // Check mixer solo/mute state
+        if (!themis_ui::g_ui.ShouldPlayMelody()) {
+            return;
+        }
 
-            // Also send MIDI out
-            uint8_t midiNote = 36 + note;  // C2 = 36
-            if (midiNote > 127) midiNote = 127;
-            if (themis::g_platform) {
-                themis::g_platform->SendMidiNoteOn(0, midiNote, 100);
-            }
-        } else {
-            // Trigger activity indicator
-            themis_ui::g_ui.TriggerMelodyCVActivity();
+        // Send note-off for previous note before triggering new one
+        if (melodyMidiNoteActive && themis::g_platform) {
+            themis::g_platform->SendMidiNoteOff(g_sequencer.melodyMidiChannel, lastMelodyMidiNote);
+        }
 
-            // Check mixer solo/mute state
-            if (!themis_ui::g_ui.ShouldPlayMelodyCV()) {
-                return;
-            }
+        // Play internal synth
+        themis_audio::g_audioEngine.TriggerMelodyMidi(note, 100);
 
-            // CV melody - trigger synth for testing
-            themis_audio::g_audioEngine.TriggerMelodyCV(note, 100);
-
-            // Update CV output
-            float voltage = (float)note / 12.0f;  // 1V/octave
-            if (themis::g_platform) {
-                themis::g_platform->SetCVOutput(0, voltage);
-                themis::g_platform->SetGateOutput(0, true);
-            }
+        // Also send MIDI out
+        uint8_t midiNote = 36 + note;  // C2 = 36
+        if (midiNote > 127) midiNote = 127;
+        lastMelodyMidiNote = midiNote;
+        melodyMidiNoteActive = true;
+        if (themis::g_platform) {
+            themis::g_platform->SendMidiNoteOn(g_sequencer.melodyMidiChannel, midiNote, 100);
         }
     };
 
     // Melody note off callback
-    g_sequencer.onMelodyNoteOff = [](bool isMidi) {
-        if (isMidi) {
-            themis_audio::g_audioEngine.StopMelodyMidi();
-        } else {
-            themis_audio::g_audioEngine.StopMelodyCV();
-            if (themis::g_platform) {
-                themis::g_platform->SetGateOutput(0, false);
-            }
+    g_sequencer.onMelodyNoteOff = []() {
+        themis_audio::g_audioEngine.StopMelodyMidi();
+        if (melodyMidiNoteActive && themis::g_platform) {
+            themis::g_platform->SendMidiNoteOff(g_sequencer.melodyMidiChannel, lastMelodyMidiNote);
+            melodyMidiNoteActive = false;
         }
     };
 
@@ -206,35 +194,35 @@ static void SetupCallbacks()
         }
     };
 
-    // Acid voice callback
-    g_sequencer.onAcidTrigger = [](int8_t note, uint8_t velocity, bool noteOn, bool isSlide) {
+    // Bass voice callback
+    g_sequencer.onBassTrigger = [](int8_t note, uint8_t velocity, bool noteOn) {
         if (noteOn) {
             // Trigger activity indicator
-            themis_ui::g_ui.TriggerAcidActivity();
+            themis_ui::g_ui.TriggerBassActivity();
 
             // Check mixer solo/mute state - only block note-ons
-            if (!themis_ui::g_ui.ShouldPlayAcid()) {
+            if (!themis_ui::g_ui.ShouldPlayBass()) {
                 return;
             }
 
             // Trigger synth note
-            themis_audio::g_audioEngine.TriggerAcid(note, velocity, isSlide);
+            themis_audio::g_audioEngine.TriggerBass(note, velocity);
 
             // Send MIDI note-on
             if (themis::g_platform) {
                 themis::g_platform->SendMidiNoteOn(
-                    g_sequencer.acidVoice.midiChannel,
+                    g_sequencer.bassVoice.midiChannel,
                     note,
                     velocity);
             }
         } else {
             // Always allow note-offs through to prevent hanging notes
-            themis_audio::g_audioEngine.StopAcid(note);
+            themis_audio::g_audioEngine.StopBass(note);
 
             // Send MIDI note-off
             if (themis::g_platform) {
                 themis::g_platform->SendMidiNoteOff(
-                    g_sequencer.acidVoice.midiChannel,
+                    g_sequencer.bassVoice.midiChannel,
                     note);
             }
         }
@@ -368,16 +356,14 @@ int main(int argc, char* argv[])
             themis_ui::g_ui.drumMute[i] = g_settings.drumMute[i];
             themis_ui::g_ui.drumSolo[i] = g_settings.drumSolo[i];
         }
-        themis_ui::g_ui.melodyCVMute = g_settings.melodyCVMute;
-        themis_ui::g_ui.melodyCVSolo = g_settings.melodyCVSolo;
-        themis_ui::g_ui.melodyMidiMute = g_settings.melodyMidiMute;
-        themis_ui::g_ui.melodyMidiSolo = g_settings.melodyMidiSolo;
+        themis_ui::g_ui.melodyMute = g_settings.melodyMute;
+        themis_ui::g_ui.melodySolo = g_settings.melodySolo;
         themis_ui::g_ui.polyMute = g_settings.polyMute;
         themis_ui::g_ui.polySolo = g_settings.polySolo;
 
         // Apply voice activation settings to sequencer
-        g_sequencer.melodyVoice.active = g_settings.melodyCVActive;
-        g_sequencer.melodyMidiVoice.active = g_settings.melodyMidiActive;
+        g_sequencer.melodyVoice.active = g_settings.melodyActive;
+        g_sequencer.melodyMidiChannel = g_settings.melodyMidiChannel;
         g_sequencer.polyVoice.active = g_settings.polyActive;
 
         // Apply rhythm player settings
@@ -385,20 +371,21 @@ int main(int argc, char* argv[])
         themis_ui::g_ui.rhythmMute = g_settings.rhythmMute;
         themis_ui::g_ui.rhythmSolo = g_settings.rhythmSolo;
         g_sequencer.rhythmVoice.mode = (themis::RhythmPlayerMode)g_settings.rhythmMode;
-        g_sequencer.rhythmVoice.playStyle = (themis::RhythmPlayStyle)g_settings.rhythmPlayStyle;
+        g_sequencer.rhythmVoice.playStyle = (themis::RhythmPlayStyle)(g_settings.rhythmPlayStyle < themis::NUM_RHYTHM_PLAY_STYLES ? g_settings.rhythmPlayStyle : 0);
         g_sequencer.rhythmVoice.midiChannel = g_settings.rhythmMidiChannel;
         g_sequencer.rhythmVoice.octaveOffset = g_settings.rhythmOctaveOffset;
 
-        // Apply acid voice settings
-        g_sequencer.acidVoice.active = g_settings.acidActive;
-        themis_ui::g_ui.acidMute = g_settings.acidMute;
-        themis_ui::g_ui.acidSolo = g_settings.acidSolo;
-        g_sequencer.acidVoice.mode = (themis::AcidMode)g_settings.acidMode;
-        g_sequencer.acidVoice.rhythmPattern = g_settings.acidRhythmPattern;
-        g_sequencer.acidVoice.melodyPattern = g_settings.acidMelodyPattern;
-        g_sequencer.acidVoice.activity = (themis::AcidActivity)g_settings.acidActivity;
-        g_sequencer.acidVoice.midiChannel = g_settings.acidMidiChannel;
-        g_sequencer.acidVoice.octaveOffset = g_settings.acidOctaveOffset;
+        // Apply bass voice settings
+        g_sequencer.bassVoice.active = g_settings.bassActive;
+        themis_ui::g_ui.bassMute = g_settings.bassMute;
+        themis_ui::g_ui.bassSolo = g_settings.bassSolo;
+        g_sequencer.bassVoice.freezePattern = g_settings.bassFreezePattern;
+        g_sequencer.bassVoice.midiChannel = g_settings.bassMidiChannel;
+        g_sequencer.bassVoice.octaveOffset = g_settings.bassOctaveOffset;
+        g_sequencer.bassVoice.rhythmVariation.mode = (themis::VariationMode)(g_settings.bassRhythmVariationMode < themis::NUM_VARIATION_MODES ? g_settings.bassRhythmVariationMode : 0);
+        g_sequencer.bassVoice.rhythmVariation.sequence = (themis::VariationSequence)(g_settings.bassRhythmVariationSequence < themis::NUM_VARIATION_SEQUENCES ? g_settings.bassRhythmVariationSequence : 0);
+        g_sequencer.bassVoice.pitchVariation.mode = (themis::VariationMode)(g_settings.bassPitchVariationMode < themis::NUM_VARIATION_MODES ? g_settings.bassPitchVariationMode : 0);
+        g_sequencer.bassVoice.pitchVariation.sequence = (themis::VariationSequence)(g_settings.bassPitchVariationSequence < themis::NUM_VARIATION_SEQUENCES ? g_settings.bassPitchVariationSequence : 0);
 
         // Apply chord randomizer settings
         g_sequencer.chordRandomizer.freezeEnabled = g_settings.chordFreezeEnabled;
@@ -406,7 +393,7 @@ int main(int argc, char* argv[])
         for (int i = 0; i < themis::NUM_VIBE_TYPES; i++) {
             g_sequencer.chordRandomizer.enabledProgressions[i] = g_settings.chordEnabledProgressions[i];
         }
-        g_sequencer.polyVoice.progressionIndex = g_settings.chordProgressionIndex;
+        g_sequencer.polyVoice.progressionIndex = g_settings.chordProgressionIndex < themis::NUM_PROGRESSIONS ? g_settings.chordProgressionIndex : 0;
         g_sequencer.polyVoice.chordRate = g_settings.chordRate;
         g_sequencer.polyVoice.octaveOffset = g_settings.chordOctaveOffset;
     } else {
@@ -493,6 +480,11 @@ int main(int argc, char* argv[])
         std::cout << "\nShutting down..." << std::endl;
     }
 
+    // Pause audio FIRST to stop callbacks and prevent mutex deadlock
+    // (Stop() triggers note-off callbacks that acquire synthMutex,
+    //  which would deadlock if an audio callback is still holding it)
+    themis_audio::g_audioEngine.Pause();
+
     g_sequencer.Stop();
 
     // Save settings before shutdown
@@ -514,16 +506,14 @@ int main(int argc, char* argv[])
         g_settings.drumMute[i] = themis_ui::g_ui.drumMute[i];
         g_settings.drumSolo[i] = themis_ui::g_ui.drumSolo[i];
     }
-    g_settings.melodyCVMute = themis_ui::g_ui.melodyCVMute;
-    g_settings.melodyCVSolo = themis_ui::g_ui.melodyCVSolo;
-    g_settings.melodyMidiMute = themis_ui::g_ui.melodyMidiMute;
-    g_settings.melodyMidiSolo = themis_ui::g_ui.melodyMidiSolo;
+    g_settings.melodyMute = themis_ui::g_ui.melodyMute;
+    g_settings.melodySolo = themis_ui::g_ui.melodySolo;
     g_settings.polyMute = themis_ui::g_ui.polyMute;
     g_settings.polySolo = themis_ui::g_ui.polySolo;
 
     // Save voice activation settings from sequencer
-    g_settings.melodyCVActive = g_sequencer.melodyVoice.active;
-    g_settings.melodyMidiActive = g_sequencer.melodyMidiVoice.active;
+    g_settings.melodyActive = g_sequencer.melodyVoice.active;
+    g_settings.melodyMidiChannel = g_sequencer.melodyMidiChannel;
     g_settings.polyActive = g_sequencer.polyVoice.active;
 
     // Save rhythm player settings
@@ -535,16 +525,17 @@ int main(int argc, char* argv[])
     g_settings.rhythmMidiChannel = g_sequencer.rhythmVoice.midiChannel;
     g_settings.rhythmOctaveOffset = g_sequencer.rhythmVoice.octaveOffset;
 
-    // Save acid voice settings
-    g_settings.acidActive = g_sequencer.acidVoice.active;
-    g_settings.acidMute = themis_ui::g_ui.acidMute;
-    g_settings.acidSolo = themis_ui::g_ui.acidSolo;
-    g_settings.acidMode = g_sequencer.acidVoice.mode;
-    g_settings.acidRhythmPattern = g_sequencer.acidVoice.rhythmPattern;
-    g_settings.acidMelodyPattern = g_sequencer.acidVoice.melodyPattern;
-    g_settings.acidActivity = g_sequencer.acidVoice.activity;
-    g_settings.acidMidiChannel = g_sequencer.acidVoice.midiChannel;
-    g_settings.acidOctaveOffset = g_sequencer.acidVoice.octaveOffset;
+    // Save bass voice settings
+    g_settings.bassActive = g_sequencer.bassVoice.active;
+    g_settings.bassMute = themis_ui::g_ui.bassMute;
+    g_settings.bassSolo = themis_ui::g_ui.bassSolo;
+    g_settings.bassFreezePattern = g_sequencer.bassVoice.freezePattern;
+    g_settings.bassMidiChannel = g_sequencer.bassVoice.midiChannel;
+    g_settings.bassOctaveOffset = g_sequencer.bassVoice.octaveOffset;
+    g_settings.bassRhythmVariationMode = g_sequencer.bassVoice.rhythmVariation.mode;
+    g_settings.bassRhythmVariationSequence = g_sequencer.bassVoice.rhythmVariation.sequence;
+    g_settings.bassPitchVariationMode = g_sequencer.bassVoice.pitchVariation.mode;
+    g_settings.bassPitchVariationSequence = g_sequencer.bassVoice.pitchVariation.sequence;
 
     // Save chord randomizer settings
     g_settings.chordFreezeEnabled = g_sequencer.chordRandomizer.freezeEnabled;

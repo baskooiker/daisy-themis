@@ -69,6 +69,8 @@ void ThemisUI::RenderChordsTab()
         case VIBE_MINOR: vibeColor = ImVec4(0.4f, 0.6f, 0.8f, 1.0f); break;
         case VIBE_WHOLE_TONE: vibeColor = ImVec4(0.7f, 0.5f, 0.7f, 1.0f); break;
         case VIBE_MAJOR: vibeColor = ImVec4(0.9f, 0.7f, 0.3f, 1.0f); break;
+        case VIBE_HALF_WHOLE: vibeColor = ImVec4(0.8f, 0.3f, 0.3f, 1.0f); break;
+        case VIBE_WHOLE_HALF: vibeColor = ImVec4(0.3f, 0.7f, 0.5f, 1.0f); break;
         default: vibeColor = ImVec4(0.5f, 0.5f, 0.5f, 1.0f); break;
     }
     ImGui::TextColored(vibeColor, "Vibe: %s", vibeNames[sequencer->chordRandomizerState.currentVibe]);
@@ -175,6 +177,8 @@ void ThemisUI::RenderChordsTab()
             case VIBE_MINOR: vColor = ImVec4(0.4f, 0.6f, 0.8f, 1.0f); break;
             case VIBE_WHOLE_TONE: vColor = ImVec4(0.7f, 0.5f, 0.7f, 1.0f); break;
             case VIBE_MAJOR: vColor = ImVec4(0.9f, 0.7f, 0.3f, 1.0f); break;
+            case VIBE_HALF_WHOLE: vColor = ImVec4(0.8f, 0.3f, 0.3f, 1.0f); break;
+            case VIBE_WHOLE_HALF: vColor = ImVec4(0.3f, 0.7f, 0.5f, 1.0f); break;
             default: vColor = ImVec4(0.5f, 0.5f, 0.5f, 1.0f); break;
         }
 
@@ -218,6 +222,8 @@ void ThemisUI::RenderChordsTab()
             case VIBE_MINOR: vColor = ImVec4(0.3f, 0.5f, 0.7f, 1.0f); break;
             case VIBE_WHOLE_TONE: vColor = ImVec4(0.6f, 0.4f, 0.6f, 1.0f); break;
             case VIBE_MAJOR: vColor = ImVec4(0.8f, 0.6f, 0.2f, 1.0f); break;
+            case VIBE_HALF_WHOLE: vColor = ImVec4(0.7f, 0.2f, 0.2f, 1.0f); break;
+            case VIBE_WHOLE_HALF: vColor = ImVec4(0.2f, 0.6f, 0.4f, 1.0f); break;
             default: vColor = ImVec4(0.4f, 0.4f, 0.4f, 1.0f); break;
         }
 
@@ -359,6 +365,8 @@ void ThemisUI::RenderChordsTab()
         ImGui::BulletText("Minor -> Major: Root shifts +3 or -4 semitones");
         ImGui::BulletText("Major -> Minor: Root shifts -3 or +4 semitones");
         ImGui::BulletText("To/From Whole-tone: Root shifts +2 or +6 semitones");
+        ImGui::BulletText("To/From Half-Whole: Root shifts +3 or +6 semitones");
+        ImGui::BulletText("To/From Whole-Half: Root shifts +3 or +1 semitones");
 
         ImGui::Spacing();
         ImGui::TextDisabled("Root Changes (within same vibe):");

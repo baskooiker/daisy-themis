@@ -9,6 +9,8 @@
 #include "daisy_patch.h"
 #include "daisysp.h"
 #include "types.h"
+#include "core/themis_bass.h"
+#include "core/themis_rhythm.h"
 
 using namespace daisy;
 using namespace daisysp;
@@ -36,14 +38,16 @@ extern uint32_t gateHighCounter;
 // Gate outputs
 extern bool gate24ppqn;
 extern bool gate16th;
-extern bool gate2;
-extern bool gateQuarter;
 extern bool gateReset;
+extern bool melodyGate;
+extern bool bassGate;
+extern bool analogDrumGate;
 extern uint32_t gate24ppqnCounter;
 extern uint32_t gate16thCounter;
-extern uint32_t gate2Counter;
-extern uint32_t gateQuarterCounter;
 extern uint32_t gateResetCounter;
+extern uint32_t melodyGateCounter;
+extern uint32_t bassGateCounter;
+extern uint32_t analogDrumGateCounter;
 
 // ============================================================================
 // UI STATE
@@ -51,12 +55,24 @@ extern uint32_t gateResetCounter;
 
 extern DisplayState currentDisplayState;
 extern ConfigOption currentConfigOption;
-extern OutDivision currentOut2Division;
-extern OutDivision currentOut3Division;
 extern bool freezeEnabled;
 extern int patternInfoScroll;
 extern uint32_t lastEncoderActivity;
 extern int configScrollOffset;
+
+// Submenu state
+extern FreezeOption currentFreezeOption;
+extern SystemOption currentSystemOption;
+extern HarmonyOption currentHarmonyOption;
+extern VoiceMenuItem currentVoiceMenuItem;
+extern VoiceDetailItem currentVoiceDetail;
+extern int freezeScrollOffset;
+extern int systemScrollOffset;
+extern int harmonyScrollOffset;
+extern int voiceScrollOffset;
+extern int voiceDetailScrollOffset;
+extern uint8_t drumMidiChannel;
+extern themis::ChordRandomizerConfig chordRandomizerConfig;
 
 // ============================================================================
 // PERSISTENT SETTINGS
@@ -115,10 +131,27 @@ extern uint8_t currentKickPattern;
 extern DrumVoice fundamentalBeatVoice;
 extern VoiceConfig generativeVoices[6];
 
-// Analog voice
-extern bool analogGateHigh;
-extern uint32_t analogGateCounter;
-extern uint8_t analogVoiceVelocity;
+// ============================================================================
+// BASS VOICE
+// ============================================================================
+
+extern themis::BassConfig bassVoiceConfig;
+extern themis::BassState bassVoiceState;
+extern uint8_t bassMidiChannel;
+extern int8_t lastBassMidiNote;
+extern bool bassNotePlaying;
+extern uint64_t bassMidiNoteOffSample;
+
+// ============================================================================
+// RHYTHM PLAYER
+// ============================================================================
+
+extern themis::RhythmPlayerConfig rhythmPlayerConfig;
+extern themis::RhythmPlayerState rhythmPlayerState;
+extern uint8_t rhythmMidiChannel;
+extern int8_t rhythmActiveNotes[6];   // Currently held MIDI notes
+extern uint8_t rhythmNumActiveNotes;  // Number of active notes
+extern bool rhythmNotesPlaying;       // Are notes currently held
 
 // ============================================================================
 // MELODY SYSTEM
@@ -166,7 +199,12 @@ extern const uint8_t chordRateSteps[NUM_CHORD_RATES];
 extern const uint8_t drumNotes[NUM_DRUM_VOICES];
 extern const char* drumNames[NUM_DRUM_VOICES];
 extern const char* configOptionNames[NUM_CONFIG_OPTIONS];
-extern const char* outDivisionNames[NUM_OUT_DIVISIONS];
+extern const char* freezeOptionNames[NUM_FREEZE_OPTIONS];
+extern const char* systemOptionNames[NUM_SYSTEM_OPTIONS];
+extern const char* harmonyOptionNames[NUM_HARMONY_OPTIONS];
+extern const char* voiceMenuNames[NUM_VOICE_MENU_ITEMS];
+extern const char* voiceDetailNames[NUM_VOICE_DETAIL_ITEMS];
+extern const char* rhythmModeNames[2];
 extern const char* scaleNames[NUM_SCALE_TYPES];
 extern const char* melodyStyleNames[NUM_MELODY_STYLES];
 extern const char* rootNoteNames[12];

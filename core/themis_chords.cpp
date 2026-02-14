@@ -28,7 +28,9 @@ const char* chordRateNames[NUM_CHORD_RATES] = {
 const char* vibeNames[NUM_VIBE_TYPES] = {
     "Minor",
     "Whole-Tone",
-    "Major"
+    "Major",
+    "Half-Whole",
+    "Whole-Half"
 };
 
 const char* progCategoryNames[NUM_PROG_CATEGORIES] = {
@@ -370,6 +372,158 @@ const ChordProgression progressions[NUM_PROGRESSIONS] = {
       {3, true, CHORD_MAJOR, 0}, {6, true, CHORD_DIM, 0},
       {2, true, CHORD_MINOR, 0}, {5, true, CHORD_MINOR, 0}},
      8, FEEL_JAZZY, VIBE_MAJOR, PROG_FULL},
+
+    // ========================================================================
+    // HALF-WHOLE DIMINISHED VIBE - STEADY
+    // ========================================================================
+
+    // 31: Dim7 Pedal - Single diminished 7th chord
+    {"Dim7 Pedal",
+     {{0, false, CHORD_DIM7, 0}, {0, false, CHORD_DIM7, 0},
+      {0, false, CHORD_DIM7, 0}, {0, false, CHORD_DIM7, 0},
+      {0, false, CHORD_DIM7, 0}, {0, false, CHORD_DIM7, 0},
+      {0, false, CHORD_DIM7, 0}, {0, false, CHORD_DIM7, 0}},
+     1, FEEL_TENSE, VIBE_HALF_WHOLE, PROG_STEADY},
+
+    // 32: Dom7 Pedal - Dominant 7th drone
+    {"Dom7 Pedal",
+     {{0, false, CHORD_DOM7, 0}, {0, false, CHORD_DOM7, 0},
+      {0, false, CHORD_DOM7, 0}, {0, false, CHORD_DOM7, 0},
+      {0, false, CHORD_DOM7, 0}, {0, false, CHORD_DOM7, 0},
+      {0, false, CHORD_DOM7, 0}, {0, false, CHORD_DOM7, 0}},
+     1, FEEL_TENSE, VIBE_HALF_WHOLE, PROG_STEADY},
+
+    // ========================================================================
+    // HALF-WHOLE DIMINISHED VIBE - CADENCES
+    // ========================================================================
+
+    // 33: Dim7-Dom7 - Diminished to dominant resolution
+    {"Dim7-Dom7",
+     {{0, false, CHORD_DIM7, 0}, {0, false, CHORD_DOM7, 0},
+      {0, false, CHORD_DIM7, 0}, {0, false, CHORD_DOM7, 0},
+      {0, false, CHORD_DIM7, 0}, {0, false, CHORD_DIM7, 0},
+      {0, false, CHORD_DIM7, 0}, {0, false, CHORD_DIM7, 0}},
+     2, FEEL_TENSE, VIBE_HALF_WHOLE, PROG_CADENCE},
+
+    // 34: Tritone Dom - Dominant tritone substitution
+    {"Tritone Dom",
+     {{0, false, CHORD_DOM7, 0}, {6, false, CHORD_DOM7, 0},
+      {0, false, CHORD_DOM7, 0}, {6, false, CHORD_DOM7, 0},
+      {0, false, CHORD_DOM7, 0}, {0, false, CHORD_DOM7, 0},
+      {0, false, CHORD_DOM7, 0}, {0, false, CHORD_DOM7, 0}},
+     2, FEEL_DARK, VIBE_HALF_WHOLE, PROG_CADENCE},
+
+    // ========================================================================
+    // HALF-WHOLE DIMINISHED VIBE - FULL PROGRESSIONS
+    // ========================================================================
+
+    // 35: Dim Cycle - Dim7 chords by minor 3rds (symmetrical)
+    {"Dim Cycle",
+     {{0, false, CHORD_DIM7, 0}, {3, false, CHORD_DIM7, 0},
+      {6, false, CHORD_DIM7, 0}, {9, false, CHORD_DIM7, 0},
+      {0, false, CHORD_DIM7, 0}, {0, false, CHORD_DIM7, 0},
+      {0, false, CHORD_DIM7, 0}, {0, false, CHORD_DIM7, 0}},
+     4, FEEL_TENSE, VIBE_HALF_WHOLE, PROG_FULL},
+
+    // 36: Dom7 Chain - Descending dominant 5ths
+    {"Dom7 Chain",
+     {{0, false, CHORD_DOM7, 0}, {5, false, CHORD_DOM7, 0},
+      {10, false, CHORD_DOM7, 0}, {3, false, CHORD_DOM7, 0},
+      {0, false, CHORD_DOM7, 0}, {0, false, CHORD_DOM7, 0},
+      {0, false, CHORD_DOM7, 0}, {0, false, CHORD_DOM7, 0}},
+     4, FEEL_JAZZY, VIBE_HALF_WHOLE, PROG_FULL},
+
+    // 37: Dim-Dom Alt - Alternating dim7 and dom7
+    {"Dim-Dom Alt",
+     {{0, false, CHORD_DIM7, 0}, {0, false, CHORD_DOM7, 0},
+      {3, false, CHORD_DIM7, 0}, {3, false, CHORD_DOM7, 0},
+      {0, false, CHORD_DIM7, 0}, {0, false, CHORD_DIM7, 0},
+      {0, false, CHORD_DIM7, 0}, {0, false, CHORD_DIM7, 0}},
+     4, FEEL_DARK, VIBE_HALF_WHOLE, PROG_FULL},
+
+    // 38: Chromatic Dom - Chromatic descent of dom7 chords
+    {"Chromatic Dom",
+     {{0, false, CHORD_DOM7, 0}, {11, false, CHORD_DOM7, 0},
+      {10, false, CHORD_DOM7, 0}, {9, false, CHORD_DOM7, 0},
+      {0, false, CHORD_DOM7, 0}, {0, false, CHORD_DOM7, 0},
+      {0, false, CHORD_DOM7, 0}, {0, false, CHORD_DOM7, 0}},
+     4, FEEL_DARK, VIBE_HALF_WHOLE, PROG_FULL},
+
+    // ========================================================================
+    // WHOLE-HALF DIMINISHED VIBE - STEADY
+    // ========================================================================
+
+    // 39: Dim Drone - Simple diminished triad
+    {"Dim Drone",
+     {{0, false, CHORD_DIM, 0}, {0, false, CHORD_DIM, 0},
+      {0, false, CHORD_DIM, 0}, {0, false, CHORD_DIM, 0},
+      {0, false, CHORD_DIM, 0}, {0, false, CHORD_DIM, 0},
+      {0, false, CHORD_DIM, 0}, {0, false, CHORD_DIM, 0}},
+     1, FEEL_DARK, VIBE_WHOLE_HALF, PROG_STEADY},
+
+    // 40: m7b5 Drone - Half-diminished drone
+    {"m7b5 Drone",
+     {{0, false, CHORD_MIN7B5, 0}, {0, false, CHORD_MIN7B5, 0},
+      {0, false, CHORD_MIN7B5, 0}, {0, false, CHORD_MIN7B5, 0},
+      {0, false, CHORD_MIN7B5, 0}, {0, false, CHORD_MIN7B5, 0},
+      {0, false, CHORD_MIN7B5, 0}, {0, false, CHORD_MIN7B5, 0}},
+     1, FEEL_MELANCHOLIC, VIBE_WHOLE_HALF, PROG_STEADY},
+
+    // ========================================================================
+    // WHOLE-HALF DIMINISHED VIBE - CADENCES
+    // ========================================================================
+
+    // 41: Dim-m7b5 - Diminished to half-diminished
+    {"Dim-m7b5",
+     {{0, false, CHORD_DIM, 0}, {0, false, CHORD_MIN7B5, 0},
+      {0, false, CHORD_DIM, 0}, {0, false, CHORD_MIN7B5, 0},
+      {0, false, CHORD_DIM, 0}, {0, false, CHORD_DIM, 0},
+      {0, false, CHORD_DIM, 0}, {0, false, CHORD_DIM, 0}},
+     2, FEEL_DARK, VIBE_WHOLE_HALF, PROG_CADENCE},
+
+    // 42: Dim m3 Drop - Diminished minor 3rd drop
+    {"Dim m3 Drop",
+     {{0, false, CHORD_DIM7, 0}, {9, false, CHORD_DIM7, 0},
+      {0, false, CHORD_DIM7, 0}, {9, false, CHORD_DIM7, 0},
+      {0, false, CHORD_DIM7, 0}, {0, false, CHORD_DIM7, 0},
+      {0, false, CHORD_DIM7, 0}, {0, false, CHORD_DIM7, 0}},
+     2, FEEL_TENSE, VIBE_WHOLE_HALF, PROG_CADENCE},
+
+    // ========================================================================
+    // WHOLE-HALF DIMINISHED VIBE - FULL PROGRESSIONS
+    // ========================================================================
+
+    // 43: Dim Descent - Chromatic descending diminished
+    {"Dim Descent",
+     {{0, false, CHORD_DIM, 0}, {11, false, CHORD_DIM, 0},
+      {10, false, CHORD_DIM, 0}, {9, false, CHORD_DIM, 0},
+      {0, false, CHORD_DIM, 0}, {0, false, CHORD_DIM, 0},
+      {0, false, CHORD_DIM, 0}, {0, false, CHORD_DIM, 0}},
+     4, FEEL_DARK, VIBE_WHOLE_HALF, PROG_FULL},
+
+    // 44: m7b5 Cycle - Half-diminished by minor 3rds
+    {"m7b5 Cycle",
+     {{0, false, CHORD_MIN7B5, 0}, {3, false, CHORD_MIN7B5, 0},
+      {6, false, CHORD_MIN7B5, 0}, {9, false, CHORD_MIN7B5, 0},
+      {0, false, CHORD_MIN7B5, 0}, {0, false, CHORD_MIN7B5, 0},
+      {0, false, CHORD_MIN7B5, 0}, {0, false, CHORD_MIN7B5, 0}},
+     4, FEEL_MELANCHOLIC, VIBE_WHOLE_HALF, PROG_FULL},
+
+    // 45: Dim7 Symmetric - Symmetric dim7 movement
+    {"Dim7 Symmetric",
+     {{0, false, CHORD_DIM7, 0}, {1, false, CHORD_DIM7, 0},
+      {3, false, CHORD_DIM7, 0}, {4, false, CHORD_DIM7, 0},
+      {0, false, CHORD_DIM7, 0}, {0, false, CHORD_DIM7, 0},
+      {0, false, CHORD_DIM7, 0}, {0, false, CHORD_DIM7, 0}},
+     4, FEEL_TENSE, VIBE_WHOLE_HALF, PROG_FULL},
+
+    // 46: Dim-m7b5 Walk - Alternating dim and m7b5 with movement
+    {"Dim-m7b5 Walk",
+     {{0, false, CHORD_DIM, 0}, {0, false, CHORD_MIN7B5, 0},
+      {3, false, CHORD_DIM, 0}, {3, false, CHORD_MIN7B5, 0},
+      {0, false, CHORD_DIM, 0}, {0, false, CHORD_DIM, 0},
+      {0, false, CHORD_DIM, 0}, {0, false, CHORD_DIM, 0}},
+     4, FEEL_DARK, VIBE_WHOLE_HALF, PROG_FULL},
 };
 
 // ============================================================================
@@ -649,6 +803,16 @@ int8_t CalculateVibeRootShift(VibeType from, VibeType to, uint32_t seed) {
     // Whole-tone: shift by whole tone (2) or tritone (6)
     if (from == VIBE_WHOLE_TONE || to == VIBE_WHOLE_TONE) {
         return ((seed & 0x01) == 0) ? 2 : 6;
+    }
+
+    // Half-whole diminished: shift by minor 3rd (3) or tritone (6) - symmetric intervals
+    if (from == VIBE_HALF_WHOLE || to == VIBE_HALF_WHOLE) {
+        return ((seed & 0x01) == 0) ? 3 : 6;
+    }
+
+    // Whole-half diminished: shift by minor 3rd (3) or semitone (1)
+    if (from == VIBE_WHOLE_HALF || to == VIBE_WHOLE_HALF) {
+        return ((seed & 0x01) == 0) ? 3 : 1;
     }
 
     // Within same vibe, changing root: up by fifth (7) or up by semitone (1)

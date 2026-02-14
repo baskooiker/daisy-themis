@@ -28,11 +28,11 @@ public:
     VoiceConfig generativeVoices[6];
     DrumVoice fundamentalBeatVoice = SNARE;
 
-    // Melody voices
+    // Melody voice
     MelodyConfig melodyVoice;
-    MelodyConfig melodyMidiVoice;
     ScaleType melodyScale = SCALE_MINOR;
     uint8_t melodyRoot = 0;
+    uint8_t melodyMidiChannel = 0;  ///< MIDI channel for melody voice (0-15)
 
     // Poly voice (chords/pads)
     PolyVoiceConfig polyVoice;
@@ -46,9 +46,9 @@ public:
     RhythmPlayerConfig rhythmVoice;
     RhythmPlayerState rhythmState;
 
-    // Acid voice (303-style bass lines)
-    AcidConfig acidVoice;
-    AcidState acidState;
+    // Bass voice (root-note bass lines)
+    BassConfig bassVoice;
+    BassState bassState;
 
     // Pattern indices
     uint8_t currentKickPattern = 0;
@@ -101,15 +101,13 @@ public:
     /**
      * @brief Called when a melody note should trigger
      * @param note Semitone offset from C2
-     * @param isMidi True for MIDI output, false for CV output
      */
-    std::function<void(int8_t note, bool isMidi)> onMelodyTrigger;
+    std::function<void(int8_t note)> onMelodyTrigger;
 
     /**
      * @brief Called when melody notes should stop
-     * @param isMidi True for MIDI, false for CV
      */
-    std::function<void(bool isMidi)> onMelodyNoteOff;
+    std::function<void()> onMelodyNoteOff;
 
     /**
      * @brief Called when poly voice chord notes should trigger
@@ -129,13 +127,12 @@ public:
     std::function<void(const int8_t* notes, uint8_t count, uint8_t velocity, bool noteOn)> onRhythmTrigger;
 
     /**
-     * @brief Called when acid voice should trigger
+     * @brief Called when bass voice should trigger
      * @param note MIDI note number
-     * @param velocity MIDI velocity (64 normal, 127 accent)
+     * @param velocity MIDI velocity (70 normal, 120 accent)
      * @param noteOn True for note-on, false for note-off
-     * @param isSlide True if this note overlaps previous (for 303 slide)
      */
-    std::function<void(int8_t note, uint8_t velocity, bool noteOn, bool isSlide)> onAcidTrigger;
+    std::function<void(int8_t note, uint8_t velocity, bool noteOn)> onBassTrigger;
 
     // ========================================================================
     // Methods
@@ -216,9 +213,9 @@ public:
     void RandomizeRhythmVoice();
 
     /**
-     * @brief Randomize acid voice settings
+     * @brief Randomize bass voice settings
      */
-    void RandomizeAcidVoice();
+    void RandomizeBassVoice();
 
     /**
      * @brief Get context about current chord for melody mapping
@@ -268,9 +265,9 @@ private:
     void ProcessRhythmVoice();
 
     /**
-     * @brief Process acid voice
+     * @brief Process bass voice
      */
-    void ProcessAcidVoice();
+    void ProcessBassVoice();
 
     /**
      * @brief Trigger new chord for poly voice

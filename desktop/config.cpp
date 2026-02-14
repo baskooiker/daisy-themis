@@ -125,22 +125,18 @@ bool LoadSettings(Settings& settings)
             settings.midiPort = std::stoi(value);
         } else if (key == "midi_port_name") {
             settings.midiPortName = value;
-        } else if (key == "melody_cv_mute") {
-            settings.melodyCVMute = (value == "true" || value == "1");
-        } else if (key == "melody_cv_solo") {
-            settings.melodyCVSolo = (value == "true" || value == "1");
-        } else if (key == "melody_midi_mute") {
-            settings.melodyMidiMute = (value == "true" || value == "1");
-        } else if (key == "melody_midi_solo") {
-            settings.melodyMidiSolo = (value == "true" || value == "1");
+        } else if (key == "melody_midi_channel") {
+            settings.melodyMidiChannel = std::stoi(value);
+        } else if (key == "melody_mute") {
+            settings.melodyMute = (value == "true" || value == "1");
+        } else if (key == "melody_solo") {
+            settings.melodySolo = (value == "true" || value == "1");
         } else if (key == "poly_mute") {
             settings.polyMute = (value == "true" || value == "1");
         } else if (key == "poly_solo") {
             settings.polySolo = (value == "true" || value == "1");
-        } else if (key == "melody_cv_active") {
-            settings.melodyCVActive = (value == "true" || value == "1");
-        } else if (key == "melody_midi_active") {
-            settings.melodyMidiActive = (value == "true" || value == "1");
+        } else if (key == "melody_active") {
+            settings.melodyActive = (value == "true" || value == "1");
         } else if (key == "poly_active") {
             settings.polyActive = (value == "true" || value == "1");
         } else if (key == "rhythm_active") {
@@ -157,24 +153,26 @@ bool LoadSettings(Settings& settings)
             settings.rhythmMidiChannel = std::stoi(value);
         } else if (key == "rhythm_octave_offset") {
             settings.rhythmOctaveOffset = std::stoi(value);
-        } else if (key == "acid_active") {
-            settings.acidActive = (value == "true" || value == "1");
-        } else if (key == "acid_mute") {
-            settings.acidMute = (value == "true" || value == "1");
-        } else if (key == "acid_solo") {
-            settings.acidSolo = (value == "true" || value == "1");
-        } else if (key == "acid_mode") {
-            settings.acidMode = std::stoi(value);
-        } else if (key == "acid_rhythm_pattern") {
-            settings.acidRhythmPattern = std::stoi(value);
-        } else if (key == "acid_melody_pattern") {
-            settings.acidMelodyPattern = std::stoi(value);
-        } else if (key == "acid_activity") {
-            settings.acidActivity = std::stoi(value);
-        } else if (key == "acid_midi_channel") {
-            settings.acidMidiChannel = std::stoi(value);
-        } else if (key == "acid_octave_offset") {
-            settings.acidOctaveOffset = std::stoi(value);
+        } else if (key == "bass_active") {
+            settings.bassActive = (value == "true" || value == "1");
+        } else if (key == "bass_mute") {
+            settings.bassMute = (value == "true" || value == "1");
+        } else if (key == "bass_solo") {
+            settings.bassSolo = (value == "true" || value == "1");
+        } else if (key == "bass_freeze_pattern") {
+            settings.bassFreezePattern = (value == "true" || value == "1");
+        } else if (key == "bass_midi_channel") {
+            settings.bassMidiChannel = std::stoi(value);
+        } else if (key == "bass_octave_offset") {
+            settings.bassOctaveOffset = std::stoi(value);
+        } else if (key == "bass_variation_mode" || key == "bass_rhythm_variation_mode") {
+            settings.bassRhythmVariationMode = std::stoi(value);
+        } else if (key == "bass_variation_sequence" || key == "bass_rhythm_variation_sequence") {
+            settings.bassRhythmVariationSequence = std::stoi(value);
+        } else if (key == "bass_pitch_variation_mode") {
+            settings.bassPitchVariationMode = std::stoi(value);
+        } else if (key == "bass_pitch_variation_sequence") {
+            settings.bassPitchVariationSequence = std::stoi(value);
         } else if (key.substr(0, 10) == "drum_mute_") {
             int idx = std::stoi(key.substr(10));
             if (idx >= 0 && idx < 11) {
@@ -191,7 +189,7 @@ bool LoadSettings(Settings& settings)
             settings.chordEnabledVibes = (uint8_t)std::stoi(value);
         } else if (key.substr(0, 26) == "chord_enabled_progressions") {
             int idx = std::stoi(key.substr(27));
-            if (idx >= 0 && idx < 3) {
+            if (idx >= 0 && idx < 5) {
                 settings.chordEnabledProgressions[idx] = (uint32_t)std::stoul(value);
             }
         } else if (key == "chord_progression_index") {
@@ -209,7 +207,7 @@ bool LoadSettings(Settings& settings)
         LoadSynthParam(key, value, "clap_synth", settings.clapSynth);
         LoadSynthParam(key, value, "tom_synth", settings.tomSynth);
         LoadSynthParam(key, value, "rhythm_synth", settings.rhythmSynth);
-        LoadSynthParam(key, value, "acid_synth", settings.acidSynth);
+        LoadSynthParam(key, value, "bass_synth", settings.bassSynth);
         LoadSynthParam(key, value, "pad_synth", settings.padSynth);
     }
 
@@ -250,23 +248,21 @@ bool SaveSettings(const Settings& settings)
 
     file << "[midi]\n";
     file << "midi_port=" << settings.midiPort << "\n";
-    file << "midi_port_name=" << settings.midiPortName << "\n\n";
+    file << "midi_port_name=" << settings.midiPortName << "\n";
+    file << "melody_midi_channel=" << settings.melodyMidiChannel << "\n\n";
 
     file << "[mixer]\n";
     for (int i = 0; i < 11; i++) {
         file << "drum_mute_" << i << "=" << (settings.drumMute[i] ? "true" : "false") << "\n";
         file << "drum_solo_" << i << "=" << (settings.drumSolo[i] ? "true" : "false") << "\n";
     }
-    file << "melody_cv_mute=" << (settings.melodyCVMute ? "true" : "false") << "\n";
-    file << "melody_cv_solo=" << (settings.melodyCVSolo ? "true" : "false") << "\n";
-    file << "melody_midi_mute=" << (settings.melodyMidiMute ? "true" : "false") << "\n";
-    file << "melody_midi_solo=" << (settings.melodyMidiSolo ? "true" : "false") << "\n";
+    file << "melody_mute=" << (settings.melodyMute ? "true" : "false") << "\n";
+    file << "melody_solo=" << (settings.melodySolo ? "true" : "false") << "\n";
     file << "poly_mute=" << (settings.polyMute ? "true" : "false") << "\n";
     file << "poly_solo=" << (settings.polySolo ? "true" : "false") << "\n\n";
 
     file << "[voices]\n";
-    file << "melody_cv_active=" << (settings.melodyCVActive ? "true" : "false") << "\n";
-    file << "melody_midi_active=" << (settings.melodyMidiActive ? "true" : "false") << "\n";
+    file << "melody_active=" << (settings.melodyActive ? "true" : "false") << "\n";
     file << "poly_active=" << (settings.polyActive ? "true" : "false") << "\n\n";
 
     file << "[rhythm]\n";
@@ -278,21 +274,22 @@ bool SaveSettings(const Settings& settings)
     file << "rhythm_midi_channel=" << settings.rhythmMidiChannel << "\n";
     file << "rhythm_octave_offset=" << settings.rhythmOctaveOffset << "\n\n";
 
-    file << "[acid]\n";
-    file << "acid_active=" << (settings.acidActive ? "true" : "false") << "\n";
-    file << "acid_mute=" << (settings.acidMute ? "true" : "false") << "\n";
-    file << "acid_solo=" << (settings.acidSolo ? "true" : "false") << "\n";
-    file << "acid_mode=" << settings.acidMode << "\n";
-    file << "acid_rhythm_pattern=" << settings.acidRhythmPattern << "\n";
-    file << "acid_melody_pattern=" << settings.acidMelodyPattern << "\n";
-    file << "acid_activity=" << settings.acidActivity << "\n";
-    file << "acid_midi_channel=" << settings.acidMidiChannel << "\n";
-    file << "acid_octave_offset=" << settings.acidOctaveOffset << "\n\n";
+    file << "[bass]\n";
+    file << "bass_active=" << (settings.bassActive ? "true" : "false") << "\n";
+    file << "bass_mute=" << (settings.bassMute ? "true" : "false") << "\n";
+    file << "bass_solo=" << (settings.bassSolo ? "true" : "false") << "\n";
+    file << "bass_freeze_pattern=" << (settings.bassFreezePattern ? "true" : "false") << "\n";
+    file << "bass_midi_channel=" << settings.bassMidiChannel << "\n";
+    file << "bass_octave_offset=" << settings.bassOctaveOffset << "\n";
+    file << "bass_rhythm_variation_mode=" << settings.bassRhythmVariationMode << "\n";
+    file << "bass_rhythm_variation_sequence=" << settings.bassRhythmVariationSequence << "\n";
+    file << "bass_pitch_variation_mode=" << settings.bassPitchVariationMode << "\n";
+    file << "bass_pitch_variation_sequence=" << settings.bassPitchVariationSequence << "\n\n";
 
     file << "[chords]\n";
     file << "chord_freeze_enabled=" << (settings.chordFreezeEnabled ? "true" : "false") << "\n";
     file << "chord_enabled_vibes=" << (int)settings.chordEnabledVibes << "\n";
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 5; i++) {
         file << "chord_enabled_progressions_" << i << "=" << settings.chordEnabledProgressions[i] << "\n";
     }
     file << "chord_progression_index=" << settings.chordProgressionIndex << "\n";
@@ -306,7 +303,7 @@ bool SaveSettings(const Settings& settings)
     SaveSynthParams(file, "clap_synth", settings.clapSynth);
     SaveSynthParams(file, "tom_synth", settings.tomSynth);
     SaveSynthParams(file, "rhythm_synth", settings.rhythmSynth);
-    SaveSynthParams(file, "acid_synth", settings.acidSynth);
+    SaveSynthParams(file, "bass_synth", settings.bassSynth);
     SaveSynthParams(file, "pad_synth", settings.padSynth);
 
     file.close();

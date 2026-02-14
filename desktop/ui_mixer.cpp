@@ -12,7 +12,7 @@ void ThemisUI::RenderMixer()
     // Track effective play states BEFORE any UI changes
     bool wasPolyPlaying = ShouldPlayPoly();
     bool wasRhythmPlaying = ShouldPlayRhythm();
-    bool wasAcidPlaying = ShouldPlayAcid();
+    bool wasBassPlaying = ShouldPlayBass();
 
     // Decay activity indicators
     float activityDecay = 0.05f;
@@ -20,16 +20,14 @@ void ThemisUI::RenderMixer()
         if (drumActivity[i] > 0.0f) drumActivity[i] -= activityDecay;
         if (drumActivity[i] < 0.0f) drumActivity[i] = 0.0f;
     }
-    if (melodyCVActivity > 0.0f) melodyCVActivity -= activityDecay;
-    if (melodyCVActivity < 0.0f) melodyCVActivity = 0.0f;
-    if (melodyMidiActivity > 0.0f) melodyMidiActivity -= activityDecay;
-    if (melodyMidiActivity < 0.0f) melodyMidiActivity = 0.0f;
+    if (melodyActivity > 0.0f) melodyActivity -= activityDecay;
+    if (melodyActivity < 0.0f) melodyActivity = 0.0f;
     if (polyActivity > 0.0f) polyActivity -= activityDecay;
     if (polyActivity < 0.0f) polyActivity = 0.0f;
     if (rhythmActivity > 0.0f) rhythmActivity -= activityDecay;
     if (rhythmActivity < 0.0f) rhythmActivity = 0.0f;
-    if (acidActivity > 0.0f) acidActivity -= activityDecay;
-    if (acidActivity < 0.0f) acidActivity = 0.0f;
+    if (bassActivity > 0.0f) bassActivity -= activityDecay;
+    if (bassActivity < 0.0f) bassActivity = 0.0f;
 
     // Compact channel strip helper lambda
     auto RenderChannel = [](const char* name, bool* mute, bool* solo,
@@ -89,16 +87,10 @@ void ThemisUI::RenderMixer()
         ImGui::PopID();
     }
 
-    ImGui::PushID("MelCV");
-    RenderChannel("MelCV", &melodyCVMute, &melodyCVSolo,
-                 melodyCVActivity, ShouldPlayMelodyCV(),
-                 ImVec4(0.2f, 0.4f, 0.8f, 1.0f));
-    ImGui::PopID();
-
-    ImGui::PushID("MelMID");
-    RenderChannel("MelMID", &melodyMidiMute, &melodyMidiSolo,
-                 melodyMidiActivity, ShouldPlayMelodyMidi(),
-                 ImVec4(0.6f, 0.2f, 0.8f, 1.0f));
+    ImGui::PushID("Melody");
+    RenderChannel("Melody", &melodyMute, &melodySolo,
+                 melodyActivity, ShouldPlayMelody(),
+                 ImVec4(0.4f, 0.3f, 0.8f, 1.0f));
     ImGui::PopID();
 
     ImGui::PushID("Pads");
@@ -113,9 +105,9 @@ void ThemisUI::RenderMixer()
                  ImVec4(0.8f, 0.4f, 0.6f, 1.0f));
     ImGui::PopID();
 
-    ImGui::PushID("Acid");
-    RenderChannel("Acid", &acidMute, &acidSolo,
-                 acidActivity, ShouldPlayAcid(),
+    ImGui::PushID("Bass");
+    RenderChannel("Bass", &bassMute, &bassSolo,
+                 bassActivity, ShouldPlayBass(),
                  ImVec4(0.9f, 0.7f, 0.1f, 1.0f));
     ImGui::PopID();
 
@@ -126,8 +118,8 @@ void ThemisUI::RenderMixer()
     if (wasRhythmPlaying && !ShouldPlayRhythm()) {
         themis_audio::g_audioEngine.StopAllRhythmNotes();
     }
-    if (wasAcidPlaying && !ShouldPlayAcid()) {
-        themis_audio::g_audioEngine.StopAllAcidNotes();
+    if (wasBassPlaying && !ShouldPlayBass()) {
+        themis_audio::g_audioEngine.StopAllBassNotes();
     }
 
     ImGui::NewLine();
@@ -135,46 +127,42 @@ void ThemisUI::RenderMixer()
     // Quick actions row
     if (ImGui::SmallButton("Clear Mutes")) {
         for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) drumMute[i] = false;
-        melodyCVMute = false;
-        melodyMidiMute = false;
+        melodyMute = false;
         polyMute = false;
         rhythmMute = false;
-        acidMute = false;
+        bassMute = false;
     }
     ImGui::SameLine();
     if (ImGui::SmallButton("Clear Solos")) {
         for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) drumSolo[i] = false;
-        melodyCVSolo = false;
-        melodyMidiSolo = false;
+        melodySolo = false;
         polySolo = false;
         rhythmSolo = false;
-        acidSolo = false;
+        bassSolo = false;
     }
     ImGui::SameLine();
     if (ImGui::SmallButton("Solo Drums")) {
         for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) drumSolo[i] = true;
-        melodyCVSolo = false;
-        melodyMidiSolo = false;
+        melodySolo = false;
         polySolo = false;
         rhythmSolo = false;
-        acidSolo = false;
+        bassSolo = false;
         // Stop melodic voices immediately
         themis_audio::g_audioEngine.StopAllPolyNotes();
         themis_audio::g_audioEngine.StopAllRhythmNotes();
-        themis_audio::g_audioEngine.StopAllAcidNotes();
+        themis_audio::g_audioEngine.StopAllBassNotes();
     }
     ImGui::SameLine();
     if (ImGui::SmallButton("Solo Melody")) {
         for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) drumSolo[i] = false;
-        melodyCVSolo = true;
-        melodyMidiSolo = true;
+        melodySolo = true;
         polySolo = false;
         rhythmSolo = false;
-        acidSolo = false;
+        bassSolo = false;
         // Stop polyphonic melodic voices immediately
         themis_audio::g_audioEngine.StopAllPolyNotes();
         themis_audio::g_audioEngine.StopAllRhythmNotes();
-        themis_audio::g_audioEngine.StopAllAcidNotes();
+        themis_audio::g_audioEngine.StopAllBassNotes();
     }
 
     ImGui::Separator();
@@ -229,14 +217,9 @@ void ThemisUI::TriggerDrumActivity(themis::DrumVoice voice)
     }
 }
 
-void ThemisUI::TriggerMelodyCVActivity()
+void ThemisUI::TriggerMelodyActivity()
 {
-    melodyCVActivity = 1.0f;
-}
-
-void ThemisUI::TriggerMelodyMidiActivity()
-{
-    melodyMidiActivity = 1.0f;
+    melodyActivity = 1.0f;
 }
 
 void ThemisUI::TriggerPolyActivity()
@@ -249,9 +232,9 @@ void ThemisUI::TriggerRhythmActivity()
     rhythmActivity = 1.0f;
 }
 
-void ThemisUI::TriggerAcidActivity()
+void ThemisUI::TriggerBassActivity()
 {
-    acidActivity = 1.0f;
+    bassActivity = 1.0f;
 }
 
 } // namespace themis_ui

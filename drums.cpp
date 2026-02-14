@@ -6,6 +6,9 @@
 #include "drums.h"
 #include "groove.h"
 #include "melody.h"
+#include "config.h"
+#include "core/themis_bass.h"
+#include "core/themis_rhythm.h"
 
 // ============================================================================
 // PATTERN HELPERS
@@ -669,11 +672,11 @@ void ProcessDrumPatterns()
     }
 
     // Process generative voices (with polyrhythm support and AB/ABC variations)
-    // Note: ANALOG voice is now handled by melody system, skip it in generative voices
+    // ANALOG voice triggers GATE OUT pin via TriggerDrum() special handling
     for(int i = 0; i < 6; i++)
     {
         VoiceConfig* voice = &generativeVoices[i];
-        if(voice->active && voice->voice != ANALOG)
+        if(voice->active)
         {
             // Get which variation to use (0=A, 1=B, 2=C)
             uint8_t var = GetCurrentVariation(&voice->variation, currentStep, barCounter);
@@ -711,9 +714,8 @@ void ProcessDrumPatterns()
             uint16_t cv1 = (uint16_t)(cvVoltage / 5.0f * 4095.0f);
             hw.seed.dac.WriteValue(DacHandle::Channel::ONE, cv1);
 
-            // Trigger CV gate
-            analogGateHigh = true;
-            analogGateCounter = 0;
+            // Trigger melody gate on OUT3
+            TriggerMelodyGate();
 
             // MIDI output: Middle C = MIDI note 60
             const uint8_t middleC_midi = 60;
@@ -802,6 +804,256 @@ void ProcessDrumPatterns()
         }
     }
 
+    // Process bass voice
+    if(bassVoiceConfig.active && !tuneModeEnabled)
+    {
+        // Build chord context from firmware poly state
+        themis::ChordContext bassChordCtx;
+        if(polyVoice.active && polyNotesOn)
+        {
+            const ChordProgression& prog = progressions[polyVoice.progressionIndex];
+            // currentChordIndex points to the chord that was just triggered
+            // (it gets incremented at end of ProcessPolyVoiceStep)
+            uint8_t chordIdx = polyState.currentChordIndex;
+            if(chordIdx > 0) chordIdx--; // Point to current, not next
+            else chordIdx = prog.numChords - 1; // Wrap around
+            const ProgressionStep& chordStep = prog.steps[chordIdx];
+
+            if(prog.diatonic)
+            {
+                bassChordCtx.chordRoot = melodyRoot + chordStep.rootOffset;
+            }
+            else
+            {
+                bassChordCtx.chordRoot = chordStep.rootOffset;
+            }
+            // Normalize to 0-11
+            while(bassChordCtx.chordRoot < 0) bassChordCtx.chordRoot += 12;
+            bassChordCtx.chordRoot = bassChordCtx.chordRoot % 12;
+            bassChordCtx.chordType = (uint8_t)chordStep.chordType;
+            bassChordCtx.isDiatonic = prog.diatonic;
+        }
+        else
+        {
+            bassChordCtx.chordRoot = melodyRoot;
+            bassChordCtx.chordType = CHORD_MINOR;
+            bassChordCtx.isDiatonic = true;
+        }
+
+        // Handle note-off for previous bass note
+        if(bassVoiceState.gateStepsRemaining == 1 && bassVoiceState.currentNote >= 0)
+        {
+            // Send MIDI note-off
+            if(bassNotePlaying)
+            {
+                uint8_t noteOff[3] = {
+                    static_cast<uint8_t>(0x80 | bassMidiChannel),
+                    static_cast<uint8_t>(lastBassMidiNote),
+                    0
+                };
+                hw.midi.SendMessage(noteOff, 3);
+                bassNotePlaying = false;
+            }
+            bassVoiceState.currentNote = -1;
+        }
+
+        // Decrement gate counter
+        if(bassVoiceState.gateStepsRemaining > 0)
+        {
+            bassVoiceState.gateStepsRemaining--;
+        }
+
+        // Determine active patterns based on independent variations
+        uint8_t savedPattern = bassVoiceState.currentPattern;
+        uint8_t savedPitchPattern = bassVoiceState.currentPitchPattern;
+
+        // Rhythm variation (independent)
+        if(bassVoiceConfig.rhythmVariation.mode != themis::VAR_MODE_OFF)
+        {
+            uint8_t segment = (barCounter * 2) + (currentStep / 16);
+            uint8_t var = variationSequences[bassVoiceConfig.rhythmVariation.sequence][segment % 8];
+            if(var >= 1)
+            {
+                bassVoiceState.currentPattern = bassVoiceState.currentPatternB;
+            }
+        }
+
+        // Pitch variation (independent)
+        if(bassVoiceConfig.pitchVariation.mode != themis::VAR_MODE_OFF)
+        {
+            uint8_t segment = (barCounter * 2) + (currentStep / 16);
+            uint8_t var = variationSequences[bassVoiceConfig.pitchVariation.sequence][segment % 8];
+            if(var >= 1)
+            {
+                bassVoiceState.currentPitchPattern = bassVoiceState.currentPitchPatternB;
+            }
+        }
+
+        // Process bass step
+        int8_t bassNote;
+        uint8_t bassVelocity;
+        uint8_t bassGateLength;
+        bool bassTriggered = themis::ProcessBassStep(
+            bassVoiceConfig,
+            bassVoiceState,
+            bassChordCtx,
+            melodyRoot,
+            currentStep,
+            bassNote,
+            bassVelocity,
+            bassGateLength
+        );
+
+        // Restore A pattern indices
+        bassVoiceState.currentPattern = savedPattern;
+        bassVoiceState.currentPitchPattern = savedPitchPattern;
+
+        // Trigger note if one was generated
+        if(bassTriggered && bassNote >= 0)
+        {
+            // Release previous note first
+            if(bassVoiceState.currentNote >= 0 && bassNotePlaying)
+            {
+                uint8_t noteOff[3] = {
+                    static_cast<uint8_t>(0x80 | bassMidiChannel),
+                    static_cast<uint8_t>(lastBassMidiNote),
+                    0
+                };
+                hw.midi.SendMessage(noteOff, 3);
+            }
+
+            // Send MIDI note-on
+            uint8_t noteOn[3] = {
+                static_cast<uint8_t>(0x90 | bassMidiChannel),
+                static_cast<uint8_t>(bassNote),
+                bassVelocity
+            };
+            hw.midi.SendMessage(noteOn, 3);
+            lastBassMidiNote = bassNote;
+            bassNotePlaying = true;
+
+            // Output bass CV to DAC2 (1V/oct)
+            float bassCvVoltage = MelodyNoteToCV(bassNote - 36); // Convert MIDI note to semitone from C2
+            uint16_t cv2 = (uint16_t)(bassCvVoltage / 5.0f * 4095.0f);
+            hw.seed.dac.WriteValue(DacHandle::Channel::TWO, cv2);
+
+            // Trigger bass gate on OUT4
+            TriggerBassGate();
+
+            // Update state
+            bassVoiceState.currentNote = bassNote;
+            bassVoiceState.gateStepsRemaining = bassGateLength;
+        }
+    }
+
+    // Process rhythm player voice
+    if(rhythmPlayerConfig.active && !tuneModeEnabled)
+    {
+        // Build chord context from firmware poly state
+        themis::ChordContext rhythmChordCtx;
+        if(polyVoice.active && polyNotesOn)
+        {
+            const ChordProgression& prog = progressions[polyVoice.progressionIndex];
+            uint8_t chordIdx = polyState.currentChordIndex;
+            if(chordIdx > 0) chordIdx--;
+            else chordIdx = prog.numChords - 1;
+            const ProgressionStep& chordStep = prog.steps[chordIdx];
+
+            if(prog.diatonic)
+            {
+                rhythmChordCtx.chordRoot = melodyRoot + chordStep.rootOffset;
+            }
+            else
+            {
+                rhythmChordCtx.chordRoot = chordStep.rootOffset;
+            }
+            while(rhythmChordCtx.chordRoot < 0) rhythmChordCtx.chordRoot += 12;
+            rhythmChordCtx.chordRoot = rhythmChordCtx.chordRoot % 12;
+            rhythmChordCtx.chordType = (uint8_t)chordStep.chordType;
+            rhythmChordCtx.isDiatonic = prog.diatonic;
+        }
+        else
+        {
+            rhythmChordCtx.chordRoot = melodyRoot;
+            rhythmChordCtx.chordType = CHORD_MINOR;
+            rhythmChordCtx.isDiatonic = true;
+        }
+
+        // Check if kick is active this step (for followKick feature)
+        bool kickActive = IsStepActive(kickPatterns[currentKickPattern], currentStep);
+
+        // Handle note-off: when noteDuration reaches 1, release all active notes
+        if(rhythmPlayerState.noteDuration == 1 && rhythmNumActiveNotes > 0)
+        {
+            for(uint8_t n = 0; n < rhythmNumActiveNotes; n++)
+            {
+                if(rhythmActiveNotes[n] >= 0)
+                {
+                    uint8_t noteOff[3] = {
+                        static_cast<uint8_t>(0x80 | rhythmMidiChannel),
+                        static_cast<uint8_t>(rhythmActiveNotes[n]),
+                        0
+                    };
+                    hw.midi.SendMessage(noteOff, 3);
+                }
+            }
+            rhythmNumActiveNotes = 0;
+            rhythmNotesPlaying = false;
+        }
+
+        // Generate seed (deterministic per step)
+        uint32_t seed = System::GetUs();
+        seed ^= (uint32_t)currentStep << 8;
+        seed ^= (uint32_t)barCounter << 16;
+
+        // Process rhythm step
+        int8_t notes[6];
+        uint8_t numNotes = 0;
+        bool triggered = themis::ProcessRhythmStep(
+            rhythmPlayerConfig, rhythmPlayerState, rhythmChordCtx,
+            kickActive, currentStep, seed, notes, numNotes
+        );
+
+        if(triggered && numNotes > 0)
+        {
+            // Release previous notes first
+            if(rhythmNotesPlaying && rhythmNumActiveNotes > 0)
+            {
+                for(uint8_t n = 0; n < rhythmNumActiveNotes; n++)
+                {
+                    if(rhythmActiveNotes[n] >= 0)
+                    {
+                        uint8_t noteOff[3] = {
+                            static_cast<uint8_t>(0x80 | rhythmMidiChannel),
+                            static_cast<uint8_t>(rhythmActiveNotes[n]),
+                            0
+                        };
+                        hw.midi.SendMessage(noteOff, 3);
+                    }
+                }
+            }
+
+            // Calculate velocity
+            uint8_t velocity = themis::CalculateRhythmVelocity(
+                rhythmPlayerState, currentStep, seed ^ 0x87654321
+            );
+
+            // Send MIDI note-on for all generated notes
+            rhythmNumActiveNotes = numNotes;
+            for(uint8_t n = 0; n < numNotes && n < 6; n++)
+            {
+                rhythmActiveNotes[n] = notes[n];
+                uint8_t noteOn[3] = {
+                    static_cast<uint8_t>(0x90 | rhythmMidiChannel),
+                    static_cast<uint8_t>(notes[n]),
+                    velocity
+                };
+                hw.midi.SendMessage(noteOn, 3);
+            }
+            rhythmNotesPlaying = true;
+        }
+    }
+
     // Process poly voice (chords)
     ProcessPolyVoiceStep(currentStep);
 
@@ -844,6 +1096,34 @@ void ProcessDrumPatterns()
                 {
                     SendMelodyNoteOff();  // Clean note-off before personality change
                     RandomizeMelodyPersonality();
+                }
+
+                // Randomize bass pattern (if not frozen)
+                if(bassVoiceConfig.active && !bassVoiceConfig.freezePattern)
+                {
+                    themis::RandomizeBassPattern(bassVoiceState, bassVoiceConfig, System::GetUs());
+                }
+
+                // Randomize rhythm player (if not frozen)
+                if(rhythmPlayerConfig.active && !rhythmPlayerConfig.freezeStyle)
+                {
+                    uint32_t seed = System::GetUs();
+                    // Randomize mode (30% manual, 70% morph)
+                    rhythmPlayerConfig.mode = ((seed % 100) < 30)
+                        ? themis::RHYTHM_MODE_MANUAL : themis::RHYTHM_MODE_MORPH;
+                    rhythmPlayerConfig.octaveOffset = ((seed >> 4) % 3) - 1;
+
+                    if(rhythmPlayerConfig.mode == themis::RHYTHM_MODE_MORPH)
+                    {
+                        themis::RandomizeRhythmParams(rhythmPlayerConfig, rhythmPlayerState, seed);
+                    }
+                    else
+                    {
+                        rhythmPlayerConfig.playStyle =
+                            (themis::RhythmPlayStyle)((seed >> 8) % themis::NUM_RHYTHM_PLAY_STYLES);
+                        rhythmPlayerConfig.activity = themis::ACTIVITY_MODERATE;
+                        rhythmPlayerConfig.articulation = themis::ARTICULATION_NORMAL;
+                    }
                 }
 
                 cycleCounter = 0;

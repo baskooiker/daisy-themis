@@ -233,18 +233,18 @@ private:
 };
 
 // ============================================================================
-// ACID SYNTH
+// BASS SYNTH
 // ============================================================================
 
 /**
- * @class AcidSynth
- * @brief Monophonic 303-style acid bass synth
+ * @class BassSynth
+ * @brief Monophonic bass synth
  *
- * Sawtooth wave with resonant filter, accent, and portamento/slide
+ * Sawtooth wave with resonant filter for root-note bass lines
  */
-class AcidSynth {
+class BassSynth {
 public:
-    void NoteOn(int8_t note, uint8_t velocity, bool isSlide);
+    void NoteOn(int8_t note, uint8_t velocity);
     void NoteOff(int8_t note);
     void AllNotesOff();
     float Process(float sampleRate);
@@ -259,16 +259,13 @@ private:
     bool active = false;
     int8_t currentNote = -1;
     float phase = 0.0f;
-    float phase2 = 0.0f;        // Second oscillator for thickness
     float freq = 0.0f;
-    float targetFreq = 0.0f;
     float env = 0.0f;
     float targetEnv = 0.0f;
     float filterState = 0.0f;
     float filterState2 = 0.0f;  // For resonance
     float velocity = 0.0f;
     bool isAccent = false;
-    bool slideActive = false;
 
     // Envelope rates
     float attackRate = 0.05f;    // Fast attack for punchy bass
@@ -279,9 +276,6 @@ private:
     float baseCutoff = 0.15f;    // Base filter cutoff
     float accentCutoff = 0.6f;   // Cutoff when accented
     float resonance = 0.7f;      // Fixed resonance
-
-    // Slide rate (portamento)
-    float slideRate = 0.05f;     // How fast pitch slides
 };
 
 // ============================================================================
@@ -301,12 +295,11 @@ public:
     static constexpr int NUM_TOM = 4;
 
     bool Init(int sampleRate = 48000);
+    void Pause();
     void Shutdown();
 
     void TriggerDrum(themis::DrumVoice voice, uint8_t velocity);
-    void TriggerMelodyCV(int8_t note, uint8_t velocity);
     void TriggerMelodyMidi(int8_t note, uint8_t velocity);
-    void StopMelodyCV();
     void StopMelodyMidi();
 
     // Poly voice (pads/chords)
@@ -319,10 +312,10 @@ public:
     void ReleaseRhythmNotes(const int8_t* notes, uint8_t count);
     void StopAllRhythmNotes();
 
-    // Acid voice
-    void TriggerAcid(int8_t note, uint8_t velocity, bool isSlide);
-    void StopAcid(int8_t note);
-    void StopAllAcidNotes();
+    // Bass voice
+    void TriggerBass(int8_t note, uint8_t velocity);
+    void StopBass(int8_t note);
+    void StopAllBassNotes();
 
     void SetVolume(float vol) { volume = vol; }
     float GetVolume() const { return volume; }
@@ -366,9 +359,9 @@ public:
     void SetRhythmVcoType(int v) { rhythmVcoType = v; }
     void SetRhythmFilterEnvAmount(float v) { rhythmFilterEnvAmount = v; }
 
-    void SetAcidFilterCutoff(float v) { acidFilterCutoff = v; }
-    void SetAcidVcaDecay(float v) { acidVcaDecay = v; }
-    void SetAcidFilterEnvAmount(float v) { acidFilterEnvAmount = v; }
+    void SetBassFilterCutoff(float v) { bassFilterCutoff = v; }
+    void SetBassVcaDecay(float v) { bassVcaDecay = v; }
+    void SetBassFilterEnvAmount(float v) { bassFilterEnvAmount = v; }
 
     void SetPadFilterCutoff(float v) { padFilterCutoff = v; }
     void SetPadVcaDecay(float v) { padVcaDecay = v; }
@@ -411,9 +404,9 @@ private:
     std::atomic<int> rhythmVcoType{0};
     std::atomic<float> rhythmFilterEnvAmount{0.5f};
 
-    std::atomic<float> acidFilterCutoff{1.0f};
-    std::atomic<float> acidVcaDecay{0.5f};
-    std::atomic<float> acidFilterEnvAmount{0.5f};
+    std::atomic<float> bassFilterCutoff{1.0f};
+    std::atomic<float> bassVcaDecay{0.5f};
+    std::atomic<float> bassFilterEnvAmount{0.5f};
 
     std::atomic<float> padFilterCutoff{1.0f};
     std::atomic<float> padVcaDecay{0.5f};
@@ -432,13 +425,7 @@ private:
     ClapSynth clap;
     TomSynth tom[NUM_TOM];
 
-    // Melody CV synth (saw wave)
-    float melodyCVPhase = 0.0f;
-    float melodyCVFreq = 0.0f;
-    float melodyCVEnv = 0.0f;
-    bool melodyCVActive = false;
-
-    // Melody MIDI synth (square wave with different character)
+    // Melody synth (square wave with filter)
     float melodyMidiPhase = 0.0f;
     float melodyMidiFreq = 0.0f;
     float melodyMidiEnv = 0.0f;
@@ -451,8 +438,8 @@ private:
     // Rhythm player voice
     RhythmSynth rhythmSynth;
 
-    // Acid voice
-    AcidSynth acidSynth;
+    // Bass voice
+    BassSynth bassSynth;
 };
 
 // Global audio engine instance

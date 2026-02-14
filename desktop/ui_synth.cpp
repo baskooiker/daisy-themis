@@ -126,7 +126,7 @@ void ThemisUI::RenderSynthParams()
     if (ImGui::CollapsingHeader("Melodic Voices", ImGuiTreeNodeFlags_DefaultOpen)) {
         static float rhythmCut = 1.0f, rhythmDcy = 0.5f, rhythmEnv = 0.5f;
         static int rhythmVco = 0;
-        static float acidCut = 1.0f, acidDcy = 0.5f, acidEnv = 0.5f;
+        static float bassCut = 1.0f, bassDcy = 0.5f, bassEnv = 0.5f;
         static float padCut = 1.0f, padDcy = 0.5f, padEnv = 0.5f;
         static int padVco = 0;
 
@@ -137,12 +137,12 @@ void ThemisUI::RenderSynthParams()
             [](int v) { themis_audio::g_audioEngine.SetRhythmVcoType(v); },
             rhythmCut, rhythmDcy, rhythmEnv, &rhythmVco);
 
-        RenderVoiceParams("Acid", "acid",
-            [](float v) { themis_audio::g_audioEngine.SetAcidFilterCutoff(v); },
-            [](float v) { themis_audio::g_audioEngine.SetAcidVcaDecay(v); },
-            [](float v) { themis_audio::g_audioEngine.SetAcidFilterEnvAmount(v); },
-            nullptr,  // Acid always uses saw
-            acidCut, acidDcy, acidEnv, nullptr);
+        RenderVoiceParams("Bass", "bass",
+            [](float v) { themis_audio::g_audioEngine.SetBassFilterCutoff(v); },
+            [](float v) { themis_audio::g_audioEngine.SetBassVcaDecay(v); },
+            [](float v) { themis_audio::g_audioEngine.SetBassFilterEnvAmount(v); },
+            nullptr,  // Bass always uses saw
+            bassCut, bassDcy, bassEnv, nullptr);
 
         RenderVoiceParams("Pad", "pad",
             [](float v) { themis_audio::g_audioEngine.SetPadFilterCutoff(v); },

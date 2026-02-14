@@ -278,7 +278,15 @@ enum DisplayState
     DISPLAY_DEFAULT,        ///< Main running display
     DISPLAY_CONFIG_MENU,    ///< Configuration menu
     DISPLAY_CONFIG_EDIT,    ///< Editing a config value
-    DISPLAY_PATTERN_INFO    ///< Pattern visualization
+    DISPLAY_PATTERN_INFO,   ///< Pattern visualization
+    DISPLAY_FREEZE_MENU,    ///< Freeze submenu
+    DISPLAY_SYSTEM_MENU,    ///< System settings submenu
+    DISPLAY_SYSTEM_EDIT,    ///< Editing a system setting value
+    DISPLAY_HARMONY_MENU,   ///< Harmony submenu
+    DISPLAY_HARMONY_EDIT,   ///< Editing a harmony setting value
+    DISPLAY_VOICES_MENU,    ///< Voices submenu
+    DISPLAY_VOICE_DETAIL,   ///< Individual voice detail view
+    DISPLAY_VOICE_EDIT      ///< Editing a voice detail value
 };
 
 /**
@@ -290,25 +298,85 @@ enum DisplayState
 enum ConfigOption
 {
     CONFIG_BPM,             ///< Tempo (20-300 BPM)
-    CONFIG_OUT2_DIVISION,   ///< OUT2 clock division
-    CONFIG_OUT3_DIVISION,   ///< OUT3 clock division
-    CONFIG_FREEZE,          ///< Freeze drum patterns
-    CONFIG_MELODY_SCALE,    ///< Shared melody scale
-    CONFIG_MELODY_ROOT,     ///< Shared melody root note
-    CONFIG_CV_STYLE,        ///< CV melody style
-    CONFIG_MIDI_STYLE,      ///< MIDI melody style
-    CONFIG_MIDI_MEL_CH,     ///< MIDI melody channel
-    CONFIG_MELODY_FREEZE,   ///< Freeze melody patterns
-    CONFIG_POLY_ACTIVE,     ///< Poly voice on/off
-    CONFIG_POLY_PROG,       ///< Poly voice progression
-    CONFIG_POLY_RATE,       ///< Poly voice chord rate
-    CONFIG_POLY_OCTAVE,     ///< Poly voice octave offset
-    CONFIG_POLY_MIDI_CH,    ///< Poly voice MIDI channel
     CONFIG_TUNE_MODE,       ///< VCO tuning mode
+    CONFIG_HARMONY_MENU,    ///< Opens harmony submenu
+    CONFIG_VOICES_MENU,     ///< Opens voices submenu
     CONFIG_RANDOMIZE_ALL,   ///< Randomize all parameters
     CONFIG_PATTERN_INFO,    ///< Show pattern info
+    CONFIG_FREEZE_MENU,     ///< Opens freeze submenu
+    CONFIG_SYSTEM_MENU,     ///< Opens system settings submenu
     CONFIG_BACK,            ///< Exit menu
     NUM_CONFIG_OPTIONS
+};
+
+/**
+ * @enum HarmonyOption
+ * @brief Harmony submenu items
+ */
+enum HarmonyOption
+{
+    HARMONY_SCALE,          ///< Shared melody scale
+    HARMONY_ROOT,           ///< Shared melody root note
+    HARMONY_PROGRESSION,    ///< Poly voice progression
+    HARMONY_RATE,           ///< Poly voice chord rate
+    HARMONY_BACK,
+    NUM_HARMONY_OPTIONS
+};
+
+/**
+ * @enum VoiceMenuItem
+ * @brief Voices submenu items (each opens a detail view)
+ */
+enum VoiceMenuItem
+{
+    VOICE_MELODY,           ///< Melody voice settings (CV + MIDI)
+    VOICE_BASS,             ///< Bass voice settings
+    VOICE_RHYTHM,           ///< Rhythm player settings
+    VOICE_BACK,
+    NUM_VOICE_MENU_ITEMS
+};
+
+/**
+ * @enum VoiceDetailItem
+ * @brief Items within a voice detail view
+ */
+enum VoiceDetailItem
+{
+    VDETAIL_ACTIVE,         ///< Voice on/off toggle
+    VDETAIL_STYLE,          ///< Style (melody) or Mode (rhythm)
+    VDETAIL_OCTAVE,         ///< Octave offset (bass/rhythm)
+    VDETAIL_BACK,
+    NUM_VOICE_DETAIL_ITEMS
+};
+
+/**
+ * @enum FreezeOption
+ * @brief Freeze submenu items
+ */
+enum FreezeOption
+{
+    FREEZE_ALL,             ///< Toggle all freezes at once
+    FREEZE_DRUMS,           ///< freezeEnabled
+    FREEZE_MELODY,          ///< melodyFreezeEnabled
+    FREEZE_BASS,            ///< bassVoiceConfig.freezePattern
+    FREEZE_RHYTHM,          ///< rhythmPlayerConfig.freezeStyle
+    FREEZE_CHORDS,          ///< chordRandomizerConfig.freezeEnabled
+    FREEZE_BACK,
+    NUM_FREEZE_OPTIONS
+};
+
+/**
+ * @enum SystemOption
+ * @brief System settings submenu items
+ */
+enum SystemOption
+{
+    SYSTEM_MEL_MIDI_CH,     ///< melodyMidiChannel
+    SYSTEM_DRUM_MIDI_CH,    ///< drumMidiChannel
+    SYSTEM_BASS_MIDI_CH,    ///< bassVoiceConfig.midiChannel
+    SYSTEM_RHYTHM_MIDI_CH,  ///< rhythmPlayerConfig.midiChannel
+    SYSTEM_BACK,
+    NUM_SYSTEM_OPTIONS
 };
 
 /**
@@ -463,8 +531,6 @@ struct PersistentSettings
 {
     uint32_t magic;             ///< SETTINGS_MAGIC for validation
     float bpm;                  ///< Tempo (20-300)
-    uint8_t out2Division;       ///< OutDivision enum value
-    uint8_t out3Division;       ///< OutDivision enum value
     uint8_t freezeEnabled;      ///< Drum freeze state
     uint8_t melodyScale;        ///< ScaleType enum value
     uint8_t melodyRoot;         ///< Root note (0-11)
@@ -477,7 +543,17 @@ struct PersistentSettings
     uint8_t polyRate;           ///< Poly voice chord rate
     int8_t polyOctave;          ///< Poly voice octave offset
     uint8_t polyMidiChannel;    ///< Poly voice MIDI channel
-    uint8_t reserved[12];       ///< Padding to 32 bytes
+    uint8_t drumMidiChannel;    ///< Drum MIDI channel (default 9)
+    uint8_t bassMidiChannel;    ///< Bass MIDI channel (default 4)
+    uint8_t rhythmMidiChannel;  ///< Rhythm MIDI channel (default 3)
+    uint8_t bassFreezeEnabled;  ///< Bass freeze state
+    uint8_t rhythmFreezeEnabled;///< Rhythm freeze state
+    uint8_t chordFreezeEnabled; ///< Chord freeze state
+    uint8_t bassOctave;         ///< Bass voice octave offset (stored as int8_t)
+    uint8_t rhythmOctave;       ///< Rhythm player octave offset (stored as int8_t)
+    uint8_t rhythmMode;         ///< Rhythm player mode (0=Manual, 1=Morph)
+    uint8_t voiceActiveBits;    ///< Bitmask: bit0=cvMel, bit1=midiMel, bit2=poly, bit3=bass, bit4=rhythm
+    uint8_t reserved[2];        ///< Padding to 32 bytes
 };
 
 /**

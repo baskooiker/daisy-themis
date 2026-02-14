@@ -5,14 +5,11 @@
 
 #include "display.h"
 #include "drums.h"
-#include <string>
 
 void UpdateDisplay()
 {
     hw.display.Fill(false);
 
-    std::string str;
-    char*       cstr;
     char        buffer[30];
     int         configScrollOffset = 0;
     int         displayRow = 0;
@@ -76,182 +73,31 @@ void UpdateDisplay()
 
         case DISPLAY_CONFIG_MENU:
         {
-            // Show config menu with values (arrow on config name)
             hw.display.SetCursor(0, 0);
             hw.display.WriteString("=== CONFIG ===", Font_6x8, true);
 
-            // Calculate scroll offset to keep selected item visible
-            // Display can show 5 items (rows 10, 20, 30, 40, 50)
             configScrollOffset = 0;
             if(currentConfigOption > 4) configScrollOffset = currentConfigOption - 4;
 
             for(int i = 0; i < NUM_CONFIG_OPTIONS; i++)
             {
                 displayRow = i - configScrollOffset;
-                if(displayRow < 0 || displayRow > 4) continue; // Skip items outside visible area
+                if(displayRow < 0 || displayRow > 4) continue;
                 hw.display.SetCursor(0, 10 + displayRow * 10);
 
                 if(i == CONFIG_BPM)
                 {
-                    sprintf(buffer, ">%-11s%d",
-                            (i == currentConfigOption) ? configOptionNames[i] : "",
-                            (int)bpm);
-                    if(i != currentConfigOption)
-                    {
-                        sprintf(buffer, " %-11s%d", configOptionNames[i], (int)bpm);
-                    }
-                }
-                else if(i == CONFIG_OUT2_DIVISION)
-                {
-                    sprintf(buffer, ">%-11s%s",
-                            (i == currentConfigOption) ? configOptionNames[i] : "",
-                            outDivisionNames[currentOut2Division]);
-                    if(i != currentConfigOption)
-                    {
-                        sprintf(buffer, " %-11s%s", configOptionNames[i], outDivisionNames[currentOut2Division]);
-                    }
-                }
-                else if(i == CONFIG_OUT3_DIVISION)
-                {
-                    sprintf(buffer, ">%-11s%s",
-                            (i == currentConfigOption) ? configOptionNames[i] : "",
-                            outDivisionNames[currentOut3Division]);
-                    if(i != currentConfigOption)
-                    {
-                        sprintf(buffer, " %-11s%s", configOptionNames[i], outDivisionNames[currentOut3Division]);
-                    }
-                }
-                else if(i == CONFIG_FREEZE)
-                {
-                    sprintf(buffer, ">%-11s%s",
-                            (i == currentConfigOption) ? configOptionNames[i] : "",
-                            freezeEnabled ? "On" : "Off");
-                    if(i != currentConfigOption)
-                    {
-                        sprintf(buffer, " %-11s%s", configOptionNames[i], freezeEnabled ? "On" : "Off");
-                    }
-                }
-                else if(i == CONFIG_MELODY_SCALE)
-                {
-                    sprintf(buffer, ">%-11s%s",
-                            (i == currentConfigOption) ? configOptionNames[i] : "",
-                            scaleNames[melodyScale]);
-                    if(i != currentConfigOption)
-                    {
-                        sprintf(buffer, " %-11s%s", configOptionNames[i], scaleNames[melodyScale]);
-                    }
-                }
-                else if(i == CONFIG_MELODY_ROOT)
-                {
-                    sprintf(buffer, ">%-11s%s",
-                            (i == currentConfigOption) ? configOptionNames[i] : "",
-                            rootNoteNames[melodyRoot]);
-                    if(i != currentConfigOption)
-                    {
-                        sprintf(buffer, " %-11s%s", configOptionNames[i], rootNoteNames[melodyRoot]);
-                    }
-                }
-                else if(i == CONFIG_CV_STYLE)
-                {
-                    sprintf(buffer, ">%-11s%s",
-                            (i == currentConfigOption) ? configOptionNames[i] : "",
-                            melodyStyleNames[melodyVoice.style]);
-                    if(i != currentConfigOption)
-                    {
-                        sprintf(buffer, " %-11s%s", configOptionNames[i], melodyStyleNames[melodyVoice.style]);
-                    }
-                }
-                else if(i == CONFIG_MIDI_STYLE)
-                {
-                    sprintf(buffer, ">%-11s%s",
-                            (i == currentConfigOption) ? configOptionNames[i] : "",
-                            melodyStyleNames[melodyMidiVoice.style]);
-                    if(i != currentConfigOption)
-                    {
-                        sprintf(buffer, " %-11s%s", configOptionNames[i], melodyStyleNames[melodyMidiVoice.style]);
-                    }
-                }
-                else if(i == CONFIG_MIDI_MEL_CH)
-                {
-                    sprintf(buffer, ">%-11s%d",
-                            (i == currentConfigOption) ? configOptionNames[i] : "",
-                            melodyMidiChannel + 1);  // Display 1-indexed
-                    if(i != currentConfigOption)
-                    {
-                        sprintf(buffer, " %-11s%d", configOptionNames[i], melodyMidiChannel + 1);
-                    }
-                }
-                else if(i == CONFIG_MELODY_FREEZE)
-                {
-                    sprintf(buffer, ">%-11s%s",
-                            (i == currentConfigOption) ? configOptionNames[i] : "",
-                            melodyFreezeEnabled ? "On" : "Off");
-                    if(i != currentConfigOption)
-                    {
-                        sprintf(buffer, " %-11s%s", configOptionNames[i], melodyFreezeEnabled ? "On" : "Off");
-                    }
+                    sprintf(buffer, "%s%-11s%d",
+                            (i == currentConfigOption) ? ">" : " ",
+                            configOptionNames[i], (int)bpm);
                 }
                 else if(i == CONFIG_TUNE_MODE)
                 {
-                    sprintf(buffer, ">%-11s%s",
-                            (i == currentConfigOption) ? configOptionNames[i] : "",
-                            tuneModeEnabled ? "On" : "Off");
-                    if(i != currentConfigOption)
-                    {
-                        sprintf(buffer, " %-11s%s", configOptionNames[i], tuneModeEnabled ? "On" : "Off");
-                    }
+                    sprintf(buffer, "%s%-11s%s",
+                            (i == currentConfigOption) ? ">" : " ",
+                            configOptionNames[i], tuneModeEnabled ? "On" : "Off");
                 }
-                else if(i == CONFIG_POLY_ACTIVE)
-                {
-                    sprintf(buffer, ">%-11s%s",
-                            (i == currentConfigOption) ? configOptionNames[i] : "",
-                            polyVoice.active ? "On" : "Off");
-                    if(i != currentConfigOption)
-                    {
-                        sprintf(buffer, " %-11s%s", configOptionNames[i], polyVoice.active ? "On" : "Off");
-                    }
-                }
-                else if(i == CONFIG_POLY_PROG)
-                {
-                    sprintf(buffer, ">%-11s%s",
-                            (i == currentConfigOption) ? configOptionNames[i] : "",
-                            progressions[polyVoice.progressionIndex].name);
-                    if(i != currentConfigOption)
-                    {
-                        sprintf(buffer, " %-11s%s", configOptionNames[i], progressions[polyVoice.progressionIndex].name);
-                    }
-                }
-                else if(i == CONFIG_POLY_RATE)
-                {
-                    sprintf(buffer, ">%-11s%s",
-                            (i == currentConfigOption) ? configOptionNames[i] : "",
-                            chordRateNames[polyVoice.chordRate]);
-                    if(i != currentConfigOption)
-                    {
-                        sprintf(buffer, " %-11s%s", configOptionNames[i], chordRateNames[polyVoice.chordRate]);
-                    }
-                }
-                else if(i == CONFIG_POLY_OCTAVE)
-                {
-                    sprintf(buffer, ">%-11s%d",
-                            (i == currentConfigOption) ? configOptionNames[i] : "",
-                            polyVoice.octaveOffset);
-                    if(i != currentConfigOption)
-                    {
-                        sprintf(buffer, " %-11s%d", configOptionNames[i], polyVoice.octaveOffset);
-                    }
-                }
-                else if(i == CONFIG_POLY_MIDI_CH)
-                {
-                    sprintf(buffer, ">%-11s%d",
-                            (i == currentConfigOption) ? configOptionNames[i] : "",
-                            polyVoice.midiChannel + 1);  // Display 1-indexed
-                    if(i != currentConfigOption)
-                    {
-                        sprintf(buffer, " %-11s%d", configOptionNames[i], polyVoice.midiChannel + 1);
-                    }
-                }
-                else // CONFIG_PATTERN_INFO, CONFIG_BACK, or CONFIG_RANDOMIZE_ALL
+                else
                 {
                     sprintf(buffer, "%s%s",
                             (i == currentConfigOption) ? ">" : " ",
@@ -265,19 +111,16 @@ void UpdateDisplay()
 
         case DISPLAY_CONFIG_EDIT:
         {
-            // Show config menu with values (arrow on value being edited)
             hw.display.SetCursor(0, 0);
             hw.display.WriteString("=== CONFIG ===", Font_6x8, true);
 
-            // Calculate scroll offset to keep selected item visible
-            // Display can show 5 items (rows 10, 20, 30, 40, 50)
             configScrollOffset = 0;
             if(currentConfigOption > 4) configScrollOffset = currentConfigOption - 4;
 
             for(int i = 0; i < NUM_CONFIG_OPTIONS; i++)
             {
                 displayRow = i - configScrollOffset;
-                if(displayRow < 0 || displayRow > 4) continue; // Skip items outside visible area
+                if(displayRow < 0 || displayRow > 4) continue;
                 hw.display.SetCursor(0, 10 + displayRow * 10);
 
                 if(i == CONFIG_BPM)
@@ -287,112 +130,7 @@ void UpdateDisplay()
                             (i == currentConfigOption) ? ">" : " ",
                             (int)bpm);
                 }
-                else if(i == CONFIG_OUT2_DIVISION)
-                {
-                    sprintf(buffer, " %-10s%s%s",
-                            configOptionNames[i],
-                            (i == currentConfigOption) ? ">" : " ",
-                            outDivisionNames[currentOut2Division]);
-                }
-                else if(i == CONFIG_OUT3_DIVISION)
-                {
-                    sprintf(buffer, " %-10s%s%s",
-                            configOptionNames[i],
-                            (i == currentConfigOption) ? ">" : " ",
-                            outDivisionNames[currentOut3Division]);
-                }
-                else if(i == CONFIG_FREEZE)
-                {
-                    sprintf(buffer, " %-10s%s%s",
-                            configOptionNames[i],
-                            (i == currentConfigOption) ? ">" : " ",
-                            freezeEnabled ? "On" : "Off");
-                }
-                else if(i == CONFIG_MELODY_SCALE)
-                {
-                    sprintf(buffer, " %-10s%s%s",
-                            configOptionNames[i],
-                            (i == currentConfigOption) ? ">" : " ",
-                            scaleNames[melodyScale]);
-                }
-                else if(i == CONFIG_MELODY_ROOT)
-                {
-                    sprintf(buffer, " %-10s%s%s",
-                            configOptionNames[i],
-                            (i == currentConfigOption) ? ">" : " ",
-                            rootNoteNames[melodyRoot]);
-                }
-                else if(i == CONFIG_CV_STYLE)
-                {
-                    sprintf(buffer, " %-10s%s%s",
-                            configOptionNames[i],
-                            (i == currentConfigOption) ? ">" : " ",
-                            melodyStyleNames[melodyVoice.style]);
-                }
-                else if(i == CONFIG_MIDI_STYLE)
-                {
-                    sprintf(buffer, " %-10s%s%s",
-                            configOptionNames[i],
-                            (i == currentConfigOption) ? ">" : " ",
-                            melodyStyleNames[melodyMidiVoice.style]);
-                }
-                else if(i == CONFIG_MIDI_MEL_CH)
-                {
-                    sprintf(buffer, " %-10s%s%d",
-                            configOptionNames[i],
-                            (i == currentConfigOption) ? ">" : " ",
-                            melodyMidiChannel + 1);  // Display 1-indexed
-                }
-                else if(i == CONFIG_MELODY_FREEZE)
-                {
-                    sprintf(buffer, " %-10s%s%s",
-                            configOptionNames[i],
-                            (i == currentConfigOption) ? ">" : " ",
-                            melodyFreezeEnabled ? "On" : "Off");
-                }
-                else if(i == CONFIG_TUNE_MODE)
-                {
-                    sprintf(buffer, " %-10s%s%s",
-                            configOptionNames[i],
-                            (i == currentConfigOption) ? ">" : " ",
-                            tuneModeEnabled ? "On" : "Off");
-                }
-                else if(i == CONFIG_POLY_ACTIVE)
-                {
-                    sprintf(buffer, " %-10s%s%s",
-                            configOptionNames[i],
-                            (i == currentConfigOption) ? ">" : " ",
-                            polyVoice.active ? "On" : "Off");
-                }
-                else if(i == CONFIG_POLY_PROG)
-                {
-                    sprintf(buffer, " %-10s%s%s",
-                            configOptionNames[i],
-                            (i == currentConfigOption) ? ">" : " ",
-                            progressions[polyVoice.progressionIndex].name);
-                }
-                else if(i == CONFIG_POLY_RATE)
-                {
-                    sprintf(buffer, " %-10s%s%s",
-                            configOptionNames[i],
-                            (i == currentConfigOption) ? ">" : " ",
-                            chordRateNames[polyVoice.chordRate]);
-                }
-                else if(i == CONFIG_POLY_OCTAVE)
-                {
-                    sprintf(buffer, " %-10s%s%d",
-                            configOptionNames[i],
-                            (i == currentConfigOption) ? ">" : " ",
-                            polyVoice.octaveOffset);
-                }
-                else if(i == CONFIG_POLY_MIDI_CH)
-                {
-                    sprintf(buffer, " %-10s%s%d",
-                            configOptionNames[i],
-                            (i == currentConfigOption) ? ">" : " ",
-                            polyVoice.midiChannel + 1);  // Display 1-indexed
-                }
-                else // CONFIG_PATTERN_INFO, CONFIG_BACK, or CONFIG_RANDOMIZE_ALL
+                else
                 {
                     sprintf(buffer, " %s", configOptionNames[i]);
                 }
@@ -400,7 +138,6 @@ void UpdateDisplay()
                 hw.display.WriteString(buffer, Font_6x8, true);
             }
 
-            // Show hint at bottom
             if(externalClockMode && currentConfigOption == CONFIG_BPM)
             {
                 hw.display.SetCursor(0, 50);
@@ -410,6 +147,7 @@ void UpdateDisplay()
         break;
 
         case DISPLAY_PATTERN_INFO:
+        {
             // Pattern info display
             hw.display.SetCursor(0, 0);
             hw.display.WriteString("=PATTERN INFO=", Font_6x8, true);
@@ -420,7 +158,6 @@ void UpdateDisplay()
 
             const char* styleNames[] = {"Syn", "Str", "Euc", "AEu", "FKi"};
             const char* densityNames[] = {"Lo", "Md", "Hi"};
-            const char* interactionSymbols[] = {"", "Div", "AB", "AH", "A2"};
             const char* melStyleNames[] = {"Sup", "Arp"};
             const char varChars[] = {'A', 'B', 'C'};
 
@@ -503,7 +240,337 @@ void UpdateDisplay()
                 hw.display.SetCursor(120, 50);
                 hw.display.WriteString("v", Font_6x8, true);
             }
-            break;
+        }
+        break;
+
+        case DISPLAY_FREEZE_MENU:
+        {
+            hw.display.SetCursor(0, 0);
+            hw.display.WriteString("=== FREEZE ===", Font_6x8, true);
+
+            // Calculate scroll offset
+            freezeScrollOffset = 0;
+            if(currentFreezeOption > 4) freezeScrollOffset = currentFreezeOption - 4;
+
+            // Check if all individual freezes are on
+            bool allFrozen = freezeEnabled && melodyFreezeEnabled
+                && bassVoiceConfig.freezePattern && rhythmPlayerConfig.freezeStyle
+                && chordRandomizerConfig.freezeEnabled;
+
+            for(int i = 0; i < NUM_FREEZE_OPTIONS; i++)
+            {
+                int row = i - freezeScrollOffset;
+                if(row < 0 || row > 4) continue;
+                hw.display.SetCursor(0, 10 + row * 10);
+
+                const char* val = "";
+                if(i == FREEZE_ALL)
+                    val = allFrozen ? "On" : "Off";
+                else if(i == FREEZE_DRUMS)
+                    val = freezeEnabled ? "On" : "Off";
+                else if(i == FREEZE_MELODY)
+                    val = melodyFreezeEnabled ? "On" : "Off";
+                else if(i == FREEZE_BASS)
+                    val = bassVoiceConfig.freezePattern ? "On" : "Off";
+                else if(i == FREEZE_RHYTHM)
+                    val = rhythmPlayerConfig.freezeStyle ? "On" : "Off";
+                else if(i == FREEZE_CHORDS)
+                    val = chordRandomizerConfig.freezeEnabled ? "On" : "Off";
+
+                if(i == FREEZE_BACK)
+                    sprintf(buffer, "%s%s", (i == currentFreezeOption) ? ">" : " ", freezeOptionNames[i]);
+                else
+                    sprintf(buffer, "%s%-11s%s", (i == currentFreezeOption) ? ">" : " ", freezeOptionNames[i], val);
+
+                hw.display.WriteString(buffer, Font_6x8, true);
+            }
+        }
+        break;
+
+        case DISPLAY_SYSTEM_MENU:
+        {
+            hw.display.SetCursor(0, 0);
+            hw.display.WriteString("=== SYSTEM ===", Font_6x8, true);
+
+            systemScrollOffset = 0;
+            if(currentSystemOption > 4) systemScrollOffset = currentSystemOption - 4;
+
+            for(int i = 0; i < NUM_SYSTEM_OPTIONS; i++)
+            {
+                int row = i - systemScrollOffset;
+                if(row < 0 || row > 4) continue;
+                hw.display.SetCursor(0, 10 + row * 10);
+
+                if(i == SYSTEM_BACK)
+                {
+                    sprintf(buffer, "%s%s", (i == currentSystemOption) ? ">" : " ", systemOptionNames[i]);
+                }
+                else
+                {
+                    uint8_t ch = 0;
+                    if(i == SYSTEM_MEL_MIDI_CH) ch = melodyMidiChannel;
+                    else if(i == SYSTEM_DRUM_MIDI_CH) ch = drumMidiChannel;
+                    else if(i == SYSTEM_BASS_MIDI_CH) ch = bassMidiChannel;
+                    else if(i == SYSTEM_RHYTHM_MIDI_CH) ch = rhythmMidiChannel;
+
+                    sprintf(buffer, "%s%-11sCh%d", (i == currentSystemOption) ? ">" : " ",
+                            systemOptionNames[i], ch + 1);
+                }
+
+                hw.display.WriteString(buffer, Font_6x8, true);
+            }
+        }
+        break;
+
+        case DISPLAY_SYSTEM_EDIT:
+        {
+            hw.display.SetCursor(0, 0);
+            hw.display.WriteString("=== SYSTEM ===", Font_6x8, true);
+
+            systemScrollOffset = 0;
+            if(currentSystemOption > 4) systemScrollOffset = currentSystemOption - 4;
+
+            for(int i = 0; i < NUM_SYSTEM_OPTIONS; i++)
+            {
+                int row = i - systemScrollOffset;
+                if(row < 0 || row > 4) continue;
+                hw.display.SetCursor(0, 10 + row * 10);
+
+                if(i == SYSTEM_BACK)
+                {
+                    sprintf(buffer, " %s", systemOptionNames[i]);
+                }
+                else
+                {
+                    uint8_t ch = 0;
+                    if(i == SYSTEM_MEL_MIDI_CH) ch = melodyMidiChannel;
+                    else if(i == SYSTEM_DRUM_MIDI_CH) ch = drumMidiChannel;
+                    else if(i == SYSTEM_BASS_MIDI_CH) ch = bassMidiChannel;
+                    else if(i == SYSTEM_RHYTHM_MIDI_CH) ch = rhythmMidiChannel;
+
+                    sprintf(buffer, " %-10s%sCh%d", systemOptionNames[i],
+                            (i == currentSystemOption) ? ">" : " ", ch + 1);
+                }
+
+                hw.display.WriteString(buffer, Font_6x8, true);
+            }
+        }
+        break;
+
+        case DISPLAY_HARMONY_MENU:
+        {
+            hw.display.SetCursor(0, 0);
+            hw.display.WriteString("=== HARMONY ===", Font_6x8, true);
+
+            harmonyScrollOffset = 0;
+            if(currentHarmonyOption > 4) harmonyScrollOffset = currentHarmonyOption - 4;
+
+            for(int i = 0; i < NUM_HARMONY_OPTIONS; i++)
+            {
+                int row = i - harmonyScrollOffset;
+                if(row < 0 || row > 4) continue;
+                hw.display.SetCursor(0, 10 + row * 10);
+
+                const char* val = "";
+                if(i == HARMONY_SCALE) val = scaleNames[melodyScale];
+                else if(i == HARMONY_ROOT) val = rootNoteNames[melodyRoot];
+                else if(i == HARMONY_PROGRESSION) val = progressions[polyVoice.progressionIndex].name;
+                else if(i == HARMONY_RATE) val = chordRateNames[polyVoice.chordRate];
+
+                if(i == HARMONY_BACK)
+                    sprintf(buffer, "%s%s", (i == currentHarmonyOption) ? ">" : " ", harmonyOptionNames[i]);
+                else
+                    sprintf(buffer, "%s%-11s%s", (i == currentHarmonyOption) ? ">" : " ",
+                            harmonyOptionNames[i], val);
+
+                hw.display.WriteString(buffer, Font_6x8, true);
+            }
+        }
+        break;
+
+        case DISPLAY_HARMONY_EDIT:
+        {
+            hw.display.SetCursor(0, 0);
+            hw.display.WriteString("=== HARMONY ===", Font_6x8, true);
+
+            harmonyScrollOffset = 0;
+            if(currentHarmonyOption > 4) harmonyScrollOffset = currentHarmonyOption - 4;
+
+            for(int i = 0; i < NUM_HARMONY_OPTIONS; i++)
+            {
+                int row = i - harmonyScrollOffset;
+                if(row < 0 || row > 4) continue;
+                hw.display.SetCursor(0, 10 + row * 10);
+
+                const char* val = "";
+                if(i == HARMONY_SCALE) val = scaleNames[melodyScale];
+                else if(i == HARMONY_ROOT) val = rootNoteNames[melodyRoot];
+                else if(i == HARMONY_PROGRESSION) val = progressions[polyVoice.progressionIndex].name;
+                else if(i == HARMONY_RATE) val = chordRateNames[polyVoice.chordRate];
+
+                if(i == HARMONY_BACK)
+                    sprintf(buffer, " %s", harmonyOptionNames[i]);
+                else
+                    sprintf(buffer, " %-10s%s%s", harmonyOptionNames[i],
+                            (i == currentHarmonyOption) ? ">" : " ", val);
+
+                hw.display.WriteString(buffer, Font_6x8, true);
+            }
+        }
+        break;
+
+        case DISPLAY_VOICES_MENU:
+        {
+            hw.display.SetCursor(0, 0);
+            hw.display.WriteString("=== VOICES ===", Font_6x8, true);
+
+            voiceScrollOffset = 0;
+            if(currentVoiceMenuItem > 4) voiceScrollOffset = currentVoiceMenuItem - 4;
+
+            for(int i = 0; i < NUM_VOICE_MENU_ITEMS; i++)
+            {
+                int row = i - voiceScrollOffset;
+                if(row < 0 || row > 4) continue;
+                hw.display.SetCursor(0, 10 + row * 10);
+
+                if(i == VOICE_BACK)
+                {
+                    sprintf(buffer, "%s%s", (i == currentVoiceMenuItem) ? ">" : " ", voiceMenuNames[i]);
+                }
+                else
+                {
+                    bool active = false;
+                    if(i == VOICE_MELODY) active = melodyMidiVoice.active;
+                    else if(i == VOICE_BASS) active = bassVoiceConfig.active;
+                    else if(i == VOICE_RHYTHM) active = rhythmPlayerConfig.active;
+
+                    sprintf(buffer, "%s%-13s%s",
+                            (i == currentVoiceMenuItem) ? ">" : " ",
+                            voiceMenuNames[i],
+                            active ? "On" : "Off");
+                }
+
+                hw.display.WriteString(buffer, Font_6x8, true);
+            }
+        }
+        break;
+
+        case DISPLAY_VOICE_DETAIL:
+        {
+            hw.display.SetCursor(0, 0);
+            const char* voiceHeaders[] = {"== MELODY ==", "== BASS ==", "== RHYTHM =="};
+            hw.display.WriteString(voiceHeaders[currentVoiceMenuItem], Font_6x8, true);
+
+            // Melody: Active, Style, Back (3)
+            // Bass: Active, Octave, Back (3)
+            // Rhythm: Active, Mode, Octave, Back (4)
+            uint8_t itemCount = (currentVoiceMenuItem == VOICE_RHYTHM) ? 4 : 3;
+
+            voiceDetailScrollOffset = 0;
+            if(currentVoiceDetail > 4) voiceDetailScrollOffset = currentVoiceDetail - 4;
+
+            for(int i = 0; i < itemCount; i++)
+            {
+                int row = i - voiceDetailScrollOffset;
+                if(row < 0 || row > 4) continue;
+                hw.display.SetCursor(0, 10 + row * 10);
+
+                bool isBack = (i == itemCount - 1);
+                bool isSelected = (i == (int)currentVoiceDetail);
+
+                if(isBack)
+                {
+                    sprintf(buffer, "%sBack", isSelected ? ">" : " ");
+                }
+                else if(i == 0)
+                {
+                    bool active = false;
+                    if(currentVoiceMenuItem == VOICE_MELODY) active = melodyMidiVoice.active;
+                    else if(currentVoiceMenuItem == VOICE_BASS) active = bassVoiceConfig.active;
+                    else if(currentVoiceMenuItem == VOICE_RHYTHM) active = rhythmPlayerConfig.active;
+                    sprintf(buffer, "%s%-11s%s", isSelected ? ">" : " ", "Active", active ? "On" : "Off");
+                }
+                else if(currentVoiceMenuItem == VOICE_MELODY)
+                {
+                    sprintf(buffer, "%s%-11s%s", isSelected ? ">" : " ", "Style",
+                            melodyStyleNames[melodyMidiVoice.style]);
+                }
+                else if(currentVoiceMenuItem == VOICE_RHYTHM)
+                {
+                    if(i == 1)
+                    {
+                        sprintf(buffer, "%s%-11s%s", isSelected ? ">" : " ", "Mode",
+                                rhythmModeNames[rhythmPlayerConfig.mode]);
+                    }
+                    else
+                    {
+                        sprintf(buffer, "%s%-11s%d", isSelected ? ">" : " ", "Octave",
+                                rhythmPlayerConfig.octaveOffset);
+                    }
+                }
+                else
+                {
+                    // Bass: octave (pos 1)
+                    sprintf(buffer, "%s%-11s%d", isSelected ? ">" : " ", "Octave",
+                            bassVoiceConfig.octaveOffset);
+                }
+
+                hw.display.WriteString(buffer, Font_6x8, true);
+            }
+        }
+        break;
+
+        case DISPLAY_VOICE_EDIT:
+        {
+            hw.display.SetCursor(0, 0);
+            const char* voiceHeaders[] = {"== MELODY ==", "== BASS ==", "== RHYTHM =="};
+            hw.display.WriteString(voiceHeaders[currentVoiceMenuItem], Font_6x8, true);
+
+            uint8_t itemCount = (currentVoiceMenuItem == VOICE_RHYTHM) ? 4 : 3;
+
+            voiceDetailScrollOffset = 0;
+            if(currentVoiceDetail > 4) voiceDetailScrollOffset = currentVoiceDetail - 4;
+
+            for(int i = 0; i < itemCount; i++)
+            {
+                int row = i - voiceDetailScrollOffset;
+                if(row < 0 || row > 4) continue;
+                hw.display.SetCursor(0, 10 + row * 10);
+
+                bool isBack = (i == itemCount - 1);
+                bool isSelected = (i == (int)currentVoiceDetail);
+
+                if(isBack)
+                {
+                    sprintf(buffer, " Back");
+                }
+                else if(i == 0)
+                {
+                    bool active = false;
+                    if(currentVoiceMenuItem == VOICE_MELODY) active = melodyMidiVoice.active;
+                    else if(currentVoiceMenuItem == VOICE_BASS) active = bassVoiceConfig.active;
+                    else if(currentVoiceMenuItem == VOICE_RHYTHM) active = rhythmPlayerConfig.active;
+                    sprintf(buffer, " %-10s%s%s", "Active", isSelected ? ">" : " ", active ? "On" : "Off");
+                }
+                else if(currentVoiceMenuItem == VOICE_BASS)
+                {
+                    sprintf(buffer, " %-10s%s%d", "Octave", isSelected ? ">" : " ",
+                            bassVoiceConfig.octaveOffset);
+                }
+                else if(currentVoiceMenuItem == VOICE_RHYTHM && i == 2)
+                {
+                    sprintf(buffer, " %-10s%s%d", "Octave", isSelected ? ">" : " ",
+                            rhythmPlayerConfig.octaveOffset);
+                }
+                else
+                {
+                    sprintf(buffer, " %s", "");
+                }
+
+                hw.display.WriteString(buffer, Font_6x8, true);
+            }
+        }
+        break;
     }
 
     hw.display.Update();

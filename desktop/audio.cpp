@@ -508,50 +508,41 @@ float RhythmSynth::Process(float sampleRate)
 }
 
 // ============================================================================
-// ACID SYNTH
+// BASS SYNTH
 // ============================================================================
 
-void AcidSynth::NoteOn(int8_t note, uint8_t velocity, bool isSlide)
+void BassSynth::NoteOn(int8_t note, uint8_t vel)
 {
-    // Store whether this is an accent (velocity 127)
-    isAccent = (velocity >= 100);
+    // Store whether this is an accent (velocity >= 100)
+    isAccent = (vel >= 100);
 
-    // Calculate target frequency
-    targetFreq = 440.0f * powf(2.0f, ((float)note - 69.0f) / 12.0f);
+    // Calculate frequency
+    freq = 440.0f * powf(2.0f, ((float)note - 69.0f) / 12.0f);
 
-    if (isSlide && active && currentNote >= 0) {
-        // Slide: don't retrigger envelope, just change pitch target
-        slideActive = true;
-        // Don't reset envelope or phase
-    } else {
-        // New note: retrigger envelope
-        slideActive = false;
-        freq = targetFreq;  // Immediate pitch change
-        env = 0.0f;         // Retrigger envelope from zero
-        targetEnv = 1.0f;
-        // Don't reset phase for smoother sound
-    }
+    // Retrigger envelope
+    env = 0.0f;
+    targetEnv = 1.0f;
 
-    this->velocity = (float)velocity / 127.0f;
+    velocity = (float)vel / 127.0f;
     currentNote = note;
     active = true;
 }
 
-void AcidSynth::NoteOff(int8_t note)
+void BassSynth::NoteOff(int8_t note)
 {
     if (currentNote == note) {
         targetEnv = 0.0f;
     }
 }
 
-void AcidSynth::AllNotesOff()
+void BassSynth::AllNotesOff()
 {
     targetEnv = 0.0f;
     active = false;
     currentNote = -1;
 }
 
-float AcidSynth::Process(float sampleRate)
+float BassSynth::Process(float sampleRate)
 {
     if (!active && env < 0.001f) {
         return 0.0f;
@@ -559,14 +550,7 @@ float AcidSynth::Process(float sampleRate)
 
     // Safety check for uninitialized frequency
     if (freq <= 0.0f) {
-        freq = targetFreq > 0.0f ? targetFreq : 110.0f;
-    }
-
-    // Slide pitch smoothly toward target
-    if (slideActive && targetFreq > 0.0f) {
-        freq += (targetFreq - freq) * slideRate;
-    } else if (targetFreq > 0.0f) {
-        freq = targetFreq;
+        freq = 110.0f;
     }
 
     // Decay/release rates affected by paramVcaDecay
@@ -592,18 +576,11 @@ float AcidSynth::Process(float sampleRate)
         return 0.0f;
     }
 
-    // Sawtooth oscillator - classic 303 sound
+    // Sawtooth oscillator
     phase += freq / sampleRate;
     if (phase > 1.0f) phase -= 1.0f;
 
     float saw = (phase * 2.0f) - 1.0f;
-
-    // Add slight detuned second saw for thickness
-    phase2 += (freq * 1.003f) / sampleRate;  // Slightly detuned
-    if (phase2 > 1.0f) phase2 -= 1.0f;
-    float saw2 = (phase2 * 2.0f) - 1.0f;
-
-    float osc = saw * 0.7f + saw2 * 0.3f;
 
     // Base cutoff affected by paramFilterCutoff
     float actualBaseCutoff = baseCutoff * (0.5f + paramFilterCutoff);
@@ -614,20 +591,19 @@ float AcidSynth::Process(float sampleRate)
 
     // Calculate filter cutoff based on accent and envelope
     float cutoff = isAccent
-        ? actualAccentCutoff + envMod  // High cutoff for accent
-        : actualBaseCutoff + envMod;   // Lower cutoff for normal
+        ? actualAccentCutoff + envMod
+        : actualBaseCutoff + envMod;
 
     // Clamp cutoff to safe range for filter stability
     if (cutoff > 0.7f) cutoff = 0.7f;
     if (cutoff < 0.05f) cutoff = 0.05f;
 
-    // Resonant low-pass filter (2-pole) with stable feedback
-    // Limit feedback to prevent filter explosion
-    float maxFeedback = 3.5f;  // Safe maximum for stability
+    // Resonant low-pass filter (2-pole)
+    float maxFeedback = 3.5f;
     float feedback = resonance * (1.0f + cutoff * 2.0f);
     if (feedback > maxFeedback) feedback = maxFeedback;
 
-    float input = osc - filterState2 * feedback;
+    float input = saw - filterState2 * feedback;
 
     // Clamp input to prevent runaway
     if (input > 2.0f) input = 2.0f;
@@ -636,13 +612,13 @@ float AcidSynth::Process(float sampleRate)
     filterState += cutoff * (input - filterState);
     filterState2 += cutoff * (filterState - filterState2);
 
-    // Clamp filter states to prevent NaN/infinity propagation
+    // Clamp filter states
     if (filterState > 10.0f) filterState = 10.0f;
     if (filterState < -10.0f) filterState = -10.0f;
     if (filterState2 > 10.0f) filterState2 = 10.0f;
     if (filterState2 < -10.0f) filterState2 = -10.0f;
 
-    // Soft clip the output for 303-like distortion
+    // Soft clip
     float output = filterState2;
     if (output > 0.8f) output = 0.8f + (output - 0.8f) * 0.3f;
     if (output < -0.8f) output = -0.8f + (output + 0.8f) * 0.3f;
@@ -708,14 +684,23 @@ bool AudioEngine::Init(int rate)
     return true;
 }
 
+void AudioEngine::Pause()
+{
+    if (audioDevice != 0) {
+        SDL_PauseAudioDevice(audioDevice, 1);
+        // Wait for any in-flight audio callback to finish and release synthMutex
+        SDL_Delay(100);
+        // Acquire and release the mutex to guarantee the callback has exited
+        synthMutex.lock();
+        synthMutex.unlock();
+    }
+}
+
 void AudioEngine::Shutdown()
 {
     if (audioDevice != 0) {
-        // Pause audio first to prevent callbacks during cleanup
-        SDL_PauseAudioDevice(audioDevice, 1);
-
-        // Small delay to ensure any pending audio callbacks complete
-        SDL_Delay(50);
+        // Pause and wait for callbacks to finish
+        Pause();
 
         // Close the device
         SDL_CloseAudioDevice(audioDevice);
@@ -769,23 +754,6 @@ void AudioEngine::TriggerDrum(themis::DrumVoice voice, uint8_t velocity)
         default:
             break;
     }
-}
-
-void AudioEngine::TriggerMelodyCV(int8_t note, uint8_t velocity)
-{
-    std::lock_guard<std::mutex> lock(synthMutex);
-
-    // Convert semitone to frequency (C2 = MIDI 36 = ~65.4 Hz)
-    float freq = 65.406f * powf(2.0f, (float)note / 12.0f);
-    melodyCVFreq = freq;
-    melodyCVEnv = (float)velocity / 127.0f;
-    melodyCVActive = true;
-}
-
-void AudioEngine::StopMelodyCV()
-{
-    std::lock_guard<std::mutex> lock(synthMutex);
-    melodyCVActive = false;
 }
 
 void AudioEngine::TriggerMelodyMidi(int8_t note, uint8_t velocity)
@@ -849,22 +817,22 @@ void AudioEngine::StopAllRhythmNotes()
     rhythmSynth.AllNotesOff();
 }
 
-void AudioEngine::TriggerAcid(int8_t note, uint8_t velocity, bool isSlide)
+void AudioEngine::TriggerBass(int8_t note, uint8_t velocity)
 {
     std::lock_guard<std::mutex> lock(synthMutex);
-    acidSynth.NoteOn(note, velocity, isSlide);
+    bassSynth.NoteOn(note, velocity);
 }
 
-void AudioEngine::StopAcid(int8_t note)
+void AudioEngine::StopBass(int8_t note)
 {
     std::lock_guard<std::mutex> lock(synthMutex);
-    acidSynth.NoteOff(note);
+    bassSynth.NoteOff(note);
 }
 
-void AudioEngine::StopAllAcidNotes()
+void AudioEngine::StopAllBassNotes()
 {
     std::lock_guard<std::mutex> lock(synthMutex);
-    acidSynth.AllNotesOff();
+    bassSynth.AllNotesOff();
 }
 
 void AudioEngine::AudioCallback(void* userdata, Uint8* stream, int len)
@@ -924,9 +892,9 @@ void AudioEngine::ProcessAudio(float* buffer, int frames)
     rhythmSynth.paramVcoType = rhythmVcoType.load();
     rhythmSynth.paramFilterEnvAmt = rhythmFilterEnvAmount.load();
 
-    acidSynth.paramFilterCutoff = acidFilterCutoff.load();
-    acidSynth.paramVcaDecay = acidVcaDecay.load();
-    acidSynth.paramFilterEnvAmt = acidFilterEnvAmount.load();
+    bassSynth.paramFilterCutoff = bassFilterCutoff.load();
+    bassSynth.paramVcaDecay = bassVcaDecay.load();
+    bassSynth.paramFilterEnvAmt = bassFilterEnvAmount.load();
 
     padSynth.paramFilterCutoff = padFilterCutoff.load();
     padSynth.paramVcaDecay = padVcaDecay.load();
@@ -954,21 +922,7 @@ void AudioEngine::ProcessAudio(float* buffer, int frames)
             sample += tom[j].Process(sampleRate * decayMult);
         }
 
-        // Melody CV synth (saw wave - brighter, analog-style)
-        if (melodyCVActive && melodyCVEnv > 0.001f) {
-            melodyCVPhase += melodyCVFreq / sampleRate;
-            if (melodyCVPhase > 1.0f) melodyCVPhase -= 1.0f;
-
-            // Saw wave
-            float saw = melodyCVPhase * 2.0f - 1.0f;
-            sample += saw * melodyCVEnv * 0.25f;
-
-            // Decay envelope - affected by decay parameter
-            float cvDecayRate = 0.9995f + decay * 0.0004f;
-            melodyCVEnv *= cvDecayRate;
-        }
-
-        // Melody MIDI synth (square wave with filter - warmer, digital-style)
+        // Melody synth (square wave with filter)
         if (melodyMidiActive && melodyMidiEnv > 0.001f) {
             melodyMidiPhase += melodyMidiFreq / sampleRate;
             if (melodyMidiPhase > 1.0f) melodyMidiPhase -= 1.0f;
@@ -993,8 +947,8 @@ void AudioEngine::ProcessAudio(float* buffer, int frames)
         // Rhythm player synth
         sample += rhythmSynth.Process(sampleRate);
 
-        // Acid synth
-        sample += acidSynth.Process(sampleRate);
+        // Bass synth
+        sample += bassSynth.Process(sampleRate);
 
         // Apply master low-pass filter
         masterFilterState += filterCoeff * (sample - masterFilterState);

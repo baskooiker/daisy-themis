@@ -72,32 +72,11 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         }
 
         // Update gate pulse counters and turn off gates after pulse width
-        if(analogGateHigh)
-        {
-            analogGateCounter++;
-            if(analogGateCounter >= GATE_PULSE_SAMPLES)
-                analogGateHigh = false;
-        }
-
         if(gate16th)
         {
             gate16thCounter++;
             if(gate16thCounter >= GATE_PULSE_SAMPLES)
                 gate16th = false;
-        }
-
-        if(gate2)
-        {
-            gate2Counter++;
-            if(gate2Counter >= GATE_PULSE_SAMPLES)
-                gate2 = false;
-        }
-
-        if(gateQuarter)
-        {
-            gateQuarterCounter++;
-            if(gateQuarterCounter >= GATE_PULSE_SAMPLES)
-                gateQuarter = false;
         }
 
         if(gateReset)
@@ -107,11 +86,32 @@ void AudioCallback(AudioHandle::InputBuffer  in,
                 gateReset = false;
         }
 
+        if(melodyGate)
+        {
+            melodyGateCounter++;
+            if(melodyGateCounter >= GATE_PULSE_SAMPLES)
+                melodyGate = false;
+        }
+
+        if(bassGate)
+        {
+            bassGateCounter++;
+            if(bassGateCounter >= GATE_PULSE_SAMPLES)
+                bassGate = false;
+        }
+
+        if(analogDrumGate)
+        {
+            analogDrumGateCounter++;
+            if(analogDrumGateCounter >= GATE_PULSE_SAMPLES)
+                analogDrumGate = false;
+        }
+
         // Output gate signals (5V = 1.0f, 0V = 0.0f for CV outputs)
-        out[0][i] = gate16th ? 1.0f : 0.0f;       // Out 1: 16th notes
-        out[1][i] = gate2 ? 1.0f : 0.0f;          // Out 2: Configurable division
-        out[2][i] = gateQuarter ? 1.0f : 0.0f;    // Out 3: Configurable division
-        out[3][i] = gateReset ? 1.0f : 0.0f;      // Out 4: Reset pulse
+        out[0][i] = gate16th ? 1.0f : 0.0f;       // OUT1: 16th note clock
+        out[1][i] = gateReset ? 1.0f : 0.0f;      // OUT2: Reset trigger
+        out[2][i] = melodyGate ? 1.0f : 0.0f;     // OUT3: Melody gate
+        out[3][i] = bassGate ? 1.0f : 0.0f;       // OUT4: Bass gate
     }
 }
 

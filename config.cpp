@@ -19,12 +19,10 @@ void SaveSettings()
 {
     settings.magic = SETTINGS_MAGIC;
     settings.bpm = bpm;
-    settings.out2Division = (uint8_t)currentOut2Division;
-    settings.out3Division = (uint8_t)currentOut3Division;
     settings.freezeEnabled = freezeEnabled ? 1 : 0;
     settings.melodyScale = (uint8_t)melodyScale;
     settings.melodyRoot = melodyRoot;
-    settings.cvMelodyStyle = (uint8_t)melodyVoice.style;
+    settings.cvMelodyStyle = (uint8_t)melodyMidiVoice.style;  // Both voices share style
     settings.midiMelodyStyle = (uint8_t)melodyMidiVoice.style;
     settings.midiMelChannel = melodyMidiChannel;
     settings.melodyFreezeEnabled = melodyFreezeEnabled ? 1 : 0;
@@ -35,6 +33,26 @@ void SaveSettings()
     settings.polyRate = polyVoice.chordRate;
     settings.polyOctave = polyVoice.octaveOffset;
     settings.polyMidiChannel = polyVoice.midiChannel;
+
+    // MIDI channel settings
+    settings.drumMidiChannel = drumMidiChannel;
+    settings.bassMidiChannel = bassMidiChannel;
+    settings.rhythmMidiChannel = rhythmMidiChannel;
+
+    // Freeze settings
+    settings.bassFreezeEnabled = bassVoiceConfig.freezePattern ? 1 : 0;
+    settings.rhythmFreezeEnabled = rhythmPlayerConfig.freezeStyle ? 1 : 0;
+    settings.chordFreezeEnabled = chordRandomizerConfig.freezeEnabled ? 1 : 0;
+
+    // Voice settings
+    settings.bassOctave = (uint8_t)bassVoiceConfig.octaveOffset;
+    settings.rhythmOctave = (uint8_t)rhythmPlayerConfig.octaveOffset;
+    settings.rhythmMode = (uint8_t)rhythmPlayerConfig.mode;
+    settings.voiceActiveBits = 0;
+    // Melody Voice controls both CV and MIDI — save as both bits
+    if(melodyMidiVoice.active) settings.voiceActiveBits |= 0x03;  // bits 0+1
+    if(bassVoiceConfig.active) settings.voiceActiveBits |= 0x08;
+    if(rhythmPlayerConfig.active) settings.voiceActiveBits |= 0x10;
 
     // Write to QSPI flash
     size_t size = sizeof(PersistentSettings);
@@ -64,26 +82,6 @@ void LoadSettings()
             bpm = 120.0f; // Reset to default if out of range
         }
 
-        // Validate OUT2 division
-        if(settings.out2Division >= NUM_OUT_DIVISIONS)
-        {
-            currentOut2Division = DIV_1_8; // Reset to default
-        }
-        else
-        {
-            currentOut2Division = (OutDivision)settings.out2Division;
-        }
-
-        // Validate OUT3 division
-        if(settings.out3Division >= NUM_OUT_DIVISIONS)
-        {
-            currentOut3Division = DIV_1_4; // Reset to default
-        }
-        else
-        {
-            currentOut3Division = (OutDivision)settings.out3Division;
-        }
-
         // Load freeze setting
         freezeEnabled = (settings.freezeEnabled != 0);
 
@@ -106,24 +104,16 @@ void LoadSettings()
             melodyRoot = 0; // Default to C
         }
 
-        // Load CV melody style
-        if(settings.cvMelodyStyle < NUM_MELODY_STYLES)
-        {
-            melodyVoice.style = (MelodyStyle)settings.cvMelodyStyle;
-        }
-        else
-        {
-            melodyVoice.style = MELODY_SUPPORTING;
-        }
-
-        // Load MIDI melody style
+        // Load melody style — both voices share the same style
         if(settings.midiMelodyStyle < NUM_MELODY_STYLES)
         {
+            melodyVoice.style = (MelodyStyle)settings.midiMelodyStyle;
             melodyMidiVoice.style = (MelodyStyle)settings.midiMelodyStyle;
         }
         else
         {
-            melodyMidiVoice.style = MELODY_ARPEGGIATOR;
+            melodyVoice.style = MELODY_SUPPORTING;
+            melodyMidiVoice.style = MELODY_SUPPORTING;
         }
 
         if(settings.midiMelChannel < 16)
@@ -176,18 +166,49 @@ void LoadSettings()
         {
             polyVoice.midiChannel = 1;  // Default to channel 2
         }
+
+        // Load MIDI channel settings (validate: > 15 means uninitialized flash)
+        drumMidiChannel = (settings.drumMidiChannel <= 15) ? settings.drumMidiChannel : 9;
+        bassMidiChannel = (settings.bassMidiChannel <= 15) ? settings.bassMidiChannel : 4;
+        rhythmMidiChannel = (settings.rhythmMidiChannel <= 15) ? settings.rhythmMidiChannel : 3;
+
+        // Load freeze settings
+        bassVoiceConfig.freezePattern = (settings.bassFreezeEnabled == 1);
+        rhythmPlayerConfig.freezeStyle = (settings.rhythmFreezeEnabled == 1);
+        chordRandomizerConfig.freezeEnabled = (settings.chordFreezeEnabled == 1);
+
+        // Load bass octave (stored as uint8_t, interpret as int8_t)
+        int8_t bOct = (int8_t)settings.bassOctave;
+        bassVoiceConfig.octaveOffset = (bOct >= -2 && bOct <= 2) ? bOct : -1;
+
+        // Load rhythm octave
+        int8_t rOct = (int8_t)settings.rhythmOctave;
+        rhythmPlayerConfig.octaveOffset = (rOct >= -2 && rOct <= 2) ? rOct : 0;
+
+        // Load rhythm mode
+        rhythmPlayerConfig.mode = (settings.rhythmMode < 2) ?
+            (themis::RhythmPlayerMode)settings.rhythmMode : themis::RHYTHM_MODE_MORPH;
+
+        // Load voice active bits (0xFF = uninitialized flash)
+        if(settings.voiceActiveBits != 0xFF)
+        {
+            // Melody Voice controls both CV and MIDI — either bit activates both
+            bool melActive = (settings.voiceActiveBits & 0x03) != 0;
+            melodyVoice.active = melActive;
+            melodyMidiVoice.active = melActive;
+            bassVoiceConfig.active = (settings.voiceActiveBits & 0x08) != 0;
+            rhythmPlayerConfig.active = (settings.voiceActiveBits & 0x10) != 0;
+        }
     }
     else
     {
         // No valid settings found, use defaults
         bpm = 120.0f;
-        currentOut2Division = DIV_1_8;
-        currentOut3Division = DIV_1_4;
         freezeEnabled = false;
         melodyScale = SCALE_MINOR;
         melodyRoot = 0;
         melodyVoice.style = MELODY_SUPPORTING;
-        melodyMidiVoice.style = MELODY_ARPEGGIATOR;
+        melodyMidiVoice.style = MELODY_SUPPORTING;
         melodyMidiChannel = 0;
         melodyFreezeEnabled = false;
 
@@ -197,6 +218,16 @@ void LoadSettings()
         polyVoice.chordRate = CHORD_RATE_1_BAR;
         polyVoice.octaveOffset = 0;
         polyVoice.midiChannel = 1;  // Default to channel 2
+
+        // MIDI channel defaults
+        drumMidiChannel = 9;
+        bassMidiChannel = 4;
+        rhythmMidiChannel = 3;
+
+        // Freeze defaults
+        bassVoiceConfig.freezePattern = false;
+        rhythmPlayerConfig.freezeStyle = false;
+        chordRandomizerConfig.freezeEnabled = false;
 
         // Save defaults
         SaveSettings();
@@ -228,43 +259,10 @@ void UpdateClockFrequency()
 
 void TriggerGate24ppqn() { gate24ppqn = true; gate24ppqnCounter = 0; }
 void TriggerGate16th() { gate16th = true; gate16thCounter = 0; }
-void TriggerGate2() { gate2 = true; gate2Counter = 0; }
-void TriggerGateQuarter() { gateQuarter = true; gateQuarterCounter = 0; }
 void TriggerGateReset() { gateReset = true; gateResetCounter = 0; }
-
-bool ShouldTriggerOut2(uint8_t step, uint8_t bar)
-{
-    uint16_t totalStep = (bar * 16) + step; // Total 16th notes since start
-
-    switch(currentOut2Division)
-    {
-        case DIV_1_16: return true;                    // Every 16th note
-        case DIV_1_8:  return (step % 2) == 0;         // Every 8th note
-        case DIV_1_4:  return (step % 4) == 0;         // Every quarter note
-        case DIV_1_2:  return (step % 8) == 0;         // Every half note
-        case DIV_1:    return (step == 0);             // Every bar (16 steps)
-        case DIV_2:    return (totalStep % 32) == 0;   // Every 2 bars
-        case DIV_4:    return (totalStep % 64) == 0;   // Every 4 bars
-        default: return false;
-    }
-}
-
-bool ShouldTriggerOut3(uint8_t step, uint8_t bar)
-{
-    uint16_t totalStep = (bar * 16) + step; // Total 16th notes since start
-
-    switch(currentOut3Division)
-    {
-        case DIV_1_16: return true;                    // Every 16th note
-        case DIV_1_8:  return (step % 2) == 0;         // Every 8th note
-        case DIV_1_4:  return (step % 4) == 0;         // Every quarter note
-        case DIV_1_2:  return (step % 8) == 0;         // Every half note
-        case DIV_1:    return step == 0;               // Every bar
-        case DIV_2:    return (totalStep % 32) == 0;   // Every 2 bars
-        case DIV_4:    return (totalStep % 64) == 0;   // Every 4 bars
-        default:       return (step % 4) == 0;         // Default to quarter
-    }
-}
+void TriggerMelodyGate() { melodyGate = true; melodyGateCounter = 0; }
+void TriggerBassGate() { bassGate = true; bassGateCounter = 0; }
+void TriggerAnalogDrumGate() { analogDrumGate = true; analogDrumGateCounter = 0; }
 
 // ============================================================================
 // MIDI TRANSPORT
@@ -327,6 +325,18 @@ void ToggleRunState()
             // Initialize poly voice
             InitPolyVoice();
 
+            // Initialize bass voice
+            bassVoiceConfig.Init();
+            bassVoiceState.Init();
+            bassNotePlaying = false;
+            lastBassMidiNote = -1;
+
+            // Initialize rhythm player
+            rhythmPlayerConfig.Init();
+            rhythmPlayerState.Init();
+            rhythmNumActiveNotes = 0;
+            rhythmNotesPlaying = false;
+
             // Initialize trigger queue
             InitTriggerQueue();
             globalSampleCounter = 0;
@@ -339,6 +349,35 @@ void ToggleRunState()
         {
             SendMelodyNoteOff();  // Send note-off before stopping
             SendPolyNoteOff();    // Send poly chord note-off before stopping
+            // Send bass note-off before stopping
+            if(bassNotePlaying)
+            {
+                uint8_t noteOff[3] = {
+                    static_cast<uint8_t>(0x80 | bassMidiChannel),
+                    static_cast<uint8_t>(lastBassMidiNote),
+                    0
+                };
+                hw.midi.SendMessage(noteOff, 3);
+                bassNotePlaying = false;
+            }
+            // Send rhythm note-off before stopping
+            if(rhythmNotesPlaying && rhythmNumActiveNotes > 0)
+            {
+                for(uint8_t n = 0; n < rhythmNumActiveNotes; n++)
+                {
+                    if(rhythmActiveNotes[n] >= 0)
+                    {
+                        uint8_t noteOff[3] = {
+                            static_cast<uint8_t>(0x80 | rhythmMidiChannel),
+                            static_cast<uint8_t>(rhythmActiveNotes[n]),
+                            0
+                        };
+                        hw.midi.SendMessage(noteOff, 3);
+                    }
+                }
+                rhythmNumActiveNotes = 0;
+                rhythmNotesPlaying = false;
+            }
             SendMidiStop();
         }
     }
@@ -404,6 +443,35 @@ void HandleMidiMessage(MidiEvent m)
                     lastMidiClockTime = System::GetNow();
                     SendMelodyNoteOff();  // Send note-off before stopping
                     SendPolyNoteOff();    // Send poly chord note-off before stopping
+                    // Send bass note-off before stopping
+                    if(bassNotePlaying)
+                    {
+                        uint8_t noteOff[3] = {
+                            static_cast<uint8_t>(0x80 | bassMidiChannel),
+                            static_cast<uint8_t>(lastBassMidiNote),
+                            0
+                        };
+                        hw.midi.SendMessage(noteOff, 3);
+                        bassNotePlaying = false;
+                    }
+                    // Send rhythm note-off before stopping
+                    if(rhythmNotesPlaying && rhythmNumActiveNotes > 0)
+                    {
+                        for(uint8_t n = 0; n < rhythmNumActiveNotes; n++)
+                        {
+                            if(rhythmActiveNotes[n] >= 0)
+                            {
+                                uint8_t noteOff[3] = {
+                                    static_cast<uint8_t>(0x80 | rhythmMidiChannel),
+                                    static_cast<uint8_t>(rhythmActiveNotes[n]),
+                                    0
+                                };
+                                hw.midi.SendMessage(noteOff, 3);
+                            }
+                        }
+                        rhythmNumActiveNotes = 0;
+                        rhythmNotesPlaying = false;
+                    }
                     SendMidiStop();
                     gateHigh = false;
                     break;
@@ -458,7 +526,6 @@ void ProcessControls()
             break;
 
         case DISPLAY_CONFIG_MENU:
-            // In config menu, encoder rotates through options
             if(inc != 0)
             {
                 int option = (int)currentConfigOption + inc;
@@ -467,61 +534,55 @@ void ProcessControls()
                 currentConfigOption = (ConfigOption)option;
                 lastEncoderActivity = now;
             }
-            // Encoder button selects option
             else if(buttonPressed)
             {
                 if(currentConfigOption == CONFIG_BACK)
                 {
-                    // Back to default display
                     currentDisplayState = DISPLAY_DEFAULT;
                 }
                 else if(currentConfigOption == CONFIG_PATTERN_INFO)
                 {
-                    // Enter pattern info display
                     currentDisplayState = DISPLAY_PATTERN_INFO;
                     patternInfoScroll = 0;
                 }
-                else if(currentConfigOption == CONFIG_FREEZE)
+                else if(currentConfigOption == CONFIG_FREEZE_MENU)
                 {
-                    // Toggle freeze directly (binary option)
-                    freezeEnabled = !freezeEnabled;
-                    SaveSettings();
+                    currentDisplayState = DISPLAY_FREEZE_MENU;
+                    currentFreezeOption = FREEZE_ALL;
+                    freezeScrollOffset = 0;
                 }
-                else if(currentConfigOption == CONFIG_MELODY_FREEZE)
+                else if(currentConfigOption == CONFIG_SYSTEM_MENU)
                 {
-                    // Toggle melody freeze directly (binary option)
-                    melodyFreezeEnabled = !melodyFreezeEnabled;
-                    SaveSettings();
+                    currentDisplayState = DISPLAY_SYSTEM_MENU;
+                    currentSystemOption = SYSTEM_MEL_MIDI_CH;
+                    systemScrollOffset = 0;
+                }
+                else if(currentConfigOption == CONFIG_HARMONY_MENU)
+                {
+                    currentDisplayState = DISPLAY_HARMONY_MENU;
+                    currentHarmonyOption = HARMONY_SCALE;
+                    harmonyScrollOffset = 0;
+                }
+                else if(currentConfigOption == CONFIG_VOICES_MENU)
+                {
+                    currentDisplayState = DISPLAY_VOICES_MENU;
+                    currentVoiceMenuItem = VOICE_MELODY;
+                    voiceScrollOffset = 0;
                 }
                 else if(currentConfigOption == CONFIG_TUNE_MODE)
                 {
-                    // Toggle tune mode directly (binary option)
                     tuneModeEnabled = !tuneModeEnabled;
-                    // Note: tune mode is not saved to flash - it's a temporary mode
-                }
-                else if(currentConfigOption == CONFIG_POLY_ACTIVE)
-                {
-                    // Toggle poly voice directly (binary option)
-                    polyVoice.active = !polyVoice.active;
-                    if(!polyVoice.active)
-                    {
-                        SendPolyNoteOff();  // Turn off any playing notes
-                    }
-                    SaveSettings();
                 }
                 else if(currentConfigOption == CONFIG_RANDOMIZE_ALL)
                 {
-                    // Randomize all parameters immediately
                     RandomizeAllParameters();
                 }
                 else
                 {
-                    // Enter edit mode for selected config
                     currentDisplayState = DISPLAY_CONFIG_EDIT;
                 }
                 lastEncoderActivity = now;
             }
-            // Timeout check (only in config menu, not in edit mode)
             else if(now - lastEncoderActivity > MENU_TIMEOUT_MS)
             {
                 currentDisplayState = DISPLAY_DEFAULT;
@@ -529,7 +590,6 @@ void ProcessControls()
             break;
 
         case DISPLAY_CONFIG_EDIT:
-            // In edit mode, encoder changes value
             if(inc != 0)
             {
                 switch(currentConfigOption)
@@ -542,165 +602,413 @@ void ProcessControls()
                             UpdateClockFrequency();
                         }
                         break;
-
-                    case CONFIG_OUT2_DIVISION:
-                        {
-                            int div = (int)currentOut2Division + inc;
-                            if(div < 0) div = 0;
-                            if(div >= NUM_OUT_DIVISIONS) div = NUM_OUT_DIVISIONS - 1;
-                            currentOut2Division = (OutDivision)div;
-                        }
-                        break;
-
-                    case CONFIG_OUT3_DIVISION:
-                        {
-                            int div = (int)currentOut3Division + inc;
-                            if(div < 0) div = 0;
-                            if(div >= NUM_OUT_DIVISIONS) div = NUM_OUT_DIVISIONS - 1;
-                            currentOut3Division = (OutDivision)div;
-                        }
-                        break;
-
-                    // CONFIG_FREEZE is handled directly in menu, not in edit mode
-
-                    case CONFIG_MELODY_SCALE:
-                        {
-                            int scale = (int)melodyScale + inc;
-                            if(scale < 0) scale = 0;
-                            if(scale >= NUM_SCALE_TYPES) scale = NUM_SCALE_TYPES - 1;
-                            melodyScale = (ScaleType)scale;
-                            // Regenerate both melody voices with new scale
-                            GenerateMelodyPatternFor(&melodyVoice);
-                            GenerateMelodyPatternFor(&melodyMidiVoice);
-                        }
-                        break;
-
-                    case CONFIG_MELODY_ROOT:
-                        {
-                            int root = (int)melodyRoot + inc;
-                            if(root < 0) root = 0;
-                            if(root >= 12) root = 11;
-                            melodyRoot = (uint8_t)root;
-                            // Regenerate both melody voices with new root
-                            GenerateMelodyPatternFor(&melodyVoice);
-                            GenerateMelodyPatternFor(&melodyMidiVoice);
-                        }
-                        break;
-
-                    case CONFIG_CV_STYLE:
-                        {
-                            int style = (int)melodyVoice.style + inc;
-                            if(style < 0) style = 0;
-                            if(style >= NUM_MELODY_STYLES) style = NUM_MELODY_STYLES - 1;
-                            melodyVoice.style = (MelodyStyle)style;
-                            // Also randomize sub-style when changing style
-                            if(melodyVoice.style == MELODY_SUPPORTING)
-                                melodyVoice.subStyle = System::GetUs() % NUM_SUPPORTING_SUBSTYLES;
-                            else
-                                melodyVoice.subStyle = System::GetUs() % NUM_ARP_SUBSTYLES;
-                            // Regenerate CV melody with new style
-                            GenerateMelodyPatternFor(&melodyVoice);
-                        }
-                        break;
-
-                    case CONFIG_MIDI_STYLE:
-                        {
-                            int style = (int)melodyMidiVoice.style + inc;
-                            if(style < 0) style = 0;
-                            if(style >= NUM_MELODY_STYLES) style = NUM_MELODY_STYLES - 1;
-                            melodyMidiVoice.style = (MelodyStyle)style;
-                            // Also randomize sub-style when changing style
-                            if(melodyMidiVoice.style == MELODY_SUPPORTING)
-                                melodyMidiVoice.subStyle = System::GetUs() % NUM_SUPPORTING_SUBSTYLES;
-                            else
-                                melodyMidiVoice.subStyle = System::GetUs() % NUM_ARP_SUBSTYLES;
-                            // Regenerate MIDI melody with new style
-                            GenerateMelodyPatternFor(&melodyMidiVoice);
-                        }
-                        break;
-
-                    case CONFIG_MIDI_MEL_CH:
-                        {
-                            int ch = (int)melodyMidiChannel + inc;
-                            if(ch < 0) ch = 0;
-                            if(ch >= 16) ch = 15;
-                            melodyMidiChannel = (uint8_t)ch;
-                        }
-                        break;
-
-                    // CONFIG_MELODY_FREEZE is handled directly in menu, not in edit mode
-
-                    // CONFIG_POLY_ACTIVE is handled directly in menu, not in edit mode
-
-                    case CONFIG_POLY_PROG:
-                        {
-                            // Send note-off for current chord before changing progression
-                            SendPolyNoteOff();
-                            int prog = (int)polyVoice.progressionIndex + inc;
-                            if(prog < 0) prog = 0;
-                            if(prog >= NUM_PROGRESSIONS) prog = NUM_PROGRESSIONS - 1;
-                            polyVoice.progressionIndex = (uint8_t)prog;
-                            polyState.currentChordIndex = 0;  // Reset to start of new progression
-                        }
-                        break;
-
-                    case CONFIG_POLY_RATE:
-                        {
-                            int rate = (int)polyVoice.chordRate + inc;
-                            if(rate < 0) rate = 0;
-                            if(rate >= NUM_CHORD_RATES) rate = NUM_CHORD_RATES - 1;
-                            polyVoice.chordRate = (uint8_t)rate;
-                        }
-                        break;
-
-                    case CONFIG_POLY_OCTAVE:
-                        {
-                            int oct = (int)polyVoice.octaveOffset + inc;
-                            if(oct < -2) oct = -2;
-                            if(oct > 2) oct = 2;
-                            polyVoice.octaveOffset = (int8_t)oct;
-                        }
-                        break;
-
-                    case CONFIG_POLY_MIDI_CH:
-                        {
-                            // Send note-off on old channel before changing
-                            SendPolyNoteOff();
-                            int ch = (int)polyVoice.midiChannel + inc;
-                            if(ch < 0) ch = 0;
-                            if(ch >= 16) ch = 15;
-                            polyVoice.midiChannel = (uint8_t)ch;
-                        }
-                        break;
-
                     default:
                         break;
                 }
             }
-            // Encoder button confirms and returns to config menu
             else if(buttonPressed)
             {
-                // Save settings to persistent storage
                 SaveSettings();
-
                 currentDisplayState = DISPLAY_CONFIG_MENU;
                 lastEncoderActivity = now;
             }
             break;
 
+        case DISPLAY_FREEZE_MENU:
+            if(inc != 0)
+            {
+                int opt = (int)currentFreezeOption + inc;
+                if(opt < 0) opt = 0;
+                if(opt >= NUM_FREEZE_OPTIONS) opt = NUM_FREEZE_OPTIONS - 1;
+                currentFreezeOption = (FreezeOption)opt;
+                lastEncoderActivity = now;
+            }
+            else if(buttonPressed)
+            {
+                switch(currentFreezeOption)
+                {
+                    case FREEZE_ALL:
+                    {
+                        // If any freeze is off, turn all on; if all on, turn all off
+                        bool allOn = freezeEnabled && melodyFreezeEnabled
+                            && bassVoiceConfig.freezePattern && rhythmPlayerConfig.freezeStyle
+                            && chordRandomizerConfig.freezeEnabled;
+                        bool newState = !allOn;
+                        freezeEnabled = newState;
+                        melodyFreezeEnabled = newState;
+                        bassVoiceConfig.freezePattern = newState;
+                        rhythmPlayerConfig.freezeStyle = newState;
+                        chordRandomizerConfig.freezeEnabled = newState;
+                        break;
+                    }
+                    case FREEZE_DRUMS:
+                        freezeEnabled = !freezeEnabled;
+                        break;
+                    case FREEZE_MELODY:
+                        melodyFreezeEnabled = !melodyFreezeEnabled;
+                        break;
+                    case FREEZE_BASS:
+                        bassVoiceConfig.freezePattern = !bassVoiceConfig.freezePattern;
+                        break;
+                    case FREEZE_RHYTHM:
+                        rhythmPlayerConfig.freezeStyle = !rhythmPlayerConfig.freezeStyle;
+                        break;
+                    case FREEZE_CHORDS:
+                        chordRandomizerConfig.freezeEnabled = !chordRandomizerConfig.freezeEnabled;
+                        break;
+                    case FREEZE_BACK:
+                        currentDisplayState = DISPLAY_CONFIG_MENU;
+                        break;
+                    default:
+                        break;
+                }
+                SaveSettings();
+                lastEncoderActivity = now;
+            }
+            else if(now - lastEncoderActivity > MENU_TIMEOUT_MS)
+            {
+                currentDisplayState = DISPLAY_DEFAULT;
+            }
+            break;
+
+        case DISPLAY_SYSTEM_MENU:
+            if(inc != 0)
+            {
+                int opt = (int)currentSystemOption + inc;
+                if(opt < 0) opt = 0;
+                if(opt >= NUM_SYSTEM_OPTIONS) opt = NUM_SYSTEM_OPTIONS - 1;
+                currentSystemOption = (SystemOption)opt;
+                lastEncoderActivity = now;
+            }
+            else if(buttonPressed)
+            {
+                if(currentSystemOption == SYSTEM_BACK)
+                {
+                    currentDisplayState = DISPLAY_CONFIG_MENU;
+                }
+                else
+                {
+                    currentDisplayState = DISPLAY_SYSTEM_EDIT;
+                }
+                lastEncoderActivity = now;
+            }
+            else if(now - lastEncoderActivity > MENU_TIMEOUT_MS)
+            {
+                currentDisplayState = DISPLAY_DEFAULT;
+            }
+            break;
+
+        case DISPLAY_SYSTEM_EDIT:
+            if(inc != 0)
+            {
+                int ch;
+                switch(currentSystemOption)
+                {
+                    case SYSTEM_MEL_MIDI_CH:
+                        ch = (int)melodyMidiChannel + inc;
+                        if(ch < 0) ch = 0;
+                        if(ch > 15) ch = 15;
+                        melodyMidiChannel = (uint8_t)ch;
+                        break;
+                    case SYSTEM_DRUM_MIDI_CH:
+                        ch = (int)drumMidiChannel + inc;
+                        if(ch < 0) ch = 0;
+                        if(ch > 15) ch = 15;
+                        drumMidiChannel = (uint8_t)ch;
+                        break;
+                    case SYSTEM_BASS_MIDI_CH:
+                        ch = (int)bassMidiChannel + inc;
+                        if(ch < 0) ch = 0;
+                        if(ch > 15) ch = 15;
+                        bassMidiChannel = (uint8_t)ch;
+                        break;
+                    case SYSTEM_RHYTHM_MIDI_CH:
+                        ch = (int)rhythmMidiChannel + inc;
+                        if(ch < 0) ch = 0;
+                        if(ch > 15) ch = 15;
+                        rhythmMidiChannel = (uint8_t)ch;
+                        break;
+                    default:
+                        break;
+                }
+                lastEncoderActivity = now;
+            }
+            else if(buttonPressed)
+            {
+                SaveSettings();
+                currentDisplayState = DISPLAY_SYSTEM_MENU;
+                lastEncoderActivity = now;
+            }
+            else if(now - lastEncoderActivity > MENU_TIMEOUT_MS)
+            {
+                currentDisplayState = DISPLAY_DEFAULT;
+            }
+            break;
+
         case DISPLAY_PATTERN_INFO:
-            // In pattern info mode, encoder scrolls
             if(inc != 0)
             {
                 patternInfoScroll += inc;
                 if(patternInfoScroll < 0) patternInfoScroll = 0;
-                int maxScroll = 3; // 7 total lines - 4 visible = 3 max scroll
+                int maxScroll = 3;
                 if(patternInfoScroll > maxScroll) patternInfoScroll = maxScroll;
             }
-            // Encoder button returns to config menu
             else if(buttonPressed)
             {
                 currentDisplayState = DISPLAY_CONFIG_MENU;
+            }
+            break;
+
+        case DISPLAY_HARMONY_MENU:
+            if(inc != 0)
+            {
+                int opt = (int)currentHarmonyOption + inc;
+                if(opt < 0) opt = 0;
+                if(opt >= NUM_HARMONY_OPTIONS) opt = NUM_HARMONY_OPTIONS - 1;
+                currentHarmonyOption = (HarmonyOption)opt;
+                lastEncoderActivity = now;
+            }
+            else if(buttonPressed)
+            {
+                if(currentHarmonyOption == HARMONY_BACK)
+                {
+                    currentDisplayState = DISPLAY_CONFIG_MENU;
+                }
+                else
+                {
+                    currentDisplayState = DISPLAY_HARMONY_EDIT;
+                }
+                lastEncoderActivity = now;
+            }
+            else if(now - lastEncoderActivity > MENU_TIMEOUT_MS)
+            {
+                currentDisplayState = DISPLAY_DEFAULT;
+            }
+            break;
+
+        case DISPLAY_HARMONY_EDIT:
+            if(inc != 0)
+            {
+                switch(currentHarmonyOption)
+                {
+                    case HARMONY_SCALE:
+                    {
+                        int scale = (int)melodyScale + inc;
+                        if(scale < 0) scale = 0;
+                        if(scale >= NUM_SCALE_TYPES) scale = NUM_SCALE_TYPES - 1;
+                        melodyScale = (ScaleType)scale;
+                        GenerateMelodyPatternFor(&melodyVoice);
+                        GenerateMelodyPatternFor(&melodyMidiVoice);
+                        break;
+                    }
+                    case HARMONY_ROOT:
+                    {
+                        int root = (int)melodyRoot + inc;
+                        if(root < 0) root = 0;
+                        if(root >= 12) root = 11;
+                        melodyRoot = (uint8_t)root;
+                        GenerateMelodyPatternFor(&melodyVoice);
+                        GenerateMelodyPatternFor(&melodyMidiVoice);
+                        break;
+                    }
+                    case HARMONY_PROGRESSION:
+                    {
+                        SendPolyNoteOff();
+                        int prog = (int)polyVoice.progressionIndex + inc;
+                        if(prog < 0) prog = 0;
+                        if(prog >= NUM_PROGRESSIONS) prog = NUM_PROGRESSIONS - 1;
+                        polyVoice.progressionIndex = (uint8_t)prog;
+                        polyState.currentChordIndex = 0;
+                        break;
+                    }
+                    case HARMONY_RATE:
+                    {
+                        int rate = (int)polyVoice.chordRate + inc;
+                        if(rate < 0) rate = 0;
+                        if(rate >= NUM_CHORD_RATES) rate = NUM_CHORD_RATES - 1;
+                        polyVoice.chordRate = (uint8_t)rate;
+                        break;
+                    }
+                    default:
+                        break;
+                }
+                lastEncoderActivity = now;
+            }
+            else if(buttonPressed)
+            {
+                SaveSettings();
+                currentDisplayState = DISPLAY_HARMONY_MENU;
+                lastEncoderActivity = now;
+            }
+            else if(now - lastEncoderActivity > MENU_TIMEOUT_MS)
+            {
+                currentDisplayState = DISPLAY_DEFAULT;
+            }
+            break;
+
+        case DISPLAY_VOICES_MENU:
+            if(inc != 0)
+            {
+                int opt = (int)currentVoiceMenuItem + inc;
+                if(opt < 0) opt = 0;
+                if(opt >= NUM_VOICE_MENU_ITEMS) opt = NUM_VOICE_MENU_ITEMS - 1;
+                currentVoiceMenuItem = (VoiceMenuItem)opt;
+                lastEncoderActivity = now;
+            }
+            else if(buttonPressed)
+            {
+                if(currentVoiceMenuItem == VOICE_BACK)
+                {
+                    currentDisplayState = DISPLAY_CONFIG_MENU;
+                }
+                else
+                {
+                    currentDisplayState = DISPLAY_VOICE_DETAIL;
+                    currentVoiceDetail = VDETAIL_ACTIVE;
+                    voiceDetailScrollOffset = 0;
+                }
+                lastEncoderActivity = now;
+            }
+            else if(now - lastEncoderActivity > MENU_TIMEOUT_MS)
+            {
+                currentDisplayState = DISPLAY_DEFAULT;
+            }
+            break;
+
+        case DISPLAY_VOICE_DETAIL:
+        {
+            uint8_t detailCount = (currentVoiceMenuItem == VOICE_RHYTHM) ? 4 : 3;
+
+            if(inc != 0)
+            {
+                int opt = (int)currentVoiceDetail + inc;
+                if(opt < 0) opt = 0;
+                if(opt >= detailCount) opt = detailCount - 1;
+                currentVoiceDetail = (VoiceDetailItem)opt;
+                lastEncoderActivity = now;
+            }
+            else if(buttonPressed)
+            {
+                bool isBack = ((int)currentVoiceDetail == detailCount - 1);
+
+                if(isBack)
+                {
+                    currentDisplayState = DISPLAY_VOICES_MENU;
+                }
+                else if(currentVoiceDetail == VDETAIL_ACTIVE)
+                {
+                    if(currentVoiceMenuItem == VOICE_MELODY)
+                    {
+                        // Toggle both CV and MIDI melody together
+                        bool newState = !melodyMidiVoice.active;
+                        melodyVoice.active = newState;
+                        melodyMidiVoice.active = newState;
+                    }
+                    else if(currentVoiceMenuItem == VOICE_BASS)
+                    {
+                        bassVoiceConfig.active = !bassVoiceConfig.active;
+                        if(!bassVoiceConfig.active && bassNotePlaying)
+                        {
+                            uint8_t noteOff[3] = {
+                                static_cast<uint8_t>(0x80 | bassMidiChannel),
+                                static_cast<uint8_t>(lastBassMidiNote),
+                                0
+                            };
+                            hw.midi.SendMessage(noteOff, 3);
+                            bassNotePlaying = false;
+                        }
+                    }
+                    else if(currentVoiceMenuItem == VOICE_RHYTHM)
+                    {
+                        rhythmPlayerConfig.active = !rhythmPlayerConfig.active;
+                        if(!rhythmPlayerConfig.active && rhythmNotesPlaying && rhythmNumActiveNotes > 0)
+                        {
+                            for(uint8_t n = 0; n < rhythmNumActiveNotes; n++)
+                            {
+                                if(rhythmActiveNotes[n] >= 0)
+                                {
+                                    uint8_t noteOff[3] = {
+                                        static_cast<uint8_t>(0x80 | rhythmMidiChannel),
+                                        static_cast<uint8_t>(rhythmActiveNotes[n]),
+                                        0
+                                    };
+                                    hw.midi.SendMessage(noteOff, 3);
+                                }
+                            }
+                            rhythmNumActiveNotes = 0;
+                            rhythmNotesPlaying = false;
+                        }
+                    }
+                    SaveSettings();
+                }
+                else if((int)currentVoiceDetail == 1 && currentVoiceMenuItem == VOICE_MELODY)
+                {
+                    // Toggle melody style — applies to both CV and MIDI voice
+                    MelodyStyle newStyle = (melodyMidiVoice.style == MELODY_SUPPORTING) ?
+                        MELODY_ARPEGGIATOR : MELODY_SUPPORTING;
+                    uint8_t newSubStyle;
+                    if(newStyle == MELODY_SUPPORTING)
+                        newSubStyle = System::GetUs() % NUM_SUPPORTING_SUBSTYLES;
+                    else
+                        newSubStyle = System::GetUs() % NUM_ARP_SUBSTYLES;
+
+                    melodyVoice.style = newStyle;
+                    melodyVoice.subStyle = newSubStyle;
+                    melodyMidiVoice.style = newStyle;
+                    melodyMidiVoice.subStyle = newSubStyle;
+                    GenerateMelodyPatternFor(&melodyVoice);
+                    GenerateMelodyPatternFor(&melodyMidiVoice);
+                    SaveSettings();
+                }
+                else if((int)currentVoiceDetail == 1 && currentVoiceMenuItem == VOICE_RHYTHM)
+                {
+                    rhythmPlayerConfig.mode = (rhythmPlayerConfig.mode == themis::RHYTHM_MODE_MANUAL) ?
+                        themis::RHYTHM_MODE_MORPH : themis::RHYTHM_MODE_MANUAL;
+                    SaveSettings();
+                }
+                else
+                {
+                    // Octave edit: enter VOICE_EDIT
+                    currentDisplayState = DISPLAY_VOICE_EDIT;
+                }
+                lastEncoderActivity = now;
+            }
+            else if(now - lastEncoderActivity > MENU_TIMEOUT_MS)
+            {
+                currentDisplayState = DISPLAY_DEFAULT;
+            }
+            break;
+        }
+
+        case DISPLAY_VOICE_EDIT:
+            if(inc != 0)
+            {
+                int oct;
+                if(currentVoiceMenuItem == VOICE_BASS)
+                {
+                    oct = (int)bassVoiceConfig.octaveOffset + inc;
+                    if(oct < -2) oct = -2;
+                    if(oct > 2) oct = 2;
+                    bassVoiceConfig.octaveOffset = (int8_t)oct;
+                }
+                else if(currentVoiceMenuItem == VOICE_RHYTHM)
+                {
+                    oct = (int)rhythmPlayerConfig.octaveOffset + inc;
+                    if(oct < -2) oct = -2;
+                    if(oct > 2) oct = 2;
+                    rhythmPlayerConfig.octaveOffset = (int8_t)oct;
+                }
+                lastEncoderActivity = now;
+            }
+            else if(buttonPressed)
+            {
+                SaveSettings();
+                currentDisplayState = DISPLAY_VOICE_DETAIL;
+                lastEncoderActivity = now;
+            }
+            else if(now - lastEncoderActivity > MENU_TIMEOUT_MS)
+            {
+                currentDisplayState = DISPLAY_DEFAULT;
             }
             break;
     }
@@ -730,17 +1038,10 @@ void ProcessClock()
         // Trigger 16th note gate
         TriggerGate16th();
 
-        // Trigger OUT2 and OUT3 gates based on division settings
-        // Calculate actual bar number (0-7) and step within bar (0-15)
-        uint8_t actualBar = (barCounter * 2) + (currentStep / 16);
-        uint8_t stepInBar = currentStep % 16;
-        if(ShouldTriggerOut2(stepInBar, actualBar))
+        // Trigger reset on step 0 of pattern
+        if(currentStep == 0 && barCounter == 0)
         {
-            TriggerGate2();
-        }
-        if(ShouldTriggerOut3(stepInBar, actualBar))
-        {
-            TriggerGateQuarter();
+            TriggerGateReset();
         }
 
         // Process drum patterns on each 16th note
@@ -768,7 +1069,7 @@ void ProcessClock()
         }
     }
 
-    // Set gate output to Analog voice gate
-    // Note: analogGateHigh timing is managed in AudioCallback at 48kHz
-    dsy_gpio_write(&hw.gate_output, analogGateHigh ? 1 : 0);
+    // Set GATE OUT pin to analog drum trigger
+    // Note: analogDrumGate timing is managed in AudioCallback at 48kHz
+    dsy_gpio_write(&hw.gate_output, analogDrumGate ? 1 : 0);
 }

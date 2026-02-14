@@ -41,7 +41,6 @@ struct RhythmPatterns
     uint16_t chordMedium[4];      ///< Medium chord activity
     uint16_t chordBusy[4];        ///< Busy chord comping
     uint16_t bassGroove[4];       ///< Bass line patterns
-    uint16_t arpPatterns[4];      ///< Arpeggio patterns
 };
 
 // ============================================================================
@@ -182,22 +181,6 @@ void ApplyInversion(int8_t* notes, uint8_t numNotes, uint8_t inversion);
  * @return Next inversion value (0-2)
  */
 uint8_t GetNextInversion(RhythmPlayerState& state, uint32_t seed);
-
-/**
- * @brief Get next arpeggio note
- *
- * Returns the next note in arpeggio sequence based on direction.
- *
- * @param chordCtx Current chord context
- * @param state Current rhythm player state
- * @param octaveOffset Octave adjustment
- * @return MIDI note number
- */
-int8_t GetArpeggioNote(
-    const ChordContext& chordCtx,
-    RhythmPlayerState& state,
-    int8_t octaveOffset
-);
 
 /**
  * @brief Process polyrhythm pattern

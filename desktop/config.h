@@ -56,20 +56,18 @@ struct Settings {
     // MIDI settings
     int midiPort = -1;
     std::string midiPortName;
+    int melodyMidiChannel = 0;     // 0-indexed (displayed as 1-16)
 
-    // Mixer mute/solo settings (11 drum voices + melody CV + melody MIDI + poly)
+    // Mixer mute/solo settings (11 drum voices + melody + poly)
     bool drumMute[11] = {false};
     bool drumSolo[11] = {false};
-    bool melodyCVMute = false;
-    bool melodyCVSolo = false;
-    bool melodyMidiMute = false;
-    bool melodyMidiSolo = false;
+    bool melodyMute = false;
+    bool melodySolo = false;
     bool polyMute = false;
     bool polySolo = false;
 
     // Voice activation states
-    bool melodyCVActive = true;
-    bool melodyMidiActive = true;
+    bool melodyActive = true;
     bool polyActive = true;
 
     // Rhythm player settings
@@ -77,20 +75,21 @@ struct Settings {
     bool rhythmMute = false;
     bool rhythmSolo = false;
     int rhythmMode = 1;        // 0=Manual, 1=Morph
-    int rhythmPlayStyle = 0;   // 0=Chords, 1=Arps, 2=Poly
+    int rhythmPlayStyle = 0;   // 0=Chords, 1=Poly
     int rhythmMidiChannel = 3; // 0-indexed
     int rhythmOctaveOffset = 0;
 
-    // Acid voice settings
-    bool acidActive = true;
-    bool acidMute = false;
-    bool acidSolo = false;
-    int acidMode = 1;          // 0=Manual, 1=Auto
-    int acidRhythmPattern = 0;
-    int acidMelodyPattern = 0;
-    int acidActivity = 1;      // 0=Sparse, 1=Moderate, 2=Busy
-    int acidMidiChannel = 4;   // 0-indexed
-    int acidOctaveOffset = -1;
+    // Bass voice settings
+    bool bassActive = true;
+    bool bassMute = false;
+    bool bassSolo = false;
+    bool bassFreezePattern = false;
+    int bassMidiChannel = 4;   // 0-indexed
+    int bassOctaveOffset = -1;
+    int bassRhythmVariationMode = 0;     // 0=Off, 1=AB
+    int bassRhythmVariationSequence = 1; // VAR_SEQ_AAAB
+    int bassPitchVariationMode = 0;      // 0=Off, 1=AB
+    int bassPitchVariationSequence = 1;  // VAR_SEQ_AAAB
 
     // Per-voice synth parameters
     VoiceSynthParams kickSynth;
@@ -99,13 +98,13 @@ struct Settings {
     VoiceSynthParams clapSynth;
     VoiceSynthParams tomSynth;
     VoiceSynthParams rhythmSynth;
-    VoiceSynthParams acidSynth;
+    VoiceSynthParams bassSynth;
     VoiceSynthParams padSynth;
 
     // Chord randomizer settings
     bool chordFreezeEnabled = false;
-    uint8_t chordEnabledVibes = 0x07;  // Bitmask: all 3 vibes enabled
-    uint32_t chordEnabledProgressions[3] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};  // Per-vibe
+    uint8_t chordEnabledVibes = 0x1F;  // Bitmask: all 5 vibes enabled
+    uint32_t chordEnabledProgressions[5] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};  // Per-vibe
     int chordProgressionIndex = 0;
     int chordRate = 1;  // CHORD_RATE_1_BAR
     int chordOctaveOffset = 0;

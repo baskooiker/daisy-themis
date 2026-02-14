@@ -129,14 +129,16 @@ uint32_t gateHighCounter = 0;
 
 bool gate24ppqn = false;
 bool gate16th = false;
-bool gate2 = false;
-bool gateQuarter = false;
 bool gateReset = false;
+bool melodyGate = false;
+bool bassGate = false;
+bool analogDrumGate = false;
 uint32_t gate24ppqnCounter = 0;
 uint32_t gate16thCounter = 0;
-uint32_t gate2Counter = 0;
-uint32_t gateQuarterCounter = 0;
 uint32_t gateResetCounter = 0;
+uint32_t melodyGateCounter = 0;
+uint32_t bassGateCounter = 0;
+uint32_t analogDrumGateCounter = 0;
 
 // ============================================================================
 // UI STATE
@@ -144,12 +146,24 @@ uint32_t gateResetCounter = 0;
 
 DisplayState currentDisplayState = DISPLAY_DEFAULT;
 ConfigOption currentConfigOption = CONFIG_BPM;
-OutDivision currentOut2Division = DIV_1_8;
-OutDivision currentOut3Division = DIV_1_4;
 bool freezeEnabled = false;
 int patternInfoScroll = 0;
 uint32_t lastEncoderActivity = 0;
 int configScrollOffset = 0;
+
+// Submenu state
+FreezeOption currentFreezeOption = FREEZE_ALL;
+SystemOption currentSystemOption = SYSTEM_MEL_MIDI_CH;
+HarmonyOption currentHarmonyOption = HARMONY_SCALE;
+VoiceMenuItem currentVoiceMenuItem = VOICE_MELODY;
+VoiceDetailItem currentVoiceDetail = VDETAIL_ACTIVE;
+int freezeScrollOffset = 0;
+int systemScrollOffset = 0;
+int harmonyScrollOffset = 0;
+int voiceScrollOffset = 0;
+int voiceDetailScrollOffset = 0;
+uint8_t drumMidiChannel = 9;  // Channel 10 (0-indexed)
+themis::ChordRandomizerConfig chordRandomizerConfig;
 
 // ============================================================================
 // PERSISTENT SETTINGS
@@ -227,9 +241,27 @@ VoiceConfig generativeVoices[6] = {
     {ANALOG, RHYTHM_FOLLOW_KICK, DENSITY_HIGH, INTERACTION_NONE, ANALOG, 0, 0, 0, 32, true, defaultVoiceVariation}
 };
 
-bool analogGateHigh = false;
-uint32_t analogGateCounter = 0;
-uint8_t analogVoiceVelocity = 100;
+// ============================================================================
+// BASS VOICE
+// ============================================================================
+
+themis::BassConfig bassVoiceConfig;
+themis::BassState bassVoiceState;
+uint8_t bassMidiChannel = 4;  // Default: channel 5 (0-indexed)
+int8_t lastBassMidiNote = -1;
+bool bassNotePlaying = false;
+uint64_t bassMidiNoteOffSample = 0;
+
+// ============================================================================
+// RHYTHM PLAYER
+// ============================================================================
+
+themis::RhythmPlayerConfig rhythmPlayerConfig;
+themis::RhythmPlayerState rhythmPlayerState;
+uint8_t rhythmMidiChannel = 3;       // Default: channel 4 (0-indexed)
+int8_t rhythmActiveNotes[6] = {-1, -1, -1, -1, -1, -1};
+uint8_t rhythmNumActiveNotes = 0;
+bool rhythmNotesPlaying = false;
 
 // ============================================================================
 // MELODY SYSTEM
@@ -394,15 +426,32 @@ const char* drumNames[NUM_DRUM_VOICES] = {
 };
 
 const char* configOptionNames[NUM_CONFIG_OPTIONS] = {
-    "BPM", "OUT2 div", "OUT3 div", "DrumFreeze", "Scale", "Root",
-    "CV Style", "MIDI Style", "MIDI Ch", "MelFreeze", "TuneMode",
-    "Poly On", "Poly Prog", "Poly Rate", "Poly Oct", "Poly Ch",
-    "Randomize!", "Pattern info", "Back"
+    "BPM", "TuneMode", "Harmony >>", "Voices >>",
+    "Randomize!", "Pattern info",
+    "Freeze >>", "System >>", "Back"
 };
 
-const char* outDivisionNames[NUM_OUT_DIVISIONS] = {
-    "1/16", "1/8", "1/4", "1/2", "1", "2", "4"
+const char* freezeOptionNames[NUM_FREEZE_OPTIONS] = {
+    "All", "Drums", "Melody", "Bass", "Rhythm", "Chords", "Back"
 };
+
+const char* systemOptionNames[NUM_SYSTEM_OPTIONS] = {
+    "Melody Ch", "Drum Ch", "Bass Ch", "Rhythm Ch", "Back"
+};
+
+const char* harmonyOptionNames[NUM_HARMONY_OPTIONS] = {
+    "Scale", "Root", "Progression", "Rate", "Back"
+};
+
+const char* voiceMenuNames[NUM_VOICE_MENU_ITEMS] = {
+    "Melody Voice", "Bass Voice", "Rhythm Voice", "Back"
+};
+
+const char* voiceDetailNames[NUM_VOICE_DETAIL_ITEMS] = {
+    "Active", "Style", "Octave", "Back"
+};
+
+const char* rhythmModeNames[2] = {"Manual", "Morph"};
 
 const char* scaleNames[NUM_SCALE_TYPES] = {
     "Minor", "MinBlue", "MinPent", "Gypsy"

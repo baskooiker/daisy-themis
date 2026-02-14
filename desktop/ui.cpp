@@ -16,6 +16,33 @@ namespace themis_ui {
 // Global instance
 ThemisUI g_ui;
 
+// Helper: arrow key / scroll wheel increment for the last ImGui item
+// Call immediately after a DragInt/SliderInt/Combo. Returns true if value changed.
+static bool ArrowKeyAdjust(int& value, int minVal, int maxVal)
+{
+    if (!ImGui::IsItemHovered()) return false;
+
+    bool changed = false;
+    if (ImGui::IsKeyPressed(ImGuiKey_UpArrow) || ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
+        value = (value < maxVal) ? value + 1 : minVal;
+        changed = true;
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_DownArrow) || ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) {
+        value = (value > minVal) ? value - 1 : maxVal;
+        changed = true;
+    }
+    // Mouse scroll wheel
+    float wheel = ImGui::GetIO().MouseWheel;
+    if (wheel > 0.0f) {
+        value = (value < maxVal) ? value + 1 : minVal;
+        changed = true;
+    } else if (wheel < 0.0f) {
+        value = (value > minVal) ? value - 1 : maxVal;
+        changed = true;
+    }
+    return changed;
+}
+
 void ThemisUI::Init(themis::Sequencer* seq)
 {
     sequencer = seq;
@@ -26,10 +53,8 @@ void ThemisUI::Init(themis::Sequencer* seq)
         drumSolo[i] = false;
         drumActivity[i] = 0.0f;
     }
-    melodyCVMute = false;
-    melodyCVSolo = false;
-    melodyMidiMute = false;
-    melodyMidiSolo = false;
+    melodyMute = false;
+    melodySolo = false;
 }
 
 bool ThemisUI::IsAnySoloActive() const
@@ -37,7 +62,7 @@ bool ThemisUI::IsAnySoloActive() const
     for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) {
         if (drumSolo[i]) return true;
     }
-    return melodyCVSolo || melodyMidiSolo || polySolo || rhythmSolo || acidSolo;
+    return melodySolo || polySolo || rhythmSolo || bassSolo;
 }
 
 bool ThemisUI::ShouldPlayDrum(themis::DrumVoice voice) const
@@ -50,22 +75,12 @@ bool ThemisUI::ShouldPlayDrum(themis::DrumVoice voice) const
     return true;
 }
 
-bool ThemisUI::ShouldPlayMelodyCV() const
+bool ThemisUI::ShouldPlayMelody() const
 {
-    if (melodyCVMute) return false;
+    if (melodyMute) return false;
 
     if (IsAnySoloActive()) {
-        return melodyCVSolo;
-    }
-    return true;
-}
-
-bool ThemisUI::ShouldPlayMelodyMidi() const
-{
-    if (melodyMidiMute) return false;
-
-    if (IsAnySoloActive()) {
-        return melodyMidiSolo;
+        return melodySolo;
     }
     return true;
 }
@@ -90,12 +105,12 @@ bool ThemisUI::ShouldPlayRhythm() const
     return true;
 }
 
-bool ThemisUI::ShouldPlayAcid() const
+bool ThemisUI::ShouldPlayBass() const
 {
-    if (acidMute) return false;
+    if (bassMute) return false;
 
     if (IsAnySoloActive()) {
-        return acidSolo;
+        return bassSolo;
     }
     return true;
 }
@@ -272,6 +287,42 @@ void ThemisUI::RenderVoicesAndPatterns()
 
     ImGui::Separator();
 
+    // Fundamental pattern selectors (Kick, Clap, Hat)
+    ImGui::SetNextItemWidth(40);
+    int kickPat = sequencer->currentKickPattern;
+    if (ImGui::DragInt("##kickPat", &kickPat, 0.1f, 0, 15, "K:%d")) {
+        sequencer->currentKickPattern = kickPat;
+    }
+    if (ArrowKeyAdjust(kickPat, 0, 15)) sequencer->currentKickPattern = kickPat;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Kick pattern (0-15)");
+
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(40);
+    int clapPat = sequencer->currentClapPattern;
+    if (ImGui::DragInt("##clapPat", &clapPat, 0.1f, 0, 15, "C:%d")) {
+        sequencer->currentClapPattern = clapPat;
+    }
+    if (ArrowKeyAdjust(clapPat, 0, 15)) sequencer->currentClapPattern = clapPat;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clap pattern (0-15)");
+
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(40);
+    int hatPat = sequencer->currentHatPattern;
+    if (ImGui::DragInt("##hatPat", &hatPat, 0.1f, 0, 15, "H:%d")) {
+        sequencer->currentHatPattern = hatPat;
+    }
+    if (ArrowKeyAdjust(hatPat, 0, 15)) sequencer->currentHatPattern = hatPat;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Hi-hat pattern (0-15)");
+
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(40);
+    int groovePat = sequencer->currentGroovePattern;
+    if (ImGui::DragInt("##groovePat", &groovePat, 0.1f, 0, 31, "G:%d")) {
+        sequencer->currentGroovePattern = groovePat;
+    }
+    if (ArrowKeyAdjust(groovePat, 0, 31)) sequencer->currentGroovePattern = groovePat;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Groove pattern (0-31)");
+
     // Compact voice parameters
     for (int i = 0; i < 6; i++) {
         RenderCompactVoiceRow(&sequencer->generativeVoices[i], i);
@@ -289,32 +340,10 @@ void ThemisUI::RenderVoicesAndPatterns()
     ImGui::SameLine();
     ImGui::Checkbox("Freeze##Melody", &sequencer->melodyFreezeEnabled);
 
-    // Scale and root on same line
-    ImGui::SetNextItemWidth(80);
-    if (ImGui::BeginCombo("Scale", GetScaleName(sequencer->melodyScale))) {
-        for (int s = 0; s < themis::NUM_SCALE_TYPES; s++) {
-            if (ImGui::Selectable(themis::scaleNames[s], sequencer->melodyScale == s)) {
-                sequencer->melodyScale = (themis::ScaleType)s;
-            }
-        }
-        ImGui::EndCombo();
-    }
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(50);
-    if (ImGui::BeginCombo("Root", themis::rootNoteNames[sequencer->melodyRoot])) {
-        for (int r = 0; r < 12; r++) {
-            if (ImGui::Selectable(themis::rootNoteNames[r], sequencer->melodyRoot == r)) {
-                sequencer->melodyRoot = r;
-            }
-        }
-        ImGui::EndCombo();
-    }
-
     ImGui::Separator();
 
     // Compact melody parameters
-    RenderCompactMelodyRow(&sequencer->melodyVoice, "CV");
-    RenderCompactMelodyRow(&sequencer->melodyMidiVoice, "MIDI");
+    RenderCompactMelodyRow(&sequencer->melodyVoice, "Melody", true);
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -381,6 +410,7 @@ void ThemisUI::RenderVoicesAndPatterns()
     if (ImGui::DragInt("##oct", &oct, 0.1f, -2, 2, "Oct%+d")) {
         sequencer->polyVoice.octaveOffset = oct;
     }
+    if (ArrowKeyAdjust(oct, -2, 2)) sequencer->polyVoice.octaveOffset = oct;
 
     // Show current chord info (and pending indicator)
     if (sequencer->polyVoice.active) {
@@ -429,7 +459,7 @@ void ThemisUI::RenderVoicesAndPatterns()
     // Style
     ImGui::SameLine();
     ImGui::SetNextItemWidth(65);
-    const char* styleNames[] = {"Chords", "Arps", "Poly"};
+    const char* styleNames[] = {"Chords", "Poly"};
     if (ImGui::BeginCombo("##rstyle", styleNames[sequencer->rhythmVoice.playStyle])) {
         for (int s = 0; s < themis::NUM_RHYTHM_PLAY_STYLES; s++) {
             if (ImGui::Selectable(styleNames[s], sequencer->rhythmVoice.playStyle == s)) {
@@ -447,6 +477,7 @@ void ThemisUI::RenderVoicesAndPatterns()
     if (ImGui::DragInt("##rOct", &rhythmOct, 0.1f, -2, 2, "Oct%+d")) {
         sequencer->rhythmVoice.octaveOffset = rhythmOct;
     }
+    if (ArrowKeyAdjust(rhythmOct, -2, 2)) sequencer->rhythmVoice.octaveOffset = rhythmOct;
 
     // MIDI Channel
     ImGui::SameLine();
@@ -455,6 +486,7 @@ void ThemisUI::RenderVoicesAndPatterns()
     if (ImGui::DragInt("##rCh", &rhythmMidiCh, 0.1f, 1, 16, "Ch%d")) {
         sequencer->rhythmVoice.midiChannel = rhythmMidiCh - 1;
     }
+    if (ArrowKeyAdjust(rhythmMidiCh, 1, 16)) sequencer->rhythmVoice.midiChannel = rhythmMidiCh - 1;
 
     // Manual mode parameters (only if in manual mode)
     if (sequencer->rhythmVoice.mode == themis::RHYTHM_MODE_MANUAL) {
@@ -485,21 +517,19 @@ void ThemisUI::RenderVoicesAndPatterns()
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Articulation: Staccato, Normal, Legato");
 
-        // Arp direction (only relevant for arp mode)
-        if (sequencer->rhythmVoice.playStyle == themis::RHYTHM_PLAY_ARPEGGIOS) {
-            ImGui::SameLine();
-            const char* arpDirNames[] = {"Up", "Dn", "U/D", "Rnd"};
-            ImGui::SetNextItemWidth(45);
-            if (ImGui::BeginCombo("##rarp", arpDirNames[sequencer->rhythmVoice.arpDirection])) {
-                for (int d = 0; d < themis::NUM_ARP_DIRECTIONS; d++) {
-                    if (ImGui::Selectable(arpDirNames[d], sequencer->rhythmVoice.arpDirection == d)) {
-                        sequencer->rhythmVoice.arpDirection = (themis::ArpDirection)d;
-                    }
+        // Inversion variation
+        ImGui::SameLine();
+        const char* invVarNames[] = {"Low", "High"};
+        ImGui::SetNextItemWidth(45);
+        if (ImGui::BeginCombo("##rinv", invVarNames[sequencer->rhythmVoice.inversionVariation])) {
+            for (int v = 0; v < themis::NUM_INV_VARIATIONS; v++) {
+                if (ImGui::Selectable(invVarNames[v], sequencer->rhythmVoice.inversionVariation == v)) {
+                    sequencer->rhythmVoice.inversionVariation = (themis::InversionVariation)v;
                 }
-                ImGui::EndCombo();
             }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Arpeggio direction");
+            ImGui::EndCombo();
         }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Inversion variation: Low = mostly root, High = mostly inverted");
 
         // Follow kick
         ImGui::SameLine();
@@ -515,7 +545,7 @@ void ThemisUI::RenderVoicesAndPatterns()
     // Show current state if active
     if (sequencer->rhythmVoice.active) {
         ImGui::SameLine();
-        const char* styleDisplayNames[] = {"Chords", "Arps", "Poly"};
+        const char* styleDisplayNames[] = {"Chords", "Poly"};
         ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.6f, 1.0f), "[%s I:%.0f%%]",
                           styleDisplayNames[sequencer->rhythmState.currentStyle],
                           sequencer->rhythmState.intensity * 100.0f);
@@ -526,116 +556,178 @@ void ThemisUI::RenderVoicesAndPatterns()
     ImGui::Spacing();
     ImGui::Separator();
 
-    // Acid Voice section
-    ImGui::Text("ACID VOICE");
+    // Bass Voice section
+    ImGui::Text("BASS VOICE");
     ImGui::SameLine();
-    if (ImGui::SmallButton("Rnd Acid")) {
-        sequencer->RandomizeAcidVoice();
+    if (ImGui::SmallButton("Rnd Bass")) {
+        sequencer->RandomizeBassVoice();
     }
 
     ImGui::Separator();
 
-    ImGui::PushID("AcidCompact");
+    ImGui::PushID("BassCompact");
 
-    // Active toggle and mode
-    ImGui::Checkbox("Acid", &sequencer->acidVoice.active);
+    // Row 1: Common controls
+    ImGui::Checkbox("Bass", &sequencer->bassVoice.active);
 
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(60);
-    const char* acidModeNames[] = {"Manual", "Auto"};
-    if (ImGui::BeginCombo("##amode", acidModeNames[sequencer->acidVoice.mode])) {
-        for (int m = 0; m < themis::NUM_ACID_MODES; m++) {
-            if (ImGui::Selectable(acidModeNames[m], sequencer->acidVoice.mode == m)) {
-                sequencer->acidVoice.mode = (themis::AcidMode)m;
-            }
-        }
-        ImGui::EndCombo();
-    }
+    ImGui::Checkbox("Freeze##bass", &sequencer->bassVoice.freezePattern);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Prevent automatic pattern changes");
 
-    // Activity level
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(65);
-    const char* acidActivityNames[] = {"Sparse", "Mod", "Busy"};
-    if (ImGui::BeginCombo("##aact", acidActivityNames[sequencer->acidVoice.activity])) {
-        for (int a = 0; a < themis::NUM_ACID_ACTIVITIES; a++) {
-            if (ImGui::Selectable(acidActivityNames[a], sequencer->acidVoice.activity == a)) {
-                sequencer->acidVoice.activity = (themis::AcidActivity)a;
-            }
-        }
-        ImGui::EndCombo();
-    }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Note density/activity");
-
-    // Octave
     ImGui::SameLine();
     ImGui::SetNextItemWidth(50);
-    int acidOct = sequencer->acidVoice.octaveOffset;
-    if (ImGui::DragInt("##aOct", &acidOct, 0.1f, -2, 2, "Oct%+d")) {
-        sequencer->acidVoice.octaveOffset = acidOct;
+    int bassOct = sequencer->bassVoice.octaveOffset;
+    if (ImGui::DragInt("##bOct", &bassOct, 0.1f, -2, 2, "Oct%+d")) {
+        sequencer->bassVoice.octaveOffset = bassOct;
     }
+    if (ArrowKeyAdjust(bassOct, -2, 2)) sequencer->bassVoice.octaveOffset = bassOct;
 
-    // MIDI Channel
     ImGui::SameLine();
     ImGui::SetNextItemWidth(45);
-    int acidMidiCh = sequencer->acidVoice.midiChannel + 1;
-    if (ImGui::DragInt("##aCh", &acidMidiCh, 0.1f, 1, 16, "Ch%d")) {
-        sequencer->acidVoice.midiChannel = acidMidiCh - 1;
+    int bassMidiCh = sequencer->bassVoice.midiChannel + 1;
+    if (ImGui::DragInt("##bCh", &bassMidiCh, 0.1f, 1, 16, "Ch%d")) {
+        sequencer->bassVoice.midiChannel = bassMidiCh - 1;
     }
+    if (ArrowKeyAdjust(bassMidiCh, 1, 16)) sequencer->bassVoice.midiChannel = bassMidiCh - 1;
 
-    // Manual mode parameters (pattern selection)
-    if (sequencer->acidVoice.mode == themis::ACID_MODE_MANUAL) {
-        // Rhythm pattern
-        ImGui::SetNextItemWidth(80);
-        char rhythmPatLabel[32];
-        themis::GetAcidPatternName(sequencer->acidVoice.rhythmPattern, 0, rhythmPatLabel, 16);
-        if (ImGui::BeginCombo("R##rpat", rhythmPatLabel)) {
-            for (int p = 0; p < themis::NUM_ACID_RHYTHM_PATTERNS; p++) {
-                char patName[32];
-                themis::GetAcidPatternName(p, 0, patName, 16);
-                if (ImGui::Selectable(patName, sequencer->acidVoice.rhythmPattern == p)) {
-                    sequencer->acidVoice.rhythmPattern = p;
-                    sequencer->acidState.currentRhythmPattern = p;
+    // Row 2: Rhythm pattern + rhythm AB
+    {
+        ImGui::Text("  Rhythm:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(85);
+        uint8_t patIdx = sequencer->bassState.currentPattern;
+        if (patIdx >= themis::NUM_BASS_PATTERNS) patIdx = 0;
+        const themis::BassPattern& pat = themis::bassPatterns[patIdx];
+        char patLabel[32];
+        if (pat.length != 16) {
+            snprintf(patLabel, sizeof(patLabel), "%s(%d)", pat.name, pat.length);
+        } else {
+            snprintf(patLabel, sizeof(patLabel), "%s", pat.name);
+        }
+        if (ImGui::BeginCombo("##bPat", patLabel)) {
+            for (int p = 0; p < themis::NUM_BASS_PATTERNS; p++) {
+                char itemLabel[32];
+                if (themis::bassPatterns[p].length != 16) {
+                    snprintf(itemLabel, sizeof(itemLabel), "%s (%d)", themis::bassPatterns[p].name, themis::bassPatterns[p].length);
+                } else {
+                    snprintf(itemLabel, sizeof(itemLabel), "%s", themis::bassPatterns[p].name);
+                }
+                if (ImGui::Selectable(itemLabel, patIdx == p)) {
+                    sequencer->bassState.currentPattern = p;
                 }
             }
             ImGui::EndCombo();
         }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rhythm pattern preset");
+        {
+            int bassPatInt = (int)patIdx;
+            if (ArrowKeyAdjust(bassPatInt, 0, themis::NUM_BASS_PATTERNS - 1))
+                sequencer->bassState.currentPattern = bassPatInt;
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Bass rhythm pattern");
 
-        // Melody pattern
+        // Rhythm variation mode
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(80);
-        char melodyPatLabel[32];
-        themis::GetAcidPatternName(0, sequencer->acidVoice.melodyPattern, melodyPatLabel, 16);
-        // Extract just melody name (after '/')
-        const char* melName = melodyPatLabel;
-        const char* slash = strchr(melodyPatLabel, '/');
-        if (slash) melName = slash + 1;
-        if (ImGui::BeginCombo("M##mpat", melName)) {
-            for (int p = 0; p < themis::NUM_ACID_MELODY_PATTERNS; p++) {
-                char patName[32];
-                themis::GetAcidPatternName(0, p, patName, 16);
-                const char* mName = patName;
-                const char* sl = strchr(patName, '/');
-                if (sl) mName = sl + 1;
-                if (ImGui::Selectable(mName, sequencer->acidVoice.melodyPattern == p)) {
-                    sequencer->acidVoice.melodyPattern = p;
-                    sequencer->acidState.currentMelodyPattern = p;
+        ImGui::SetNextItemWidth(45);
+        const char* varNames[] = {"Off", "AB"};
+        int rVarMode = (sequencer->bassVoice.rhythmVariation.mode == themis::VAR_MODE_OFF) ? 0 : 1;
+        if (ImGui::BeginCombo("##bRVar", varNames[rVarMode])) {
+            if (ImGui::Selectable("Off", rVarMode == 0)) {
+                sequencer->bassVoice.rhythmVariation.mode = themis::VAR_MODE_OFF;
+            }
+            if (ImGui::Selectable("AB", rVarMode == 1)) {
+                sequencer->bassVoice.rhythmVariation.mode = themis::VAR_MODE_AB;
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rhythm AB variation");
+
+        // Rhythm variation sequence
+        if (sequencer->bassVoice.rhythmVariation.mode != themis::VAR_MODE_OFF) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(65);
+            const char* seqNames[] = {"AAAA", "AAAB", "AABB", "ABAB", "ABAC", "AAABAAAC"};
+            int seqIdx = sequencer->bassVoice.rhythmVariation.sequence;
+            if (seqIdx >= themis::NUM_VARIATION_SEQUENCES) seqIdx = 0;
+            if (ImGui::BeginCombo("##bRSeq", seqNames[seqIdx])) {
+                for (int s = 0; s < themis::NUM_VARIATION_SEQUENCES; s++) {
+                    if (ImGui::Selectable(seqNames[s], seqIdx == s)) {
+                        sequencer->bassVoice.rhythmVariation.sequence = (themis::VariationSequence)s;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rhythm variation sequence");
+        }
+    }
+
+    // Row 3: Pitch pattern + pitch AB
+    {
+        ImGui::Text("  Pitch:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(85);
+        uint8_t pitchIdx = sequencer->bassState.currentPitchPattern;
+        if (pitchIdx >= themis::NUM_BASS_PITCH_PATTERNS) pitchIdx = 0;
+        const themis::BassPitchPattern& ppat = themis::bassPitchPatterns[pitchIdx];
+        char pitchLabel[32];
+        if (ppat.length != 16) {
+            snprintf(pitchLabel, sizeof(pitchLabel), "%s(%d)", ppat.name, ppat.length);
+        } else {
+            snprintf(pitchLabel, sizeof(pitchLabel), "%s", ppat.name);
+        }
+        if (ImGui::BeginCombo("##bPitch", pitchLabel)) {
+            for (int p = 0; p < themis::NUM_BASS_PITCH_PATTERNS; p++) {
+                char itemLabel[32];
+                if (themis::bassPitchPatterns[p].length != 16) {
+                    snprintf(itemLabel, sizeof(itemLabel), "%s (%d)", themis::bassPitchPatterns[p].name, themis::bassPitchPatterns[p].length);
+                } else {
+                    snprintf(itemLabel, sizeof(itemLabel), "%s", themis::bassPitchPatterns[p].name);
+                }
+                if (ImGui::Selectable(itemLabel, pitchIdx == p)) {
+                    sequencer->bassState.currentPitchPattern = p;
                 }
             }
             ImGui::EndCombo();
         }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Melody pattern preset");
-    }
+        {
+            int bassPitchInt = (int)pitchIdx;
+            if (ArrowKeyAdjust(bassPitchInt, 0, themis::NUM_BASS_PITCH_PATTERNS - 1))
+                sequencer->bassState.currentPitchPattern = bassPitchInt;
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Bass pitch pattern (note selection per step)");
 
-    // Show current pattern info if active
-    if (sequencer->acidVoice.active) {
+        // Pitch variation mode
         ImGui::SameLine();
-        char patternName[32];
-        themis::GetAcidPatternName(
-            sequencer->acidState.currentRhythmPattern,
-            sequencer->acidState.currentMelodyPattern,
-            patternName, 32);
-        ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.1f, 1.0f), "[%s]", patternName);
+        ImGui::SetNextItemWidth(45);
+        const char* varNames[] = {"Off", "AB"};
+        int pVarMode = (sequencer->bassVoice.pitchVariation.mode == themis::VAR_MODE_OFF) ? 0 : 1;
+        if (ImGui::BeginCombo("##bPVar", varNames[pVarMode])) {
+            if (ImGui::Selectable("Off", pVarMode == 0)) {
+                sequencer->bassVoice.pitchVariation.mode = themis::VAR_MODE_OFF;
+            }
+            if (ImGui::Selectable("AB", pVarMode == 1)) {
+                sequencer->bassVoice.pitchVariation.mode = themis::VAR_MODE_AB;
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pitch AB variation");
+
+        // Pitch variation sequence
+        if (sequencer->bassVoice.pitchVariation.mode != themis::VAR_MODE_OFF) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(65);
+            const char* seqNames[] = {"AAAA", "AAAB", "AABB", "ABAB", "ABAC", "AAABAAAC"};
+            int seqIdx = sequencer->bassVoice.pitchVariation.sequence;
+            if (seqIdx >= themis::NUM_VARIATION_SEQUENCES) seqIdx = 0;
+            if (ImGui::BeginCombo("##bPSeq", seqNames[seqIdx])) {
+                for (int s = 0; s < themis::NUM_VARIATION_SEQUENCES; s++) {
+                    if (ImGui::Selectable(seqNames[s], seqIdx == s)) {
+                        sequencer->bassVoice.pitchVariation.sequence = (themis::VariationSequence)s;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pitch variation sequence");
+        }
     }
 
     ImGui::PopID();
@@ -718,7 +810,7 @@ void ThemisUI::RenderCompactVoiceRow(themis::VoiceConfig* voice, int index)
     ImGui::PopID();
 }
 
-void ThemisUI::RenderCompactMelodyRow(themis::MelodyConfig* voice, const char* name)
+void ThemisUI::RenderCompactMelodyRow(themis::MelodyConfig* voice, const char* name, bool isMidi)
 {
     ImGui::PushID(name);
 
@@ -726,6 +818,16 @@ void ThemisUI::RenderCompactMelodyRow(themis::MelodyConfig* voice, const char* n
     char label[16];
     snprintf(label, sizeof(label), "%s##active", name);
     ImGui::Checkbox(label, &voice->active);
+
+    // MIDI channel (only for MIDI voice)
+    if (isMidi) {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(45);
+        int ch = sequencer->melodyMidiChannel + 1;
+        if (ImGui::DragInt("##mCh", &ch, 0.1f, 1, 16, "Ch%d")) {
+            sequencer->melodyMidiChannel = ch - 1;
+        }
+    }
 
     // Style
     ImGui::SameLine();
@@ -991,45 +1093,13 @@ void ThemisUI::RenderMelodyVoices()
 
     ImGui::Spacing();
 
-    // Shared settings
-    ImGui::Text("Shared Settings:");
-
-    // Scale
-    ImGui::SetNextItemWidth(100);
-    if (ImGui::BeginCombo("Scale", GetScaleName(sequencer->melodyScale))) {
-        for (int s = 0; s < themis::NUM_SCALE_TYPES; s++) {
-            if (ImGui::Selectable(themis::scaleNames[s], sequencer->melodyScale == s)) {
-                sequencer->melodyScale = (themis::ScaleType)s;
-            }
-        }
-        ImGui::EndCombo();
-    }
-
-    // Root note
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(60);
-    if (ImGui::BeginCombo("Root", themis::rootNoteNames[sequencer->melodyRoot])) {
-        for (int r = 0; r < 12; r++) {
-            if (ImGui::Selectable(themis::rootNoteNames[r], sequencer->melodyRoot == r)) {
-                sequencer->melodyRoot = r;
-            }
-        }
-        ImGui::EndCombo();
-    }
-
     // Freeze
-    ImGui::SameLine();
     ImGui::Checkbox("Freeze Melody", &sequencer->melodyFreezeEnabled);
 
     ImGui::Separator();
 
-    // CV Voice panel
-    RenderMelodyPanel(&sequencer->melodyVoice, "CV Voice", false);
-
-    ImGui::Spacing();
-
-    // MIDI Voice panel
-    RenderMelodyPanel(&sequencer->melodyMidiVoice, "MIDI Voice", true);
+    // Melody Voice panel
+    RenderMelodyPanel(&sequencer->melodyVoice, "Melody Voice", true);
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -1134,6 +1204,18 @@ void ThemisUI::RenderMelodyPanel(themis::MelodyConfig* voice, const char* name, 
 
         // Active toggle
         ImGui::Checkbox("Active", &voice->active);
+
+        // MIDI channel (only for MIDI voice)
+        if (isMidi) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(60);
+            int ch = sequencer->melodyMidiChannel + 1;
+            if (ImGui::InputInt("MIDI Ch", &ch)) {
+                if (ch < 1) ch = 1;
+                if (ch > 16) ch = 16;
+                sequencer->melodyMidiChannel = ch - 1;
+            }
+        }
 
         // Main style
         ImGui::SameLine();

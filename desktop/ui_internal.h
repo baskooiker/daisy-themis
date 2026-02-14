@@ -13,7 +13,7 @@
 #include "themis_data.h"
 #include "themis_patterns.h"
 #include "themis_chords.h"
-#include "themis_acid.h"
+#include "themis_bass.h"
 #include "audio.h"
 #include <imgui.h>
 #include <cstdio>

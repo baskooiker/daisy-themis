@@ -56,40 +56,29 @@ void UpdateClockFrequency();
 void TriggerGate24ppqn();
 
 /**
- * @brief Trigger 16th note gate output
+ * @brief Trigger 16th note gate output (OUT1)
  */
 void TriggerGate16th();
 
 /**
- * @brief Trigger OUT2 gate (configurable division)
- */
-void TriggerGate2();
-
-/**
- * @brief Trigger OUT3 gate (configurable division)
- */
-void TriggerGateQuarter();
-
-/**
- * @brief Trigger reset pulse output
+ * @brief Trigger reset pulse output (OUT2)
  */
 void TriggerGateReset();
 
 /**
- * @brief Check if OUT2 should trigger based on division setting
- * @param step Current step within bar (0-15)
- * @param bar Current bar number (0-7)
- * @return true if OUT2 should trigger
+ * @brief Trigger melody gate pulse (OUT3)
  */
-bool ShouldTriggerOut2(uint8_t step, uint8_t bar);
+void TriggerMelodyGate();
 
 /**
- * @brief Check if OUT3 should trigger based on division setting
- * @param step Current step within bar (0-15)
- * @param bar Current bar number (0-7)
- * @return true if OUT3 should trigger
+ * @brief Trigger bass gate pulse (OUT4)
  */
-bool ShouldTriggerOut3(uint8_t step, uint8_t bar);
+void TriggerBassGate();
+
+/**
+ * @brief Trigger analog drum gate pulse (GATE OUT pin)
+ */
+void TriggerAnalogDrumGate();
 
 // ============================================================================
 // MIDI TRANSPORT

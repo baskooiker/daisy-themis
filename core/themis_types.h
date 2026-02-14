@@ -202,13 +202,13 @@ struct ChordContext
 
 struct VariationConfig
 {
-    VariationMode mode;
-    VariationSequence sequence;
-    VariationGranularity granularity;
-    RhythmStyle styleB;
-    RhythmStyle styleC;
-    DensityLevel densityB;
-    DensityLevel densityC;
+    VariationMode mode = VAR_MODE_OFF;
+    VariationSequence sequence = VAR_SEQ_AAAB;
+    VariationGranularity granularity = VAR_GRAN_BAR;
+    RhythmStyle styleB = RHYTHM_EUCLIDEAN;
+    RhythmStyle styleC = RHYTHM_EUCLIDEAN;
+    DensityLevel densityB = DENSITY_LOW;
+    DensityLevel densityC = DENSITY_MEDIUM;
 };
 
 struct VoiceConfig
@@ -390,7 +390,6 @@ inline bool IsStepActive16(uint16_t pattern, uint8_t step)
 enum RhythmPlayStyle
 {
     RHYTHM_PLAY_CHORDS,         ///< Full chord stabs/pads
-    RHYTHM_PLAY_ARPEGGIOS,      ///< Arpeggiated chord tones
     RHYTHM_PLAY_POLYRHYTHM,     ///< Polyrhythmic moving patterns
     NUM_RHYTHM_PLAY_STYLES
 };
@@ -431,16 +430,14 @@ enum RhythmArticulation
 };
 
 /**
- * @enum ArpDirection
- * @brief Arpeggio direction for arpeggio mode
+ * @enum InversionVariation
+ * @brief Controls how chord inversions are weighted
  */
-enum ArpDirection
+enum InversionVariation
 {
-    ARP_UP,                     ///< Ascending
-    ARP_DOWN,                   ///< Descending
-    ARP_UP_DOWN,                ///< Ping-pong
-    ARP_RANDOM,                 ///< Random order
-    NUM_ARP_DIRECTIONS
+    INV_VAR_LOW,                ///< Mostly root position (70% root, 20% 1st, 10% 2nd)
+    INV_VAR_HIGH,               ///< Mostly inverted (20% root, 40% 1st, 40% 2nd)
+    NUM_INV_VARIATIONS
 };
 
 // ============================================================================
@@ -462,7 +459,7 @@ struct RhythmPlayerConfig
     RhythmPlayStyle playStyle;      ///< Current playing style
     RhythmActivity activity;        ///< Note density
     RhythmArticulation articulation; ///< Note length tendency
-    ArpDirection arpDirection;      ///< Arpeggio direction (for arp mode)
+    InversionVariation inversionVariation; ///< Chord inversion weighting
     bool followKick;                ///< Lock rhythm to kick pattern
     bool freezeStyle;               ///< Prevent automatic style changes
 
@@ -475,22 +472,10 @@ struct RhythmPlayerConfig
         playStyle = RHYTHM_PLAY_CHORDS;
         activity = ACTIVITY_MODERATE;
         articulation = ARTICULATION_NORMAL;
-        arpDirection = ARP_UP;
+        inversionVariation = INV_VAR_LOW;
         followKick = false;
         freezeStyle = false;
     }
-};
-
-/**
- * @enum InversionPattern
- * @brief How inversions are selected
- */
-enum InversionPattern
-{
-    INVERSION_CYCLE,            ///< Cycle through root -> 1st -> 2nd -> root
-    INVERSION_RANDOM,           ///< Random inversion each chord
-    INVERSION_ROOT_ONLY,        ///< Always use root position
-    NUM_INVERSION_PATTERNS
 };
 
 /**
@@ -508,10 +493,6 @@ struct RhythmPlayerState
     // Pattern position
     uint8_t patternPosition;        ///< Position in current rhythm pattern
     uint8_t barPosition;            ///< Position within bar (0-15)
-
-    // Arpeggio state
-    uint8_t arpIndex;               ///< Current arpeggio note index
-    int8_t arpDirection;            ///< +1 ascending, -1 descending
 
     // Polyrhythm state
     uint8_t polyCounter1;           ///< Counter for polyrhythm layer 1
@@ -533,7 +514,7 @@ struct RhythmPlayerState
 
     // Chord inversion state
     uint8_t currentInversion;       ///< 0=root, 1=first, 2=second
-    InversionPattern inversionPattern; ///< How inversions are selected
+    InversionVariation inversionVariation; ///< How inversions are weighted
 
     void Init()
     {
@@ -544,9 +525,6 @@ struct RhythmPlayerState
 
         patternPosition = 0;
         barPosition = 0;
-
-        arpIndex = 0;
-        arpDirection = 1;
 
         polyCounter1 = 0;
         polyCounter2 = 0;
@@ -565,7 +543,7 @@ struct RhythmPlayerState
         randomizeTimer = 128;       // ~4 bars
 
         currentInversion = 0;
-        inversionPattern = INVERSION_CYCLE;
+        inversionVariation = INV_VAR_LOW;
     }
 };
 
@@ -608,6 +586,8 @@ enum VibeType
     VIBE_MINOR,       ///< Natural minor, harmonic minor, aeolian progressions
     VIBE_WHOLE_TONE,  ///< Whole tone scale, augmented chords, ambiguous tonality
     VIBE_MAJOR,       ///< Major scale, ionian, bright progressions
+    VIBE_HALF_WHOLE,  ///< Half-whole diminished (dominant diminished)
+    VIBE_WHOLE_HALF,  ///< Whole-half diminished
     NUM_VIBE_TYPES
 };
 
@@ -640,7 +620,7 @@ struct ChordRandomizerConfig
     void Init()
     {
         freezeEnabled = false;
-        enabledVibes = 0x07;  // All vibes enabled
+        enabledVibes = 0x1F;  // All 5 vibes enabled
         for (int i = 0; i < NUM_VIBE_TYPES; i++) {
             enabledProgressions[i] = 0xFFFFFFFF;  // All enabled
         }
@@ -668,174 +648,83 @@ struct ChordRandomizerState
 };
 
 // ============================================================================
-// ACID VOICE ENUMS
+// BASS PITCH TYPES
 // ============================================================================
 
-/**
- * @enum AcidMode
- * @brief Operating mode for acid voice
- */
-enum AcidMode
-{
-    ACID_MODE_MANUAL,           ///< Pattern selection via config
-    ACID_MODE_AUTO,             ///< Auto-vary patterns with probability
-    NUM_ACID_MODES
-};
-
-/**
- * @enum AcidGateLength
- * @brief Gate/note length options
- */
-enum AcidGateLength
-{
-    ACID_GATE_SHORT,            ///< Very short (1/32)
-    ACID_GATE_MEDIUM,           ///< Medium (1/16)
-    ACID_GATE_LONG,             ///< Long (1/8)
-    ACID_GATE_TIE,              ///< Tied to next note (slide)
-    NUM_ACID_GATE_LENGTHS
-};
-
-/**
- * @enum AcidActivity
- * @brief Overall activity/density level
- */
-enum AcidActivity
-{
-    ACID_ACTIVITY_SPARSE,       ///< Few notes, lots of space
-    ACID_ACTIVITY_MODERATE,     ///< Balanced
-    ACID_ACTIVITY_BUSY,         ///< Dense, driving pattern
-    NUM_ACID_ACTIVITIES
+enum BassPitchType : uint8_t {
+    BASS_PITCH_ROOT = 0,      // Chord root
+    BASS_PITCH_OCT_UP,        // Root +12
+    BASS_PITCH_OCT_DOWN,      // Root -12
+    BASS_PITCH_THIRD,         // Chord 3rd (from chordShapes)
+    BASS_PITCH_FIFTH,         // Chord 5th
+    BASS_PITCH_SEVENTH,       // Chord 7th (fallback to 5th if triad)
+    BASS_PITCH_SCALE_2,       // +2 semitones (minor 2nd degree)
+    BASS_PITCH_SCALE_4,       // +5 semitones (perfect 4th)
+    BASS_PITCH_SCALE_6,       // +8 semitones (minor 6th)
+    BASS_PITCH_APPROACH_UP,   // +1 chromatic
+    BASS_PITCH_APPROACH_DN,   // -1 chromatic
+    NUM_BASS_PITCH_TYPES
 };
 
 // ============================================================================
-// ACID VOICE STRUCTS
+// BASS VOICE STRUCTS
 // ============================================================================
 
 /**
- * @struct AcidStep
- * @brief Single step in an acid pattern
- *
- * Packs trigger, accent, slide, octave shift, and note data.
+ * @struct BassConfig
+ * @brief Configuration for bass voice
  */
-struct AcidStep
+struct BassConfig
 {
-    uint8_t trigger : 1;        ///< Note triggers on this step
-    uint8_t accent : 1;         ///< Accent (velocity 127 vs 64)
-    uint8_t slide : 1;          ///< Slide to next note (overlap MIDI)
-    uint8_t hold : 1;           ///< Extended gate length
-    int8_t noteOffset : 4;      ///< Scale degree offset (-8 to +7)
-};
-
-/**
- * @struct AcidConfig
- * @brief Configuration for acid voice
- */
-struct AcidConfig
-{
-    bool active;                    ///< Is acid voice enabled
-    AcidMode mode;                  ///< Manual or Auto mode
+    bool active;                    ///< Is bass voice enabled
     uint8_t midiChannel;            ///< MIDI output channel (0-15)
     int8_t octaveOffset;            ///< Base octave offset (-2 to +2)
-
-    // Pattern selection (manual mode)
-    uint8_t rhythmPattern;          ///< Which rhythm pattern preset (0-15)
-    uint8_t melodyPattern;          ///< Which melody pattern preset (0-15)
-
-    // Activity level
-    AcidActivity activity;          ///< Overall density/activity
-
-    // Probability settings (0-100)
-    uint8_t triggerProb;            ///< Probability a step triggers (100 = always)
-    uint8_t accentProb;             ///< Probability of random accent
-    uint8_t slideProb;              ///< Probability of random slide
-    uint8_t octaveUpProb;           ///< Probability of octave up shift
-    uint8_t octaveDownProb;         ///< Probability of octave down shift
-    uint8_t fillProb;               ///< Probability of end-of-bar fill
+    uint8_t patternIndex;           ///< Current pattern index (0-15)
+    uint8_t pitchPatternIndex;      ///< Current pitch pattern index
+    bool freezePattern;             ///< Prevent random pattern selection
+    VariationConfig rhythmVariation; ///< AB variation for rhythm patterns
+    VariationConfig pitchVariation;  ///< AB variation for pitch patterns (independent)
 
     void Init()
     {
-        active = true;              // Active by default
-        mode = ACID_MODE_AUTO;
-        midiChannel = 4;            // Default to channel 5 (0-indexed)
-        octaveOffset = 0;           // Middle register by default
-        rhythmPattern = 0;
-        melodyPattern = 0;
-        activity = ACID_ACTIVITY_MODERATE;
-        triggerProb = 90;           // 90% trigger probability
-        accentProb = 20;            // 20% random accent
-        slideProb = 30;             // 30% random slide
-        octaveUpProb = 15;          // 15% octave up
-        octaveDownProb = 10;        // 10% octave down
-        fillProb = 40;              // 40% end-of-bar fill
+        active = true;
+        midiChannel = 4;            // Default: channel 5
+        octaveOffset = -1;          // Bass register
+        patternIndex = 0;
+        pitchPatternIndex = 0;
+        freezePattern = false;
+        rhythmVariation.mode = VAR_MODE_OFF;
+        rhythmVariation.sequence = VAR_SEQ_AAAB;
+        rhythmVariation.granularity = VAR_GRAN_BAR;
+        pitchVariation.mode = VAR_MODE_OFF;
+        pitchVariation.sequence = VAR_SEQ_AAAB;
+        pitchVariation.granularity = VAR_GRAN_BAR;
     }
 };
 
 /**
- * @struct AcidState
- * @brief Runtime state for acid voice
+ * @struct BassState
+ * @brief Runtime state for bass voice
  */
-struct AcidState
+struct BassState
 {
-    // Pattern position
-    uint8_t stepPosition;           ///< Current step (0-15)
-    uint8_t barPosition;            ///< Current bar for fill timing
-
-    // Current pattern data (runtime, may be modified by probability)
-    uint8_t currentRhythmPattern;   ///< Active rhythm pattern index
-    uint8_t currentMelodyPattern;   ///< Active melody pattern index
-
-    // Note tracking for slides
-    int8_t currentNote;             ///< Currently playing note (-1 if none)
-    int8_t previousNote;            ///< Previous note (for slide reference)
-    bool slideActive;               ///< Is a slide in progress
+    uint8_t currentPattern;         ///< Active A pattern index
+    uint8_t currentPatternB;        ///< Active B pattern index
+    uint8_t currentPitchPattern;    ///< Active A pitch pattern index
+    uint8_t currentPitchPatternB;   ///< Active B pitch pattern index
+    int8_t currentNote;             ///< Currently playing MIDI note (-1 if none)
     uint8_t gateStepsRemaining;     ///< Steps until note-off
-
-    // Fill state
-    bool inFill;                    ///< Currently playing a fill
-    uint8_t fillStepsRemaining;     ///< Steps remaining in fill
-
-    // Auto mode variation
-    uint8_t variationTimer;         ///< Steps until pattern variation
-    uint8_t lastRandomValue;        ///< For seeded variation
+    uint8_t chordCyclesUntilChange; ///< Chord cycles remaining before next pattern change
 
     void Init()
     {
-        stepPosition = 0;
-        barPosition = 0;
-        currentRhythmPattern = 0;
-        currentMelodyPattern = 0;
+        currentPattern = 0;
+        currentPatternB = 0;
+        currentPitchPattern = 0;
+        currentPitchPatternB = 0;
         currentNote = -1;
-        previousNote = -1;
-        slideActive = false;
         gateStepsRemaining = 0;
-        inFill = false;
-        fillStepsRemaining = 0;
-        variationTimer = 64;        // ~2 bars
-        lastRandomValue = 0;
-    }
-};
-
-/**
- * @struct AcidTrigger
- * @brief Queue entry for scheduled acid triggers
- */
-struct AcidTrigger
-{
-    int8_t note;                    ///< MIDI note number
-    uint8_t velocity;               ///< MIDI velocity (64 or 127)
-    uint64_t fireSample;            ///< When to fire
-    bool active;                    ///< Is this entry valid
-    bool isNoteOff;                 ///< True for note-off events
-    bool isSlideNote;               ///< True if this overlaps for slide
-
-    void Init()
-    {
-        note = 0;
-        velocity = 64;
-        fireSample = 0;
-        active = false;
-        isNoteOff = false;
-        isSlideNote = false;
+        chordCyclesUntilChange = 0;
     }
 };
 

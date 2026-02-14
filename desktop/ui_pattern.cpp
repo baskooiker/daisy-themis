@@ -203,16 +203,12 @@ void ThemisUI::RenderPatternVisualization()
 
     ImGui::Separator();
 
-    // Melody voice patterns
-    themis::MelodyConfig* melodyVoices[2] = {
-        &sequencer->melodyVoice,
-        &sequencer->melodyMidiVoice
-    };
-    const char* melodyNames[2] = { "MelCV", "MelMIDI" };
-    const char* melodyFullNames[2] = { "Melody CV", "Melody MIDI" };
-
-    for (int m = 0; m < 2; m++) {
-        themis::MelodyConfig* melody = melodyVoices[m];
+    // Melody voice pattern
+    {
+        themis::MelodyConfig* melody = &sequencer->melodyVoice;
+        const char* melodyName = "Melody";
+        const char* melodyFullName = "Melody";
+        int m = 0;
 
         // Get current variation
         uint8_t var = themis::GetCurrentVariation(&melody->variation,
@@ -252,7 +248,7 @@ void ThemisUI::RenderPatternVisualization()
             "Step: %d, Bar: %d\n"
             "Note Sequence A: [%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d]\n"
             "isEmpty: %s\n",
-            melodyFullNames[m],
+            melodyFullName,
             melody->active ? "YES" : "NO",
             themis::melodyStyleNames[melody->style],
             melody->subStyle,
@@ -274,7 +270,7 @@ void ThemisUI::RenderPatternVisualization()
 
         // Clickable melody name
         ImGui::PushID(m + 100);
-        if (ImGui::Selectable(melodyNames[m], false, ImGuiSelectableFlags_None, ImVec2(55, 0))) {
+        if (ImGui::Selectable(melodyName, false, ImGuiSelectableFlags_None, ImVec2(55, 0))) {
             SDL_SetClipboardText(melodyDebug);
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Click to copy debug info");
@@ -381,7 +377,7 @@ void ThemisUI::RenderPatternVisualization()
     ImGui::PushID("RhythmViz");
     if (sequencer->rhythmVoice.active) {
         const char* modeNames[] = {"Manual", "Morph"};
-        const char* styleNames[] = {"Chords", "Arpeggios", "Polyrhythm"};
+        const char* styleNames[] = {"Chords", "Polyrhythm"};
         const char* activityNames[] = {"Sparse", "Moderate", "Busy"};
 
         // Create debug string for rhythm player
@@ -450,6 +446,259 @@ void ThemisUI::RenderPatternVisualization()
             sequencer->rhythmState.barPosition + 1);
     } else {
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Rhythm (inactive)");
+    }
+    ImGui::PopID();
+
+    ImGui::Separator();
+
+    // Bass Voice pattern visualization
+    ImGui::PushID("BassViz");
+    if (sequencer->bassVoice.active) {
+        uint8_t bassPatIdx = sequencer->bassState.currentPattern;
+        if (bassPatIdx >= themis::NUM_BASS_PATTERNS) bassPatIdx = 0;
+        const themis::BassPattern& bassPat = themis::bassPatterns[bassPatIdx];
+
+        // Get pitch pattern info for debug
+        uint8_t dbgPitchIdx = sequencer->bassState.currentPitchPattern;
+        if (dbgPitchIdx >= themis::NUM_BASS_PITCH_PATTERNS) dbgPitchIdx = 0;
+        const char* dbgPitchName = themis::bassPitchPatterns[dbgPitchIdx].name;
+
+        // Create debug string for bass voice
+        char bassDebug[512];
+        snprintf(bassDebug, sizeof(bassDebug),
+            "=== BASS VOICE DEBUG ===\n"
+            "Active: YES\n"
+            "Pattern: %s (#%d, len=%d)\n"
+            "Pitch Pattern: %s (#%d, len=%d)\n"
+            "Triggers: 0x%08X\n"
+            "Accents:  0x%08X\n"
+            "Holds:    0x%08X\n"
+            "Freeze: %s\n"
+            "Octave Offset: %d\n"
+            "MIDI Channel: %d\n"
+            "Current Note: %d\n"
+            "Gate Remaining: %d\n",
+            bassPat.name, bassPatIdx, bassPat.length,
+            dbgPitchName, dbgPitchIdx, themis::bassPitchPatterns[dbgPitchIdx].length,
+            bassPat.triggers, bassPat.accents, bassPat.holds,
+            sequencer->bassVoice.freezePattern ? "YES" : "NO",
+            sequencer->bassVoice.octaveOffset,
+            sequencer->bassVoice.midiChannel + 1,
+            sequencer->bassState.currentNote,
+            sequencer->bassState.gateStepsRemaining);
+
+        // Clickable bass name
+        if (ImGui::Selectable("Bass", false, ImGuiSelectableFlags_None, ImVec2(40, 0))) {
+            SDL_SetClipboardText(bassDebug);
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Click to copy debug info");
+        ImGui::SameLine();
+
+        // Determine rhythm A/B state independently
+        bool rhythmBIsActive = false;
+        if (sequencer->bassVoice.rhythmVariation.mode != themis::VAR_MODE_OFF) {
+            uint8_t var = themis::GetCurrentVariation(&sequencer->bassVoice.rhythmVariation,
+                sequencer->currentStep, sequencer->barCounter);
+            rhythmBIsActive = (var >= 1);
+        }
+        bool rhythmAIsActive = !rhythmBIsActive;
+
+        // Determine pitch A/B state independently
+        bool pitchBIsActive = false;
+        if (sequencer->bassVoice.pitchVariation.mode != themis::VAR_MODE_OFF) {
+            uint8_t var = themis::GetCurrentVariation(&sequencer->bassVoice.pitchVariation,
+                sequencer->currentStep, sequencer->barCounter);
+            pitchBIsActive = (var >= 1);
+        }
+        bool pitchAIsActive = !pitchBIsActive;
+
+        // Rhythm pattern label with length
+        char rhythmLabel[32];
+        if (bassPat.length != 16) {
+            snprintf(rhythmLabel, sizeof(rhythmLabel), "A: %s(%d) |", bassPat.name, bassPat.length);
+        } else {
+            snprintf(rhythmLabel, sizeof(rhythmLabel), "A: %s |", bassPat.name);
+        }
+        ImGui::Text("%s", rhythmLabel);
+        ImGui::SameLine();
+
+        // Render A rhythm pattern (variable length)
+        uint8_t rhythmStep = sequencer->currentStep % bassPat.length;
+        for (int i = 0; i < bassPat.length; i++) {
+            bool isTrigger = themis::IsStepActiveVar(bassPat.triggers, i, bassPat.length);
+            bool isAccent = themis::IsStepActiveVar(bassPat.accents, i, bassPat.length);
+            bool isHold = themis::IsStepActiveVar(bassPat.holds, i, bassPat.length);
+            bool isCurrent = (i == (int)rhythmStep && sequencer->isRunning && rhythmAIsActive);
+
+            if (isCurrent) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+            } else if (isAccent && isTrigger) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.7f, 0.1f, 1.0f));
+            }
+
+            const char* sym;
+            if (isTrigger && isHold) sym = "O";
+            else if (isTrigger && isAccent) sym = "X";
+            else if (isTrigger) sym = "x";
+            else sym = ".";
+
+            ImGui::Text("%s", sym);
+
+            if (isCurrent || (isAccent && isTrigger)) {
+                ImGui::PopStyleColor();
+            }
+
+            if (i < bassPat.length - 1) ImGui::SameLine(0, 2);
+            // Add bar separator for 32-step patterns
+            if (i == 15 && bassPat.length > 16) {
+                ImGui::SameLine(0, 10);
+                ImGui::Text("|");
+                ImGui::SameLine(0, 10);
+            }
+        }
+
+        // Pitch pattern row (A) - variable length
+        uint8_t pitchIdx = sequencer->bassState.currentPitchPattern;
+        if (pitchIdx >= themis::NUM_BASS_PITCH_PATTERNS) pitchIdx = 0;
+        const themis::BassPitchPattern& pitchPat = themis::bassPitchPatterns[pitchIdx];
+
+        static const char* pitchSymbols[] = {
+            "R", "U", "D", "3", "5", "7", "2", "4", "6", "+", "-"
+        };
+
+        char pitchLabel[32];
+        if (pitchPat.length != 16) {
+            snprintf(pitchLabel, sizeof(pitchLabel), "  P: %s(%d) |", pitchPat.name, pitchPat.length);
+        } else {
+            snprintf(pitchLabel, sizeof(pitchLabel), "  P: %s |", pitchPat.name);
+        }
+        ImGui::Text("%s", pitchLabel);
+        ImGui::SameLine();
+
+        uint8_t pitchStep = sequencer->currentStep % pitchPat.length;
+        for (int i = 0; i < pitchPat.length; i++) {
+            uint8_t pt = pitchPat.steps[i];
+            bool isCurrent = (i == (int)pitchStep && sequencer->isRunning && pitchAIsActive);
+            bool isRoot = (pt == themis::BASS_PITCH_ROOT);
+
+            if (isCurrent) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+            } else if (!isRoot) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.8f, 1.0f, 1.0f));
+            }
+
+            const char* sym = (pt < themis::NUM_BASS_PITCH_TYPES) ? pitchSymbols[pt] : "?";
+            ImGui::Text("%s", sym);
+
+            if (isCurrent || !isRoot) {
+                ImGui::PopStyleColor();
+            }
+
+            if (i < pitchPat.length - 1) ImGui::SameLine(0, 2);
+            if (i == 15 && pitchPat.length > 16) {
+                ImGui::SameLine(0, 10);
+                ImGui::Text("|");
+                ImGui::SameLine(0, 10);
+            }
+        }
+
+        // Show B rhythm pattern row when rhythm variation is active
+        if (sequencer->bassVoice.rhythmVariation.mode != themis::VAR_MODE_OFF) {
+            uint8_t bPatIdx = sequencer->bassState.currentPatternB;
+            if (bPatIdx >= themis::NUM_BASS_PATTERNS) bPatIdx = 0;
+            const themis::BassPattern& bPat = themis::bassPatterns[bPatIdx];
+
+            char bLabel[32];
+            if (bPat.length != 16) {
+                snprintf(bLabel, sizeof(bLabel), "  B: %s(%d) |", bPat.name, bPat.length);
+            } else {
+                snprintf(bLabel, sizeof(bLabel), "  B: %s |", bPat.name);
+            }
+            ImGui::Text("%s", bLabel);
+            ImGui::SameLine();
+
+            uint8_t bRhythmStep = sequencer->currentStep % bPat.length;
+            for (int i = 0; i < bPat.length; i++) {
+                bool isTrigger = themis::IsStepActiveVar(bPat.triggers, i, bPat.length);
+                bool isAccent = themis::IsStepActiveVar(bPat.accents, i, bPat.length);
+                bool isHold = themis::IsStepActiveVar(bPat.holds, i, bPat.length);
+                bool isCurrent = (i == (int)bRhythmStep && sequencer->isRunning && rhythmBIsActive);
+
+                if (isCurrent) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+                } else if (isAccent && isTrigger) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.5f, 0.1f, 0.7f));
+                } else {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.8f, 0.7f));
+                }
+
+                const char* sym;
+                if (isTrigger && isHold) sym = "O";
+                else if (isTrigger && isAccent) sym = "X";
+                else if (isTrigger) sym = "x";
+                else sym = ".";
+
+                ImGui::Text("%s", sym);
+                ImGui::PopStyleColor();
+
+                if (i < bPat.length - 1) ImGui::SameLine(0, 2);
+                if (i == 15 && bPat.length > 16) {
+                    ImGui::SameLine(0, 10);
+                    ImGui::Text("|");
+                    ImGui::SameLine(0, 10);
+                }
+            }
+        }
+
+        // Show B pitch pattern row when pitch variation is active
+        if (sequencer->bassVoice.pitchVariation.mode != themis::VAR_MODE_OFF) {
+            uint8_t bPitchIdx = sequencer->bassState.currentPitchPatternB;
+            if (bPitchIdx >= themis::NUM_BASS_PITCH_PATTERNS) bPitchIdx = 0;
+            const themis::BassPitchPattern& bPitchPat = themis::bassPitchPatterns[bPitchIdx];
+
+            char bpLabel[32];
+            if (bPitchPat.length != 16) {
+                snprintf(bpLabel, sizeof(bpLabel), "  P: %s(%d) |", bPitchPat.name, bPitchPat.length);
+            } else {
+                snprintf(bpLabel, sizeof(bpLabel), "  P: %s |", bPitchPat.name);
+            }
+            ImGui::Text("%s", bpLabel);
+            ImGui::SameLine();
+
+            uint8_t bPitchStep = sequencer->currentStep % bPitchPat.length;
+            for (int i = 0; i < bPitchPat.length; i++) {
+                uint8_t pt = bPitchPat.steps[i];
+                bool isCurrent = (i == (int)bPitchStep && sequencer->isRunning && pitchBIsActive);
+                bool isRoot = (pt == themis::BASS_PITCH_ROOT);
+
+                if (isCurrent) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+                } else if (!isRoot) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.5f, 0.7f, 0.7f));
+                } else {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.8f, 0.7f));
+                }
+
+                const char* sym = (pt < themis::NUM_BASS_PITCH_TYPES) ? pitchSymbols[pt] : "?";
+                ImGui::Text("%s", sym);
+                ImGui::PopStyleColor();
+
+                if (i < bPitchPat.length - 1) ImGui::SameLine(0, 2);
+                if (i == 15 && bPitchPat.length > 16) {
+                    ImGui::SameLine(0, 10);
+                    ImGui::Text("|");
+                    ImGui::SameLine(0, 10);
+                }
+            }
+        }
+
+        // Legend and info
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.8f, 1.0f),
+            "    Oct: %+d | Note: %d | x=hit X=accent O=hold | R=root U=8va 3=3rd 5=5th 7=7th",
+            sequencer->bassVoice.octaveOffset,
+            sequencer->bassState.currentNote);
+    } else {
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Bass   (inactive)");
     }
     ImGui::PopID();
 }

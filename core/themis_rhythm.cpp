@@ -35,14 +35,6 @@ static const uint16_t chordPatternsBusy[] = {
     0xEEEE   // Very dense
 };
 
-// Arpeggio patterns - note density patterns
-static const uint16_t arpPatterns[] = {
-    0x8888,  // Quarter notes
-    0xAAAA,  // 8th notes
-    0xCCCC,  // Triplet feel
-    0xEEEE   // Dense
-};
-
 // ============================================================================
 // INTENSITY SYSTEM
 // ============================================================================
@@ -138,9 +130,8 @@ uint16_t GetRhythmPattern(
                     return chordPatternsMedium[patternIndex];
             }
 
-        case RHYTHM_PLAY_ARPEGGIOS:
         case RHYTHM_PLAY_POLYRHYTHM:
-            return arpPatterns[patternIndex];
+            return chordPatternsMedium[patternIndex];
 
         default:
             return chordPatternsMedium[0];
@@ -177,23 +168,31 @@ void ApplyInversion(int8_t* notes, uint8_t numNotes, uint8_t inversion)
 
 uint8_t GetNextInversion(RhythmPlayerState& state, uint32_t seed)
 {
-    uint8_t nextInversion = state.currentInversion;
+    uint8_t nextInversion;
+    uint8_t roll = seed % 100;
 
-    switch (state.inversionPattern) {
-        case INVERSION_CYCLE:
-            // Cycle: root -> 1st -> 2nd -> root
-            nextInversion = (state.currentInversion + 1) % 3;
+    switch (state.inversionVariation) {
+        case INV_VAR_HIGH:
+            // Mostly inverted: 20% root, 40% 1st, 40% 2nd
+            if (roll < 20) {
+                nextInversion = 0;
+            } else if (roll < 60) {
+                nextInversion = 1;
+            } else {
+                nextInversion = 2;
+            }
             break;
 
-        case INVERSION_RANDOM:
-            // Random inversion (0-2)
-            nextInversion = seed % 3;
-            break;
-
-        case INVERSION_ROOT_ONLY:
+        case INV_VAR_LOW:
         default:
-            // Always root position
-            nextInversion = 0;
+            // Mostly root: 70% root, 20% 1st, 10% 2nd
+            if (roll < 70) {
+                nextInversion = 0;
+            } else if (roll < 90) {
+                nextInversion = 1;
+            } else {
+                nextInversion = 2;
+            }
             break;
     }
 
@@ -225,37 +224,6 @@ void GenerateChordVoicing(
 
     // Apply inversion
     ApplyInversion(outNotes, outNumNotes, inversion);
-}
-
-// ============================================================================
-// ARPEGGIO
-// ============================================================================
-
-int8_t GetArpeggioNote(
-    const ChordContext& chordCtx,
-    RhythmPlayerState& state,
-    int8_t octaveOffset)
-{
-    const ChordShape& shape = chordShapes[chordCtx.chordType];
-    int8_t baseNote = 48 + (octaveOffset * 12) + chordCtx.chordRoot;
-
-    // Get note at current arp index
-    uint8_t noteIndex = state.arpIndex % shape.numNotes;
-    int8_t note = baseNote + shape.intervals[noteIndex];
-
-    // Update arp index based on direction
-    state.arpIndex += state.arpDirection;
-
-    // Handle direction changes at boundaries
-    if (state.arpIndex >= shape.numNotes) {
-        state.arpIndex = shape.numNotes - 2;
-        state.arpDirection = -1;
-    } else if (state.arpIndex == 255) {  // Wrapped around (unsigned)
-        state.arpIndex = 1;
-        state.arpDirection = 1;
-    }
-
-    return note;
 }
 
 // ============================================================================
@@ -338,11 +306,7 @@ bool ShouldRhythmPlay(
         return true;  // Always process, let ProcessPolyrhythm decide
     }
 
-    // Intensity affects probability
-    uint8_t prob = (uint8_t)(state.intensity * 30);
-    bool randomBoost = ((seed & 0xFF) < prob);
-
-    return patternActive || (randomBoost && state.currentStyle == RHYTHM_PLAY_ARPEGGIOS);
+    return patternActive;
 }
 
 // ============================================================================
@@ -402,9 +366,6 @@ uint8_t CalculateRhythmDuration(
         case RHYTHM_PLAY_CHORDS:
             baseDuration = 4;  // Chords sustain longer
             break;
-        case RHYTHM_PLAY_ARPEGGIOS:
-            baseDuration = 2;  // Arps are usually staccato
-            break;
         case RHYTHM_PLAY_POLYRHYTHM:
             baseDuration = 3;  // Poly varies
             break;
@@ -457,24 +418,8 @@ void RandomizeRhythmParams(
     // Randomize articulation
     config.articulation = (RhythmArticulation)((seed >> 4) % NUM_RHYTHM_ARTICULATIONS);
 
-    // Randomize arp direction
-    config.arpDirection = (ArpDirection)((seed >> 8) % NUM_ARP_DIRECTIONS);
-
-    // Update arp state based on direction
-    switch (config.arpDirection) {
-        case ARP_DOWN:
-            state.arpDirection = -1;
-            break;
-        case ARP_UP_DOWN:
-            state.arpDirection = (seed & 0x100) ? 1 : -1;
-            break;
-        case ARP_RANDOM:
-            // Random is handled per-note
-            break;
-        default:
-            state.arpDirection = 1;
-            break;
-    }
+    // Randomize inversion variation
+    config.inversionVariation = (InversionVariation)((seed >> 8) % NUM_INV_VARIATIONS);
 
     // Randomize polyrhythm lengths
     uint8_t polyOptions1[] = {3, 5, 7};
@@ -485,15 +430,8 @@ void RandomizeRhythmParams(
     // Randomize follow kick
     config.followKick = ((seed >> 16) & 0x03) == 0;
 
-    // Randomize inversion pattern (60% cycle, 30% random, 10% root-only)
-    uint8_t invRand = (seed >> 18) % 10;
-    if (invRand < 6) {
-        state.inversionPattern = INVERSION_CYCLE;
-    } else if (invRand < 9) {
-        state.inversionPattern = INVERSION_RANDOM;
-    } else {
-        state.inversionPattern = INVERSION_ROOT_ONLY;
-    }
+    // Set inversion variation on state to match config
+    state.inversionVariation = config.inversionVariation;
 
     // Set intensity target based on activity
     switch (config.activity) {
@@ -573,16 +511,6 @@ bool ProcessRhythmStep(
             break;
         }
 
-        case RHYTHM_PLAY_ARPEGGIOS: {
-            // Handle random arp direction
-            if (config.arpDirection == ARP_RANDOM) {
-                state.arpDirection = ((seed & 0x01) == 0) ? 1 : -1;
-            }
-            outNotes[0] = GetArpeggioNote(chordCtx, state, config.octaveOffset);
-            outNumNotes = 1;
-            break;
-        }
-
         case RHYTHM_PLAY_POLYRHYTHM:
             if (!ProcessPolyrhythm(chordCtx, state, config.octaveOffset, step, outNotes, outNumNotes)) {
                 return false;  // Poly pattern didn't trigger
@@ -591,36 +519,6 @@ bool ProcessRhythmStep(
 
         default:
             return false;
-    }
-
-    // If morphing between styles, sometimes blend (play from target style too)
-    if (state.styleMorphProgress < 1.0f && state.styleMorphProgress > 0.3f) {
-        // 30% chance to also play something from target style
-        if ((seed & 0x0F) < 5) {
-            int8_t extraNote = -1;
-
-            switch (state.targetStyle) {
-                case RHYTHM_PLAY_ARPEGGIOS:
-                    extraNote = GetArpeggioNote(chordCtx, state, config.octaveOffset);
-                    break;
-                default:
-                    break;
-            }
-
-            if (extraNote != -1 && outNumNotes < 6) {
-                // Avoid duplicates
-                bool duplicate = false;
-                for (uint8_t i = 0; i < outNumNotes; i++) {
-                    if (outNotes[i] == extraNote) {
-                        duplicate = true;
-                        break;
-                    }
-                }
-                if (!duplicate) {
-                    outNotes[outNumNotes++] = extraNote;
-                }
-            }
-        }
     }
 
     // Calculate duration and store active notes

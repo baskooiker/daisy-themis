@@ -5,6 +5,8 @@
 
 #include "groove.h"
 #include "melody.h"
+#include "config.h"
+#include "core/themis_rhythm.h"
 
 // ============================================================================
 // QUEUE MANAGEMENT
@@ -283,11 +285,10 @@ void ProcessMelodyQueue()
         {
             if(trigger->voiceType == MELODY_CV)
             {
-                // Trigger CV gate
-                analogGateHigh = true;
-                analogGateCounter = 0;
+                // Trigger melody gate on OUT3
+                TriggerMelodyGate();
 
-                // Output CV voltage
+                // Output melody CV voltage on DAC1
                 float cvVoltage = MelodyNoteToCV(trigger->note);
                 uint16_t cv1 = (uint16_t)(cvVoltage / 5.0f * 4095.0f);
                 hw.seed.dac.WriteValue(DacHandle::Channel::ONE, cv1);
@@ -350,10 +351,17 @@ void ProcessMelodyQueue()
 
 void TriggerDrum(DrumVoice voice, uint8_t velocity)
 {
+    // ANALOG voice triggers GATE OUT pin instead of MIDI
+    if(voice == ANALOG)
+    {
+        TriggerAnalogDrumGate();
+        return;
+    }
+
     uint8_t noteOn[3] = {
-        static_cast<uint8_t>(0x90 | DRM1_MIDI_CHANNEL), // Note On + channel
-        drumNotes[voice],                                // Note number
-        velocity                                         // Velocity
+        static_cast<uint8_t>(0x90 | drumMidiChannel), // Note On + channel
+        drumNotes[voice],                              // Note number
+        velocity                                       // Velocity
     };
     hw.midi.SendMessage(noteOn, 3);
 
@@ -535,6 +543,32 @@ void ProcessPolyVoiceStep(uint8_t step)
         if(polyState.currentChordIndex >= prog.numChords)
         {
             polyState.currentChordIndex = 0;
+
+            // Notify rhythm player of chord cycle boundary
+            if(rhythmPlayerConfig.active && rhythmPlayerConfig.mode == themis::RHYTHM_MODE_MORPH
+               && !rhythmPlayerConfig.freezeStyle)
+            {
+                uint32_t seed = System::GetUs();
+
+                // Style morph check
+                if(rhythmPlayerState.morphTimer == 0 || rhythmPlayerState.morphTimer <= 16)
+                {
+                    themis::RhythmPlayStyle newStyle =
+                        (themis::RhythmPlayStyle)(seed % themis::NUM_RHYTHM_PLAY_STYLES);
+                    if(newStyle == rhythmPlayerState.currentStyle)
+                        newStyle = (themis::RhythmPlayStyle)((newStyle + 1) % themis::NUM_RHYTHM_PLAY_STYLES);
+
+                    rhythmPlayerState.targetStyle = newStyle;
+                    rhythmPlayerState.styleMorphProgress = 0.0f;
+                    rhythmPlayerState.morphTimer = 128 + ((seed >> 8) % 128);
+                }
+
+                // Parameter randomization check
+                if(rhythmPlayerState.randomizeTimer == 0 || rhythmPlayerState.randomizeTimer <= 32)
+                {
+                    themis::RandomizeRhythmParams(rhythmPlayerConfig, rhythmPlayerState, seed ^ 0xFEDCBA98);
+                }
+            }
         }
     }
 }
