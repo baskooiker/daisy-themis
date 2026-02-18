@@ -562,7 +562,7 @@ void ProcessTR8Step(
     TR8State& state,
     uint8_t currentStep,
     uint8_t barCounter,
-    const std::function<void(uint8_t midiNote, uint8_t velocity)>& callback)
+    TR8TriggerCallback callback)
 {
     if (!config.active || !callback) return;
 

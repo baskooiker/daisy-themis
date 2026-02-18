@@ -11,6 +11,7 @@
 #include "types.h"
 #include "core/themis_bass.h"
 #include "core/themis_rhythm.h"
+#include "core/themis_tr8.h"
 
 using namespace daisy;
 using namespace daisysp;
@@ -153,6 +154,14 @@ extern uint8_t rhythmMidiChannel;
 extern int8_t rhythmActiveNotes[6];   // Currently held MIDI notes
 extern uint8_t rhythmNumActiveNotes;  // Number of active notes
 extern bool rhythmNotesPlaying;       // Are notes currently held
+
+// ============================================================================
+// TR-8 VOICE
+// ============================================================================
+
+extern themis::TR8Config tr8VoiceConfig;
+extern themis::TR8State tr8VoiceState;
+extern uint8_t tr8MidiChannel;
 
 // ============================================================================
 // MELODY SYSTEM

@@ -12,7 +12,6 @@
 #define THEMIS_TR8_H
 
 #include "themis_types.h"
-#include <functional>
 
 namespace themis {
 
@@ -140,12 +139,15 @@ struct TR8State {
  * @param barCounter Current bar within cycle
  * @param callback Function to call for each triggered voice (midiNote, velocity)
  */
+/// Callback type for TR-8 MIDI trigger output
+typedef void (*TR8TriggerCallback)(uint8_t midiNote, uint8_t velocity);
+
 void ProcessTR8Step(
     const TR8Config& config,
     TR8State& state,
     uint8_t currentStep,
     uint8_t barCounter,
-    const std::function<void(uint8_t midiNote, uint8_t velocity)>& callback
+    TR8TriggerCallback callback
 );
 
 /**

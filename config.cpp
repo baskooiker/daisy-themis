@@ -54,6 +54,11 @@ void SaveSettings()
     if(melodyMidiVoice.active) settings.voiceActiveBits |= 0x03;  // bits 0+1
     if(bassVoiceConfig.active) settings.voiceActiveBits |= 0x08;
     if(rhythmPlayerConfig.active) settings.voiceActiveBits |= 0x10;
+    if(tr8VoiceConfig.active) settings.voiceActiveBits |= 0x20;
+
+    // TR-8 settings
+    settings.tr8MidiChannel = tr8MidiChannel;
+    settings.tr8FreezeKit = tr8VoiceConfig.freezeKit ? 1 : 0;
 
     // Write to QSPI flash
     size_t size = sizeof(PersistentSettings);
@@ -199,7 +204,13 @@ void LoadSettings()
             melodyMidiVoice.active = melActive;
             bassVoiceConfig.active = (settings.voiceActiveBits & 0x08) != 0;
             rhythmPlayerConfig.active = (settings.voiceActiveBits & 0x10) != 0;
+            tr8VoiceConfig.active = (settings.voiceActiveBits & 0x20) != 0;
         }
+
+        // Load TR-8 settings
+        tr8MidiChannel = (settings.tr8MidiChannel <= 15) ? settings.tr8MidiChannel : 9;
+        tr8VoiceConfig.midiChannel = tr8MidiChannel;
+        tr8VoiceConfig.freezeKit = (settings.tr8FreezeKit == 1);
     }
     else
     {
@@ -229,6 +240,11 @@ void LoadSettings()
         bassVoiceConfig.freezePattern = false;
         rhythmPlayerConfig.freezeStyle = false;
         chordRandomizerConfig.freezeEnabled = false;
+
+        // TR-8 defaults
+        tr8VoiceConfig.Init();
+        tr8VoiceState.Init();
+        tr8MidiChannel = 9;
 
         // Save defaults
         SaveSettings();
@@ -333,6 +349,17 @@ void ToggleRunState()
             chordRandomizerState.Init();
             if(chordVoice.active)
                 RandomizeChordVoice();
+
+            // Initialize TR-8 voice
+            {
+                bool savedTr8Active = tr8VoiceConfig.active;
+                bool savedTr8Freeze = tr8VoiceConfig.freezeKit;
+                tr8VoiceConfig.Init();
+                tr8VoiceConfig.active = savedTr8Active;
+                tr8VoiceConfig.freezeKit = savedTr8Freeze;
+                tr8VoiceConfig.midiChannel = tr8MidiChannel;
+            }
+            tr8VoiceState.Init();
 
             // Initialize bass voice
             bassVoiceConfig.Init();
@@ -641,13 +668,14 @@ void ProcessControls()
                         // If any freeze is off, turn all on; if all on, turn all off
                         bool allOn = freezeEnabled && melodyFreezeEnabled
                             && bassVoiceConfig.freezePattern && rhythmPlayerConfig.freezeStyle
-                            && chordRandomizerConfig.freezeEnabled;
+                            && chordRandomizerConfig.freezeEnabled && tr8VoiceConfig.freezeKit;
                         bool newState = !allOn;
                         freezeEnabled = newState;
                         melodyFreezeEnabled = newState;
                         bassVoiceConfig.freezePattern = newState;
                         rhythmPlayerConfig.freezeStyle = newState;
                         chordRandomizerConfig.freezeEnabled = newState;
+                        tr8VoiceConfig.freezeKit = newState;
                         break;
                     }
                     case FREEZE_DRUMS:
@@ -664,6 +692,9 @@ void ProcessControls()
                         break;
                     case FREEZE_CHORDS:
                         chordRandomizerConfig.freezeEnabled = !chordRandomizerConfig.freezeEnabled;
+                        break;
+                    case FREEZE_TR8:
+                        tr8VoiceConfig.freezeKit = !tr8VoiceConfig.freezeKit;
                         break;
                     case FREEZE_BACK:
                         currentDisplayState = DISPLAY_CONFIG_MENU;
@@ -736,6 +767,13 @@ void ProcessControls()
                         if(ch < 0) ch = 0;
                         if(ch > 15) ch = 15;
                         rhythmMidiChannel = (uint8_t)ch;
+                        break;
+                    case SYSTEM_TR8_MIDI_CH:
+                        ch = (int)tr8MidiChannel + inc;
+                        if(ch < 0) ch = 0;
+                        if(ch > 15) ch = 15;
+                        tr8MidiChannel = (uint8_t)ch;
+                        tr8VoiceConfig.midiChannel = tr8MidiChannel;
                         break;
                     default:
                         break;
@@ -886,7 +924,10 @@ void ProcessControls()
 
         case DISPLAY_VOICE_DETAIL:
         {
-            uint8_t detailCount = (currentVoiceMenuItem == VOICE_RHYTHM) ? 4 : 3;
+            uint8_t detailCount;
+            if(currentVoiceMenuItem == VOICE_RHYTHM) detailCount = 4;
+            else if(currentVoiceMenuItem == VOICE_TR8) detailCount = 2;  // Active, Back
+            else detailCount = 3;
 
             if(inc != 0)
             {
@@ -926,6 +967,10 @@ void ProcessControls()
                             hw.midi.SendMessage(noteOff, 3);
                             bassNotePlaying = false;
                         }
+                    }
+                    else if(currentVoiceMenuItem == VOICE_TR8)
+                    {
+                        tr8VoiceConfig.active = !tr8VoiceConfig.active;
                     }
                     else if(currentVoiceMenuItem == VOICE_RHYTHM)
                     {

@@ -11,6 +11,7 @@
 #include "core/themis_rhythm.h"
 #include "core/themis_chords.h"
 #include "core/themis_melody.h"
+#include "core/themis_tr8.h"
 
 // ============================================================================
 // PATTERN HELPERS
@@ -1057,6 +1058,33 @@ void ProcessDrumPatterns()
         }
     }
 
+    // Process TR-8 voice (external drum machine via MIDI)
+    if(tr8VoiceConfig.active && !tuneModeEnabled)
+    {
+        // Schedule TR-8 fill
+        if(barCounter == 3 && currentStep == 0 && tr8VoiceConfig.fillsEnabled)
+        {
+            uint32_t fillSeed = System::GetUs();
+            if((fillSeed % 100) < 30)
+            {
+                tr8VoiceState.fillActive = true;
+                tr8VoiceState.fillPatternIndex = (fillSeed >> 8) % themis::NUM_TR8_FILLS;
+                tr8VoiceState.fillStartStep = (barCounter * 32) + 24;
+            }
+        }
+
+        // Process TR-8 step with MIDI callback
+        themis::ProcessTR8Step(tr8VoiceConfig, tr8VoiceState, currentStep, barCounter,
+            [](uint8_t midiNote, uint8_t velocity) {
+                uint8_t noteOn[3] = {
+                    static_cast<uint8_t>(0x90 | tr8MidiChannel),
+                    midiNote,
+                    velocity
+                };
+                hw.midi.SendMessage(noteOn, 3);
+            });
+    }
+
     // Process chord voice
     ProcessChordStep(currentStep);
 
@@ -1105,6 +1133,12 @@ void ProcessDrumPatterns()
                 if(bassVoiceConfig.active && !bassVoiceConfig.freezePattern)
                 {
                     themis::RandomizeBassPattern(bassVoiceState, bassVoiceConfig, System::GetUs());
+                }
+
+                // Randomize TR-8 kit (if not frozen)
+                if(tr8VoiceConfig.active && !tr8VoiceConfig.freezeKit)
+                {
+                    themis::RandomizeTR8Kit(tr8VoiceConfig, tr8VoiceState, System::GetUs());
                 }
 
                 // Randomize rhythm player (if not frozen)

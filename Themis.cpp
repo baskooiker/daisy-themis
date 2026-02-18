@@ -136,7 +136,7 @@ int main(void)
     hw.display.Fill(false);
     std::string str = "Themis";
     char*       cstr = &str[0];
-    hw.display.WriteString(cstr, Font_7x10, true);
+    hw.display.WriteString(cstr, Font_6x8, true);
     hw.display.Update();
 
     // Start MIDI and Audio

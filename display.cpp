@@ -256,7 +256,7 @@ void UpdateDisplay()
             // Check if all individual freezes are on
             bool allFrozen = freezeEnabled && melodyFreezeEnabled
                 && bassVoiceConfig.freezePattern && rhythmPlayerConfig.freezeStyle
-                && chordRandomizerConfig.freezeEnabled;
+                && chordRandomizerConfig.freezeEnabled && tr8VoiceConfig.freezeKit;
 
             for(int i = 0; i < NUM_FREEZE_OPTIONS; i++)
             {
@@ -277,6 +277,8 @@ void UpdateDisplay()
                     val = rhythmPlayerConfig.freezeStyle ? "On" : "Off";
                 else if(i == FREEZE_CHORDS)
                     val = chordRandomizerConfig.freezeEnabled ? "On" : "Off";
+                else if(i == FREEZE_TR8)
+                    val = tr8VoiceConfig.freezeKit ? "On" : "Off";
 
                 if(i == FREEZE_BACK)
                     sprintf(buffer, "%s%s", (i == currentFreezeOption) ? ">" : " ", freezeOptionNames[i]);
@@ -313,6 +315,7 @@ void UpdateDisplay()
                     else if(i == SYSTEM_DRUM_MIDI_CH) ch = drumMidiChannel;
                     else if(i == SYSTEM_BASS_MIDI_CH) ch = bassMidiChannel;
                     else if(i == SYSTEM_RHYTHM_MIDI_CH) ch = rhythmMidiChannel;
+                    else if(i == SYSTEM_TR8_MIDI_CH) ch = tr8MidiChannel;
 
                     sprintf(buffer, "%s%-11sCh%d", (i == currentSystemOption) ? ">" : " ",
                             systemOptionNames[i], ch + 1);
@@ -348,6 +351,7 @@ void UpdateDisplay()
                     else if(i == SYSTEM_DRUM_MIDI_CH) ch = drumMidiChannel;
                     else if(i == SYSTEM_BASS_MIDI_CH) ch = bassMidiChannel;
                     else if(i == SYSTEM_RHYTHM_MIDI_CH) ch = rhythmMidiChannel;
+                    else if(i == SYSTEM_TR8_MIDI_CH) ch = tr8MidiChannel;
 
                     sprintf(buffer, " %-10s%sCh%d", systemOptionNames[i],
                             (i == currentSystemOption) ? ">" : " ", ch + 1);
@@ -444,6 +448,7 @@ void UpdateDisplay()
                     if(i == VOICE_MELODY) active = melodyMidiVoice.active;
                     else if(i == VOICE_BASS) active = bassVoiceConfig.active;
                     else if(i == VOICE_RHYTHM) active = rhythmPlayerConfig.active;
+                    else if(i == VOICE_TR8) active = tr8VoiceConfig.active;
 
                     sprintf(buffer, "%s%-13s%s",
                             (i == currentVoiceMenuItem) ? ">" : " ",
@@ -459,13 +464,17 @@ void UpdateDisplay()
         case DISPLAY_VOICE_DETAIL:
         {
             hw.display.SetCursor(0, 0);
-            const char* voiceHeaders[] = {"== MELODY ==", "== BASS ==", "== RHYTHM =="};
+            const char* voiceHeaders[] = {"== MELODY ==", "== BASS ==", "== RHYTHM ==", "== TR-8 =="};
             hw.display.WriteString(voiceHeaders[currentVoiceMenuItem], Font_6x8, true);
 
             // Melody: Active, Style, Back (3)
             // Bass: Active, Octave, Back (3)
             // Rhythm: Active, Mode, Octave, Back (4)
-            uint8_t itemCount = (currentVoiceMenuItem == VOICE_RHYTHM) ? 4 : 3;
+            // TR-8: Active, Back (2)
+            uint8_t itemCount;
+            if(currentVoiceMenuItem == VOICE_RHYTHM) itemCount = 4;
+            else if(currentVoiceMenuItem == VOICE_TR8) itemCount = 2;
+            else itemCount = 3;
 
             voiceDetailScrollOffset = 0;
             if(currentVoiceDetail > 4) voiceDetailScrollOffset = currentVoiceDetail - 4;
@@ -489,6 +498,7 @@ void UpdateDisplay()
                     if(currentVoiceMenuItem == VOICE_MELODY) active = melodyMidiVoice.active;
                     else if(currentVoiceMenuItem == VOICE_BASS) active = bassVoiceConfig.active;
                     else if(currentVoiceMenuItem == VOICE_RHYTHM) active = rhythmPlayerConfig.active;
+                    else if(currentVoiceMenuItem == VOICE_TR8) active = tr8VoiceConfig.active;
                     sprintf(buffer, "%s%-11s%s", isSelected ? ">" : " ", "Active", active ? "On" : "Off");
                 }
                 else if(currentVoiceMenuItem == VOICE_MELODY)
@@ -524,10 +534,13 @@ void UpdateDisplay()
         case DISPLAY_VOICE_EDIT:
         {
             hw.display.SetCursor(0, 0);
-            const char* voiceHeaders[] = {"== MELODY ==", "== BASS ==", "== RHYTHM =="};
+            const char* voiceHeaders[] = {"== MELODY ==", "== BASS ==", "== RHYTHM ==", "== TR-8 =="};
             hw.display.WriteString(voiceHeaders[currentVoiceMenuItem], Font_6x8, true);
 
-            uint8_t itemCount = (currentVoiceMenuItem == VOICE_RHYTHM) ? 4 : 3;
+            uint8_t itemCount;
+            if(currentVoiceMenuItem == VOICE_RHYTHM) itemCount = 4;
+            else if(currentVoiceMenuItem == VOICE_TR8) itemCount = 2;
+            else itemCount = 3;
 
             voiceDetailScrollOffset = 0;
             if(currentVoiceDetail > 4) voiceDetailScrollOffset = currentVoiceDetail - 4;
@@ -551,6 +564,7 @@ void UpdateDisplay()
                     if(currentVoiceMenuItem == VOICE_MELODY) active = melodyMidiVoice.active;
                     else if(currentVoiceMenuItem == VOICE_BASS) active = bassVoiceConfig.active;
                     else if(currentVoiceMenuItem == VOICE_RHYTHM) active = rhythmPlayerConfig.active;
+                    else if(currentVoiceMenuItem == VOICE_TR8) active = tr8VoiceConfig.active;
                     sprintf(buffer, " %-10s%s%s", "Active", isSelected ? ">" : " ", active ? "On" : "Off");
                 }
                 else if(currentVoiceMenuItem == VOICE_BASS)

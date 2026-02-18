@@ -265,6 +265,14 @@ uint8_t rhythmNumActiveNotes = 0;
 bool rhythmNotesPlaying = false;
 
 // ============================================================================
+// TR-8 VOICE
+// ============================================================================
+
+themis::TR8Config tr8VoiceConfig;
+themis::TR8State tr8VoiceState;
+uint8_t tr8MidiChannel = 9;  // Default: channel 10 (0-indexed)
+
+// ============================================================================
 // MELODY SYSTEM
 // ============================================================================
 
@@ -433,11 +441,11 @@ const char* configOptionNames[NUM_CONFIG_OPTIONS] = {
 };
 
 const char* freezeOptionNames[NUM_FREEZE_OPTIONS] = {
-    "All", "Drums", "Melody", "Bass", "Rhythm", "Chords", "Back"
+    "All", "Drums", "Melody", "Bass", "Rhythm", "Chords", "TR-8", "Back"
 };
 
 const char* systemOptionNames[NUM_SYSTEM_OPTIONS] = {
-    "Melody Ch", "Drum Ch", "Bass Ch", "Rhythm Ch", "Back"
+    "Melody Ch", "Drum Ch", "Bass Ch", "Rhythm Ch", "TR-8 Ch", "Back"
 };
 
 const char* harmonyOptionNames[NUM_HARMONY_OPTIONS] = {
@@ -445,7 +453,7 @@ const char* harmonyOptionNames[NUM_HARMONY_OPTIONS] = {
 };
 
 const char* voiceMenuNames[NUM_VOICE_MENU_ITEMS] = {
-    "Melody Voice", "Bass Voice", "Rhythm Voice", "Back"
+    "Melody Voice", "Bass Voice", "Rhythm Voice", "TR-8 Voice", "Back"
 };
 
 const char* voiceDetailNames[NUM_VOICE_DETAIL_ITEMS] = {

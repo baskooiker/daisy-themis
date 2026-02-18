@@ -332,6 +332,7 @@ enum VoiceMenuItem
     VOICE_MELODY,           ///< Melody voice settings (CV + MIDI)
     VOICE_BASS,             ///< Bass voice settings
     VOICE_RHYTHM,           ///< Rhythm player settings
+    VOICE_TR8,              ///< TR-8 drum machine settings
     VOICE_BACK,
     NUM_VOICE_MENU_ITEMS
 };
@@ -361,6 +362,7 @@ enum FreezeOption
     FREEZE_BASS,            ///< bassVoiceConfig.freezePattern
     FREEZE_RHYTHM,          ///< rhythmPlayerConfig.freezeStyle
     FREEZE_CHORDS,          ///< chordRandomizerConfig.freezeEnabled
+    FREEZE_TR8,             ///< tr8VoiceConfig.freezeKit
     FREEZE_BACK,
     NUM_FREEZE_OPTIONS
 };
@@ -375,6 +377,7 @@ enum SystemOption
     SYSTEM_DRUM_MIDI_CH,    ///< drumMidiChannel
     SYSTEM_BASS_MIDI_CH,    ///< bassVoiceConfig.midiChannel
     SYSTEM_RHYTHM_MIDI_CH,  ///< rhythmPlayerConfig.midiChannel
+    SYSTEM_TR8_MIDI_CH,     ///< tr8MidiChannel
     SYSTEM_BACK,
     NUM_SYSTEM_OPTIONS
 };
@@ -552,8 +555,9 @@ struct PersistentSettings
     uint8_t bassOctave;         ///< Bass voice octave offset (stored as int8_t)
     uint8_t rhythmOctave;       ///< Rhythm player octave offset (stored as int8_t)
     uint8_t rhythmMode;         ///< Rhythm player mode (0=Manual, 1=Morph)
-    uint8_t voiceActiveBits;    ///< Bitmask: bit0=cvMel, bit1=midiMel, bit2=chord, bit3=bass, bit4=rhythm
-    uint8_t reserved[2];        ///< Padding to 32 bytes
+    uint8_t voiceActiveBits;    ///< Bitmask: bit0=cvMel, bit1=midiMel, bit2=chord, bit3=bass, bit4=rhythm, bit5=tr8
+    uint8_t tr8MidiChannel;     ///< TR-8 MIDI channel (default 9 = ch10)
+    uint8_t tr8FreezeKit;       ///< TR-8 freeze kit state
 };
 
 /**

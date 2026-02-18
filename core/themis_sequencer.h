@@ -144,7 +144,7 @@ public:
      * @param midiNote MIDI note number (TR-8 mapping)
      * @param velocity MIDI velocity (90 normal, 120 accent)
      */
-    std::function<void(uint8_t midiNote, uint8_t velocity)> onTR8Trigger;
+    TR8TriggerCallback onTR8Trigger;
 
     // ========================================================================
     // Methods
