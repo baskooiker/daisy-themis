@@ -9,8 +9,8 @@
  * - CV/MIDI melody voice configuration
  */
 
-#ifndef THEMIS_MELODY_H
-#define THEMIS_MELODY_H
+#ifndef THEMIS_FW_MELODY_H
+#define THEMIS_FW_MELODY_H
 
 #include "types.h"
 #include "globals.h"
@@ -94,4 +94,4 @@ void RandomizeMelodyPersonality();
  */
 void RandomizeAllParameters();
 
-#endif // THEMIS_MELODY_H
+#endif // THEMIS_FW_MELODY_H

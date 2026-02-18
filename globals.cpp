@@ -164,6 +164,7 @@ int voiceScrollOffset = 0;
 int voiceDetailScrollOffset = 0;
 uint8_t drumMidiChannel = 9;  // Channel 10 (0-indexed)
 themis::ChordRandomizerConfig chordRandomizerConfig;
+themis::ChordRandomizerState chordRandomizerState;
 
 // ============================================================================
 // PERSISTENT SETTINGS

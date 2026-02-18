@@ -73,6 +73,7 @@ extern int voiceScrollOffset;
 extern int voiceDetailScrollOffset;
 extern uint8_t drumMidiChannel;
 extern themis::ChordRandomizerConfig chordRandomizerConfig;
+extern themis::ChordRandomizerState chordRandomizerState;
 
 // ============================================================================
 // PERSISTENT SETTINGS

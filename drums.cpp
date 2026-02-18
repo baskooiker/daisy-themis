@@ -9,6 +9,8 @@
 #include "config.h"
 #include "core/themis_bass.h"
 #include "core/themis_rhythm.h"
+#include "core/themis_chords.h"
+#include "core/themis_melody.h"
 
 // ============================================================================
 // PATTERN HELPERS
@@ -807,36 +809,35 @@ void ProcessDrumPatterns()
     // Process bass voice
     if(bassVoiceConfig.active && !tuneModeEnabled)
     {
-        // Build chord context from firmware chord state
+        // Build chord context from core library chord state
         themis::ChordContext bassChordCtx;
-        if(chordVoice.active && chordNotesOn)
+        if(chordVoice.active && chordNotesOn
+           && chordVoice.progressionIndex < themis::NUM_PROGRESSIONS)
         {
-            const ChordProgression& prog = progressions[chordVoice.progressionIndex];
-            // currentChordIndex points to the chord that was just triggered
-            // (it gets incremented at end of ProcessChordStep)
+            const themis::ChordProgression& prog = themis::progressions[chordVoice.progressionIndex];
             uint8_t chordIdx = chordState.currentChordIndex;
-            if(chordIdx > 0) chordIdx--; // Point to current, not next
-            else chordIdx = prog.numChords - 1; // Wrap around
-            const ProgressionStep& chordStep = prog.steps[chordIdx];
+            if(chordIdx > 0) chordIdx--;
+            else chordIdx = prog.length - 1;
+            const themis::ProgressionStep& chordStep = prog.steps[chordIdx];
 
-            if(prog.diatonic)
+            if(chordStep.isDiatonic)
             {
-                bassChordCtx.chordRoot = melodyRoot + chordStep.rootOffset;
+                int8_t note = themis::GetScaleNote(
+                    (themis::ScaleType)melodyScale, melodyRoot, chordStep.scaleDegree);
+                while(note < 0) note += 12;
+                bassChordCtx.chordRoot = note % 12;
             }
             else
             {
-                bassChordCtx.chordRoot = chordStep.rootOffset;
+                bassChordCtx.chordRoot = (melodyRoot + chordStep.scaleDegree + 12) % 12;
             }
-            // Normalize to 0-11
-            while(bassChordCtx.chordRoot < 0) bassChordCtx.chordRoot += 12;
-            bassChordCtx.chordRoot = bassChordCtx.chordRoot % 12;
             bassChordCtx.chordType = (uint8_t)chordStep.chordType;
-            bassChordCtx.isDiatonic = prog.diatonic;
+            bassChordCtx.isDiatonic = chordStep.isDiatonic;
         }
         else
         {
             bassChordCtx.chordRoot = melodyRoot;
-            bassChordCtx.chordType = CHORD_MINOR;
+            bassChordCtx.chordType = themis::CHORD_MINOR;
             bassChordCtx.isDiatonic = true;
         }
 
@@ -949,33 +950,35 @@ void ProcessDrumPatterns()
     // Process rhythm player voice
     if(rhythmPlayerConfig.active && !tuneModeEnabled)
     {
-        // Build chord context from firmware chord state
+        // Build chord context from core library chord state
         themis::ChordContext rhythmChordCtx;
-        if(chordVoice.active && chordNotesOn)
+        if(chordVoice.active && chordNotesOn
+           && chordVoice.progressionIndex < themis::NUM_PROGRESSIONS)
         {
-            const ChordProgression& prog = progressions[chordVoice.progressionIndex];
+            const themis::ChordProgression& prog = themis::progressions[chordVoice.progressionIndex];
             uint8_t chordIdx = chordState.currentChordIndex;
             if(chordIdx > 0) chordIdx--;
-            else chordIdx = prog.numChords - 1;
-            const ProgressionStep& chordStep = prog.steps[chordIdx];
+            else chordIdx = prog.length - 1;
+            const themis::ProgressionStep& chordStep = prog.steps[chordIdx];
 
-            if(prog.diatonic)
+            if(chordStep.isDiatonic)
             {
-                rhythmChordCtx.chordRoot = melodyRoot + chordStep.rootOffset;
+                int8_t note = themis::GetScaleNote(
+                    (themis::ScaleType)melodyScale, melodyRoot, chordStep.scaleDegree);
+                while(note < 0) note += 12;
+                rhythmChordCtx.chordRoot = note % 12;
             }
             else
             {
-                rhythmChordCtx.chordRoot = chordStep.rootOffset;
+                rhythmChordCtx.chordRoot = (melodyRoot + chordStep.scaleDegree + 12) % 12;
             }
-            while(rhythmChordCtx.chordRoot < 0) rhythmChordCtx.chordRoot += 12;
-            rhythmChordCtx.chordRoot = rhythmChordCtx.chordRoot % 12;
             rhythmChordCtx.chordType = (uint8_t)chordStep.chordType;
-            rhythmChordCtx.isDiatonic = prog.diatonic;
+            rhythmChordCtx.isDiatonic = chordStep.isDiatonic;
         }
         else
         {
             rhythmChordCtx.chordRoot = melodyRoot;
-            rhythmChordCtx.chordType = CHORD_MINOR;
+            rhythmChordCtx.chordType = themis::CHORD_MINOR;
             rhythmChordCtx.isDiatonic = true;
         }
 

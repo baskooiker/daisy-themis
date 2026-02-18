@@ -483,4 +483,8 @@ void RandomizeAllParameters()
 
     // Randomize melody (both voices)
     RandomizeMelodyPersonality();
+
+    // Randomize chord voice (vibe-based progression selection)
+    if(chordVoice.active)
+        RandomizeChordVoice();
 }

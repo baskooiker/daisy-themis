@@ -176,4 +176,12 @@ void ProcessChordStep(uint8_t step);
  */
 void InitChordVoice();
 
+/**
+ * @brief Randomize chord voice settings using vibe system
+ *
+ * Selects a random enabled vibe, picks a progression, randomizes
+ * chord rate and octave offset.
+ */
+void RandomizeChordVoice();
+
 #endif // THEMIS_GROOVE_H

@@ -7,6 +7,8 @@
 #include "melody.h"
 #include "config.h"
 #include "core/themis_rhythm.h"
+#include "core/themis_chords.h"
+#include "core/themis_melody.h"
 
 // ============================================================================
 // QUEUE MANAGEMENT
@@ -480,57 +482,267 @@ void SendChordNoteOff()
     chordNumActiveNotes = 0;
 }
 
+// ============================================================================
+// CHORD RANDOMIZATION (VIBE SYSTEM)
+// ============================================================================
+
+static themis::VibeType SelectRandomEnabledVibe(uint32_t seed)
+{
+    uint8_t enabledCount = 0;
+    uint8_t enabledVibesArr[themis::NUM_VIBE_TYPES];
+
+    for(int v = 0; v < themis::NUM_VIBE_TYPES; v++)
+    {
+        if(chordRandomizerConfig.enabledVibes & (1 << v))
+        {
+            enabledVibesArr[enabledCount++] = v;
+        }
+    }
+
+    if(enabledCount == 0)
+        return themis::VIBE_MINOR;
+
+    return (themis::VibeType)enabledVibesArr[seed % enabledCount];
+}
+
+static void SelectProgressionFromVibe(themis::VibeType vibe, uint32_t seed)
+{
+    uint8_t indices[32];
+    uint8_t count = themis::GetProgressionsForVibe(vibe, indices, 32);
+
+    if(count == 0)
+        return;
+
+    // Filter by enabled progressions
+    uint8_t enabledIndices[32];
+    uint8_t enabledCount = 0;
+
+    for(int i = 0; i < count; i++)
+    {
+        uint8_t progIdx = indices[i];
+        uint8_t vibePos = 0;
+        for(uint8_t j = 0; j < progIdx; j++)
+        {
+            if(themis::progressions[j].vibe == vibe)
+                vibePos++;
+        }
+        if(chordRandomizerConfig.enabledProgressions[vibe] & (1 << vibePos))
+        {
+            enabledIndices[enabledCount++] = progIdx;
+        }
+    }
+
+    if(enabledCount == 0)
+    {
+        chordVoice.progressionIndex = indices[0];
+    }
+    else
+    {
+        chordVoice.progressionIndex = enabledIndices[seed % enabledCount];
+    }
+}
+
+static void ProcessChordRandomization()
+{
+    if(chordRandomizerConfig.freezeEnabled)
+        return;
+
+    uint32_t seed = System::GetUs();
+
+    // Check if current vibe is still enabled
+    bool currentVibeEnabled = chordRandomizerConfig.enabledVibes
+                              & (1 << chordRandomizerState.currentVibe);
+    if(!currentVibeEnabled && !chordRandomizerState.inTransition)
+    {
+        // Start transition to steady chord, then switch vibe
+        chordVoice.progressionIndex = themis::GetSteadyChordForVibe(
+            chordRandomizerState.currentVibe, seed);
+        chordRandomizerState.inTransition = true;
+        uint8_t barsPerCycle = themis::chordRateSteps[chordVoice.chordRate] / 32;
+        if(barsPerCycle == 0) barsPerCycle = 1;
+        chordRandomizerState.transitionBarsRemaining = 8 / barsPerCycle;
+        if(chordRandomizerState.transitionBarsRemaining < 2)
+            chordRandomizerState.transitionBarsRemaining = 2;
+        chordRandomizerState.changeTimer = 0;
+        return;
+    }
+
+    // Handle ongoing transition
+    if(chordRandomizerState.inTransition)
+    {
+        chordRandomizerState.transitionBarsRemaining--;
+
+        if(chordRandomizerState.transitionBarsRemaining <= 0)
+        {
+            chordRandomizerState.inTransition = false;
+
+            bool currentVibeStillEnabled = chordRandomizerConfig.enabledVibes
+                                           & (1 << chordRandomizerState.currentVibe);
+            if(!currentVibeStillEnabled)
+            {
+                themis::VibeType newVibe = SelectRandomEnabledVibe(seed);
+                int8_t rootShift = themis::CalculateVibeRootShift(
+                    chordRandomizerState.currentVibe, newVibe, seed);
+                melodyRoot = (melodyRoot + rootShift + 12) % 12;
+                chordRandomizerState.currentVibe = newVibe;
+            }
+
+            SelectProgressionFromVibe(chordRandomizerState.currentVibe, seed);
+            chordRandomizerState.changeTimer = 2 + (seed % 3);
+        }
+        return;
+    }
+
+    // Decrement change timer
+    if(chordRandomizerState.changeTimer > 0)
+    {
+        chordRandomizerState.changeTimer--;
+        return;
+    }
+
+    // Timer expired - consider changing
+    uint8_t enabledVibeCount = 0;
+    for(int v = 0; v < themis::NUM_VIBE_TYPES; v++)
+    {
+        if(chordRandomizerConfig.enabledVibes & (1 << v))
+            enabledVibeCount++;
+    }
+
+    // Change vibe? (20% probability if multiple vibes enabled)
+    bool changeVibe = (enabledVibeCount > 1) && ((seed % 100) < 20);
+
+    if(changeVibe)
+    {
+        themis::VibeType newVibe = SelectRandomEnabledVibe(seed);
+        if(newVibe != chordRandomizerState.currentVibe)
+        {
+            themis::VibeType oldVibe = chordRandomizerState.currentVibe;
+            int8_t rootShift = themis::CalculateVibeRootShift(oldVibe, newVibe, seed);
+            melodyRoot = (melodyRoot + rootShift + 12) % 12;
+            chordRandomizerState.currentVibe = newVibe;
+
+            // Select steady chord for transition
+            chordVoice.progressionIndex = themis::GetSteadyChordForVibe(newVibe, seed);
+            chordRandomizerState.inTransition = true;
+            uint8_t barsPerCycle = themis::chordRateSteps[chordVoice.chordRate] / 32;
+            if(barsPerCycle == 0) barsPerCycle = 1;
+            chordRandomizerState.transitionBarsRemaining = 8 / barsPerCycle;
+            if(chordRandomizerState.transitionBarsRemaining < 2)
+                chordRandomizerState.transitionBarsRemaining = 2;
+            chordRandomizerState.changeTimer = 0;
+            return;
+        }
+    }
+
+    // Stay in vibe - maybe change root? (10% chance)
+    bool changeRoot = ((seed >> 4) % 100) < 10;
+    if(changeRoot)
+    {
+        int8_t shift = ((seed >> 8) % 2) == 0 ? 7 : 1;
+        melodyRoot = (melodyRoot + shift) % 12;
+
+        chordVoice.progressionIndex = themis::GetSteadyChordForVibe(
+            chordRandomizerState.currentVibe, seed);
+        chordRandomizerState.inTransition = true;
+        uint8_t barsPerCycle = themis::chordRateSteps[chordVoice.chordRate] / 32;
+        if(barsPerCycle == 0) barsPerCycle = 1;
+        chordRandomizerState.transitionBarsRemaining = 8 / barsPerCycle;
+        if(chordRandomizerState.transitionBarsRemaining < 2)
+            chordRandomizerState.transitionBarsRemaining = 2;
+        chordRandomizerState.changeTimer = 0;
+    }
+    else
+    {
+        // Just pick new progression from same vibe
+        SelectProgressionFromVibe(chordRandomizerState.currentVibe, seed);
+        chordRandomizerState.changeTimer = 2 + ((seed >> 12) % 3);
+    }
+}
+
+void RandomizeChordVoice()
+{
+    SendChordNoteOff();
+
+    uint32_t seed = System::GetUs();
+
+    // Select a random enabled vibe
+    themis::VibeType vibe = SelectRandomEnabledVibe(seed);
+    chordRandomizerState.currentVibe = vibe;
+
+    // Select a progression from that vibe
+    SelectProgressionFromVibe(vibe, seed);
+
+    // Randomize chord rate (favor 1 bar and half bar)
+    int rateRoll = (seed >> 8) % 100;
+    if(rateRoll < 20)
+        chordVoice.chordRate = CHORD_RATE_2_BARS;
+    else if(rateRoll < 60)
+        chordVoice.chordRate = CHORD_RATE_1_BAR;
+    else if(rateRoll < 90)
+        chordVoice.chordRate = CHORD_RATE_HALF_BAR;
+    else
+        chordVoice.chordRate = CHORD_RATE_QUARTER;
+
+    // Randomize octave offset (-1 to +1)
+    chordVoice.octaveOffset = ((seed >> 16) % 3) - 1;
+
+    // Randomize velocity (70-110)
+    chordVoice.velocity = 70 + ((seed >> 28) % 41);
+
+    // Reset state
+    chordState.Init();
+    chordRandomizerState.inTransition = false;
+    chordRandomizerState.transitionBarsRemaining = 0;
+    chordRandomizerState.changeTimer = 2 + (seed % 3);
+}
+
+// ============================================================================
+// CHORD VOICE STEP PROCESSING
+// ============================================================================
+
 void ProcessChordStep(uint8_t step)
 {
     if(!chordVoice.active)
         return;
 
     // Get chord rate in steps
-    uint8_t rateSteps = chordRateSteps[chordVoice.chordRate];
+    uint8_t rateSteps = themis::chordRateSteps[chordVoice.chordRate];
 
     // Check if it's time to change chords
-    // Change occurs on step 0, and then at intervals based on rate
     bool shouldChange = false;
 
     if(step == 0)
     {
-        // Always change on step 0 (start of 2-bar pattern)
         shouldChange = true;
     }
     else if(rateSteps < 64)
     {
-        // For rates faster than 2 bars, check if we're at the interval
         shouldChange = (step % rateSteps) == 0;
     }
 
     if(shouldChange)
     {
-        // Get current progression
-        const ChordProgression& prog = progressions[chordVoice.progressionIndex];
+        // Clamp progression index to valid range for core library progressions
+        if(chordVoice.progressionIndex >= themis::NUM_PROGRESSIONS)
+            chordVoice.progressionIndex = 0;
+
+        // Get current progression from core library
+        const themis::ChordProgression& prog =
+            themis::progressions[chordVoice.progressionIndex];
 
         // Send note-off for previous chord
         SendChordNoteOff();
 
-        // Get current chord from progression
-        const ProgressionStep& chordStep = prog.steps[chordState.currentChordIndex];
-
-        // Calculate root note
-        int8_t rootNote;
-        if(prog.diatonic)
-        {
-            // Diatonic: use scale degree offset from melody root
-            rootNote = melodyRoot + chordStep.rootOffset;
-        }
-        else
-        {
-            // Chromatic: absolute semitone offset
-            rootNote = chordStep.rootOffset;
-        }
-
-        // Get chord notes
+        // Get chord notes using core library (handles diatonic/chromatic, scale degrees)
         int8_t chordNotes[6];
-        uint8_t numNotes = GetChordNotes(rootNote, chordStep.chordType,
-                                          chordVoice.octaveOffset, chordNotes);
+        uint8_t numNotes = themis::GetChordNotes(
+            &prog,
+            chordState.currentChordIndex,
+            melodyRoot,
+            (uint8_t)melodyScale,
+            chordVoice.octaveOffset,
+            chordNotes
+        );
 
         // Send note-on for new chord
         if(numNotes > 0)
@@ -540,9 +752,12 @@ void ProcessChordStep(uint8_t step)
 
         // Advance to next chord in progression
         chordState.currentChordIndex++;
-        if(chordState.currentChordIndex >= prog.numChords)
+        if(chordState.currentChordIndex >= prog.length)
         {
             chordState.currentChordIndex = 0;
+
+            // Process chord randomization (vibe system)
+            ProcessChordRandomization();
 
             // Notify rhythm player of chord cycle boundary
             if(rhythmPlayerConfig.active && rhythmPlayerConfig.mode == themis::RHYTHM_MODE_MORPH
@@ -567,6 +782,21 @@ void ProcessChordStep(uint8_t step)
                 if(rhythmPlayerState.randomizeTimer == 0 || rhythmPlayerState.randomizeTimer <= 32)
                 {
                     themis::RandomizeRhythmParams(rhythmPlayerConfig, rhythmPlayerState, seed ^ 0xFEDCBA98);
+                }
+            }
+
+            // Randomize bass pattern at chord cycle boundary
+            if(bassVoiceConfig.active && !bassVoiceConfig.freezePattern)
+            {
+                if(bassVoiceState.chordCyclesUntilChange == 0)
+                {
+                    uint32_t bassSeed = System::GetUs();
+                    themis::RandomizeBassPattern(bassVoiceState, bassVoiceConfig, bassSeed);
+                    bassVoiceState.chordCyclesUntilChange = 2 + (bassSeed % 3);
+                }
+                else
+                {
+                    bassVoiceState.chordCyclesUntilChange--;
                 }
             }
         }

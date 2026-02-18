@@ -7,6 +7,7 @@
 #include "groove.h"
 #include "drums.h"
 #include "melody.h"
+#include "core/themis_chords.h"
 
 // Timing flag - set in audio callback, processed in main loop
 volatile bool trigger16thNote = false;
@@ -130,7 +131,7 @@ void LoadSettings()
         // Load chord voice settings
         chordVoice.active = (settings.chordActive != 0);
 
-        if(settings.chordProgression < NUM_PROGRESSIONS)
+        if(settings.chordProgression < themis::NUM_PROGRESSIONS)
         {
             chordVoice.progressionIndex = settings.chordProgression;
         }
@@ -324,6 +325,14 @@ void ToggleRunState()
 
             // Initialize chord voice
             InitChordVoice();
+
+            // Initialize chord randomizer (Minor vibe only on firmware)
+            chordRandomizerConfig.enabledVibes = 0x01; // Only VIBE_MINOR
+            for(int i = 0; i < themis::NUM_VIBE_TYPES; i++)
+                chordRandomizerConfig.enabledProgressions[i] = 0xFFFFFFFF;
+            chordRandomizerState.Init();
+            if(chordVoice.active)
+                RandomizeChordVoice();
 
             // Initialize bass voice
             bassVoiceConfig.Init();
@@ -816,7 +825,7 @@ void ProcessControls()
                         SendChordNoteOff();
                         int prog = (int)chordVoice.progressionIndex + inc;
                         if(prog < 0) prog = 0;
-                        if(prog >= NUM_PROGRESSIONS) prog = NUM_PROGRESSIONS - 1;
+                        if(prog >= themis::NUM_PROGRESSIONS) prog = themis::NUM_PROGRESSIONS - 1;
                         chordVoice.progressionIndex = (uint8_t)prog;
                         chordState.currentChordIndex = 0;
                         break;

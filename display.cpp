@@ -5,6 +5,7 @@
 
 #include "display.h"
 #include "drums.h"
+#include "core/themis_chords.h"
 
 void UpdateDisplay()
 {
@@ -374,7 +375,7 @@ void UpdateDisplay()
                 const char* val = "";
                 if(i == HARMONY_SCALE) val = scaleNames[melodyScale];
                 else if(i == HARMONY_ROOT) val = rootNoteNames[melodyRoot];
-                else if(i == HARMONY_PROGRESSION) val = progressions[chordVoice.progressionIndex].name;
+                else if(i == HARMONY_PROGRESSION) val = themis::progressions[chordVoice.progressionIndex].name;
                 else if(i == HARMONY_RATE) val = chordRateNames[chordVoice.chordRate];
 
                 if(i == HARMONY_BACK)
@@ -405,7 +406,7 @@ void UpdateDisplay()
                 const char* val = "";
                 if(i == HARMONY_SCALE) val = scaleNames[melodyScale];
                 else if(i == HARMONY_ROOT) val = rootNoteNames[melodyRoot];
-                else if(i == HARMONY_PROGRESSION) val = progressions[chordVoice.progressionIndex].name;
+                else if(i == HARMONY_PROGRESSION) val = themis::progressions[chordVoice.progressionIndex].name;
                 else if(i == HARMONY_RATE) val = chordRateNames[chordVoice.chordRate];
 
                 if(i == HARMONY_BACK)
