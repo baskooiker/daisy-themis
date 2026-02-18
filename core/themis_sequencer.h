@@ -7,6 +7,7 @@
 #define THEMIS_SEQUENCER_H
 
 #include "themis_types.h"
+#include "themis_tr8.h"
 #include <functional>
 
 namespace themis {
@@ -49,6 +50,10 @@ public:
     // Bass voice (root-note bass lines)
     BassConfig bassVoice;
     BassState bassState;
+
+    // TR-8 voice (external drum machine via MIDI)
+    TR8Config tr8Voice;
+    TR8State tr8State;
 
     // Pattern indices
     uint8_t currentKickPattern = 0;
@@ -134,6 +139,13 @@ public:
      */
     std::function<void(int8_t note, uint8_t velocity, bool noteOn)> onBassTrigger;
 
+    /**
+     * @brief Called when TR-8 voice should trigger
+     * @param midiNote MIDI note number (TR-8 mapping)
+     * @param velocity MIDI velocity (90 normal, 120 accent)
+     */
+    std::function<void(uint8_t midiNote, uint8_t velocity)> onTR8Trigger;
+
     // ========================================================================
     // Methods
     // ========================================================================
@@ -218,6 +230,11 @@ public:
     void RandomizeBassVoice();
 
     /**
+     * @brief Randomize TR-8 voice kit selection
+     */
+    void RandomizeTR8Voice();
+
+    /**
      * @brief Get context about current chord for melody mapping
      * @return ChordContext with root, type, and diatonic status
      */
@@ -268,6 +285,11 @@ private:
      * @brief Process bass voice
      */
     void ProcessBassVoice();
+
+    /**
+     * @brief Process TR-8 voice
+     */
+    void ProcessTR8Voice();
 
     /**
      * @brief Trigger new chord

@@ -62,7 +62,7 @@ bool ThemisUI::IsAnySoloActive() const
     for (int i = 0; i < themis::NUM_DRUM_VOICES; i++) {
         if (drumSolo[i]) return true;
     }
-    return melodySolo || chordSolo || rhythmSolo || bassSolo;
+    return melodySolo || chordSolo || rhythmSolo || bassSolo || tr8Solo;
 }
 
 bool ThemisUI::ShouldPlayDrum(themis::DrumVoice voice) const
@@ -111,6 +111,16 @@ bool ThemisUI::ShouldPlayBass() const
 
     if (IsAnySoloActive()) {
         return bassSolo;
+    }
+    return true;
+}
+
+bool ThemisUI::ShouldPlayTR8() const
+{
+    if (tr8Mute) return false;
+
+    if (IsAnySoloActive()) {
+        return tr8Solo;
     }
     return true;
 }
@@ -827,6 +837,113 @@ void ThemisUI::RenderVoicesAndPatterns()
                 ImGui::EndCombo();
             }
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pitch variation sequence");
+        }
+    }
+
+    ImGui::PopID();
+
+    ImGui::Spacing();
+    ImGui::Separator();
+
+    // TR-8 Voice section
+    ImGui::Text("TR-8 VOICE");
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Rnd TR-8")) {
+        sequencer->RandomizeTR8Voice();
+    }
+
+    ImGui::Separator();
+
+    ImGui::PushID("TR8Compact");
+
+    ImGui::Checkbox("TR-8", &sequencer->tr8Voice.active);
+
+    ImGui::SameLine();
+    ImGui::Checkbox("Freeze##tr8", &sequencer->tr8Voice.freezeKit);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Prevent automatic kit changes");
+
+    ImGui::SameLine();
+    ImGui::Checkbox("Fills##tr8", &sequencer->tr8Voice.fillsEnabled);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Enable drum fills (~30%% chance at phrase end)");
+
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(45);
+    int tr8MidiCh = sequencer->tr8Voice.midiChannel + 1;
+    if (ImGui::DragInt("##tr8Ch", &tr8MidiCh, 0.1f, 1, 16, "Ch%d")) {
+        sequencer->tr8Voice.midiChannel = tr8MidiCh - 1;
+    }
+
+    // Kit selector
+    ImGui::Text("  Kit:");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(100);
+    uint8_t kitIdx = sequencer->tr8State.currentKitA;
+    if (kitIdx >= themis::NUM_TR8_KITS) kitIdx = 0;
+    if (ImGui::BeginCombo("##tr8Kit", themis::tr8Kits[kitIdx].name)) {
+        for (int k = 0; k < themis::NUM_TR8_KITS; k++) {
+            if (ImGui::Selectable(themis::tr8Kits[k].name, kitIdx == k)) {
+                sequencer->tr8State.currentKitA = k;
+                sequencer->tr8Voice.kitIndex = k;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("TR-8 kit pattern");
+
+    // AB variation mode
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(45);
+    const char* tr8VarNames[] = {"Off", "AB"};
+    int tr8VarMode = (sequencer->tr8Voice.variation.mode == themis::VAR_MODE_OFF) ? 0 : 1;
+    if (ImGui::BeginCombo("##tr8Var", tr8VarNames[tr8VarMode])) {
+        if (ImGui::Selectable("Off", tr8VarMode == 0)) {
+            sequencer->tr8Voice.variation.mode = themis::VAR_MODE_OFF;
+        }
+        if (ImGui::Selectable("AB", tr8VarMode == 1)) {
+            sequencer->tr8Voice.variation.mode = themis::VAR_MODE_AB;
+        }
+        ImGui::EndCombo();
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Kit AB variation");
+
+    // AB variation sequence
+    if (sequencer->tr8Voice.variation.mode != themis::VAR_MODE_OFF) {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(65);
+        const char* seqNames[] = {"AAAA", "AAAB", "AABB", "ABAB", "ABAC", "AAABAAAC"};
+        int seqIdx = sequencer->tr8Voice.variation.sequence;
+        if (seqIdx >= themis::NUM_VARIATION_SEQUENCES) seqIdx = 0;
+        if (ImGui::BeginCombo("##tr8Seq", seqNames[seqIdx])) {
+            for (int s = 0; s < themis::NUM_VARIATION_SEQUENCES; s++) {
+                if (ImGui::Selectable(seqNames[s], seqIdx == s)) {
+                    sequencer->tr8Voice.variation.sequence = (themis::VariationSequence)s;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Kit variation sequence");
+
+        // Show kit B name
+        ImGui::SameLine();
+        uint8_t kitB = sequencer->tr8State.currentKitB;
+        if (kitB < themis::NUM_TR8_KITS) {
+            ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.8f, 1.0f), "[B:%s]", themis::tr8Kits[kitB].name);
+        }
+    }
+
+    // Activity indicators (compact row of all 11 voices)
+    if (sequencer->tr8Voice.active) {
+        ImGui::Text("  ");
+        ImGui::SameLine();
+        for (int v = 0; v < themis::NUM_TR8_VOICES; v++) {
+            float act = tr8Activity[v];
+            ImVec4 color = act > 0.0f
+                ? ImVec4(0.2f + act * 0.6f, 0.8f, 0.8f, 1.0f)
+                : ImVec4(0.3f, 0.3f, 0.3f, 1.0f);
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, color);
+            ImGui::ProgressBar(act, ImVec2(30, 12), themis::tr8VoiceNames[v]);
+            ImGui::PopStyleColor();
+            if (v < themis::NUM_TR8_VOICES - 1) ImGui::SameLine(0, 2);
         }
     }
 

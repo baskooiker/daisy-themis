@@ -97,6 +97,17 @@ struct Settings {
     int bassPitchVariationMode = 0;      // 0=Off, 1=AB
     int bassPitchVariationSequence = 1;  // VAR_SEQ_AAAB
 
+    // TR-8 voice settings
+    bool tr8Active = false;
+    bool tr8Mute = false;
+    bool tr8Solo = false;
+    int tr8MidiChannel = 9;    // 0-indexed (channel 10)
+    int tr8KitIndex = 0;
+    bool tr8FreezeKit = false;
+    bool tr8FillsEnabled = true;
+    int tr8VarMode = 0;        // 0=Off, 1=AB
+    int tr8VarSequence = 1;    // VAR_SEQ_AAAB
+
     // Per-voice synth parameters
     VoiceSynthParams kickSynth;
     VoiceSynthParams snareSynth;

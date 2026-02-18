@@ -61,6 +61,7 @@ add_library(themis_core STATIC
     ../core/themis_chords.cpp
     ../core/themis_rhythm.cpp
     ../core/themis_acid.cpp
+    ../core/themis_tr8.cpp
     ../core/themis_sequencer.cpp
 )
 target_include_directories(themis_core PUBLIC ../core)

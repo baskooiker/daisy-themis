@@ -185,6 +185,24 @@ bool LoadSettings(Settings& settings)
             settings.bassPitchVariationMode = std::stoi(value);
         } else if (key == "bass_pitch_variation_sequence") {
             settings.bassPitchVariationSequence = std::stoi(value);
+        } else if (key == "tr8_active") {
+            settings.tr8Active = (value == "true" || value == "1");
+        } else if (key == "tr8_mute") {
+            settings.tr8Mute = (value == "true" || value == "1");
+        } else if (key == "tr8_solo") {
+            settings.tr8Solo = (value == "true" || value == "1");
+        } else if (key == "tr8_midi_channel") {
+            settings.tr8MidiChannel = std::stoi(value);
+        } else if (key == "tr8_kit_index") {
+            settings.tr8KitIndex = std::stoi(value);
+        } else if (key == "tr8_freeze_kit") {
+            settings.tr8FreezeKit = (value == "true" || value == "1");
+        } else if (key == "tr8_fills_enabled") {
+            settings.tr8FillsEnabled = (value == "true" || value == "1");
+        } else if (key == "tr8_var_mode") {
+            settings.tr8VarMode = std::stoi(value);
+        } else if (key == "tr8_var_sequence") {
+            settings.tr8VarSequence = std::stoi(value);
         } else if (key.substr(0, 10) == "drum_mute_") {
             int idx = std::stoi(key.substr(10));
             if (idx >= 0 && idx < 11) {
@@ -305,6 +323,17 @@ bool SaveSettings(const Settings& settings)
     file << "bass_rhythm_variation_sequence=" << settings.bassRhythmVariationSequence << "\n";
     file << "bass_pitch_variation_mode=" << settings.bassPitchVariationMode << "\n";
     file << "bass_pitch_variation_sequence=" << settings.bassPitchVariationSequence << "\n\n";
+
+    file << "[tr8]\n";
+    file << "tr8_active=" << (settings.tr8Active ? "true" : "false") << "\n";
+    file << "tr8_mute=" << (settings.tr8Mute ? "true" : "false") << "\n";
+    file << "tr8_solo=" << (settings.tr8Solo ? "true" : "false") << "\n";
+    file << "tr8_midi_channel=" << settings.tr8MidiChannel << "\n";
+    file << "tr8_kit_index=" << settings.tr8KitIndex << "\n";
+    file << "tr8_freeze_kit=" << (settings.tr8FreezeKit ? "true" : "false") << "\n";
+    file << "tr8_fills_enabled=" << (settings.tr8FillsEnabled ? "true" : "false") << "\n";
+    file << "tr8_var_mode=" << settings.tr8VarMode << "\n";
+    file << "tr8_var_sequence=" << settings.tr8VarSequence << "\n\n";
 
     file << "[chords]\n";
     file << "chord_freeze_enabled=" << (settings.chordFreezeEnabled ? "true" : "false") << "\n";

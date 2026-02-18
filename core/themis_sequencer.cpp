@@ -11,6 +11,7 @@
 #include "themis_chords.h"
 #include "themis_rhythm.h"
 #include "themis_bass.h"
+#include "themis_tr8.h"
 
 namespace themis {
 
@@ -106,6 +107,10 @@ void Sequencer::Init()
     bassVoice.Init();
     bassState.Init();
 
+    // Initialize TR-8 voice
+    tr8Voice.Init();
+    tr8State.Init();
+
     // Initialize groove amounts
     for(int i = 0; i < NUM_DRUM_VOICES; i++) {
         grooveAmount[i] = 0.5f;
@@ -156,6 +161,9 @@ void Sequencer::Start()
 
     // Reset bass voice state
     bassState.currentNote = -1;
+
+    // Reset TR-8 voice state
+    tr8State.fillActive = false;
 
     // Generate initial patterns
     if(g_platform) {
@@ -519,6 +527,7 @@ void Sequencer::RandomizeAll()
     RandomizeChordVoice();
     RandomizeRhythmVoice();
     RandomizeBassVoice();
+    RandomizeTR8Voice();
 }
 
 void Sequencer::ScheduleFill()
@@ -718,6 +727,7 @@ void Sequencer::ProcessStep(float sampleRate)
     ProcessChordVoice();
     ProcessRhythmVoice();
     ProcessBassVoice();
+    ProcessTR8Voice();
 
     // Advance step
     currentStep++;
@@ -1400,6 +1410,17 @@ void Sequencer::NotifyRhythmOfChordCycle()
         }
     }
 
+    // Randomize TR-8 kit every 2-4 chord cycles (respect freeze)
+    if (tr8Voice.active && !tr8Voice.freezeKit) {
+        if (tr8State.chordCyclesUntilChange == 0) {
+            uint32_t tr8Seed = g_platform ? g_platform->GetRandomSeed() : 12345;
+            RandomizeTR8Kit(tr8Voice, tr8State, tr8Seed);
+            tr8State.chordCyclesUntilChange = 2 + (tr8Seed % 3);
+        } else {
+            tr8State.chordCyclesUntilChange--;
+        }
+    }
+
     // Skip if not in morph mode or frozen
     if (rhythmVoice.mode != RHYTHM_MODE_MORPH || rhythmVoice.freezeStyle) {
         return;
@@ -1538,6 +1559,33 @@ void Sequencer::ProcessChordRandomization()
         // Reset timer: 2-4 progression cycles
         chordRandomizerState.changeTimer = 2 + ((seed >> 12) % 3);
     }
+}
+
+// ============================================================================
+// TR-8 VOICE
+// ============================================================================
+
+void Sequencer::ProcessTR8Voice()
+{
+    if (!tr8Voice.active) return;
+
+    // Schedule fill at start of 7th-8th bar (same timing as drum fills)
+    if (barCounter == 3 && currentStep == 0 && tr8Voice.fillsEnabled) {
+        uint32_t fillSeed = g_platform ? g_platform->GetRandomSeed() : 12345;
+        if ((fillSeed % 100) < 30) {
+            tr8State.fillActive = true;
+            tr8State.fillPatternIndex = (fillSeed >> 8) % NUM_TR8_FILLS;
+            tr8State.fillStartStep = (barCounter * 32) + 24;  // Last 8 steps
+        }
+    }
+
+    ProcessTR8Step(tr8Voice, tr8State, currentStep, barCounter, onTR8Trigger);
+}
+
+void Sequencer::RandomizeTR8Voice()
+{
+    uint32_t seed = g_platform ? g_platform->GetRandomSeed() : 12345;
+    RandomizeTR8Kit(tr8Voice, tr8State, seed);
 }
 
 } // namespace themis

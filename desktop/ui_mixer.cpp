@@ -4,6 +4,7 @@
  */
 
 #include "ui_internal.h"
+#include "themis_tr8.h"
 
 namespace themis_ui {
 
@@ -28,6 +29,16 @@ void ThemisUI::RenderMixer()
     if (rhythmActivity < 0.0f) rhythmActivity = 0.0f;
     if (bassActivity > 0.0f) bassActivity -= activityDecay;
     if (bassActivity < 0.0f) bassActivity = 0.0f;
+    for (int i = 0; i < themis::NUM_TR8_VOICES; i++) {
+        if (tr8Activity[i] > 0.0f) tr8Activity[i] -= activityDecay;
+        if (tr8Activity[i] < 0.0f) tr8Activity[i] = 0.0f;
+    }
+    // Compute aggregate TR-8 activity for mixer channel
+    float tr8AggregateActivity = 0.0f;
+    for (int i = 0; i < themis::NUM_TR8_VOICES; i++) {
+        if (tr8Activity[i] > tr8AggregateActivity)
+            tr8AggregateActivity = tr8Activity[i];
+    }
 
     // Compact channel strip helper lambda
     auto RenderChannel = [](const char* name, bool* mute, bool* solo,
@@ -111,6 +122,12 @@ void ThemisUI::RenderMixer()
                  ImVec4(0.9f, 0.7f, 0.1f, 1.0f));
     ImGui::PopID();
 
+    ImGui::PushID("TR-8");
+    RenderChannel("TR-8", &tr8Mute, &tr8Solo,
+                 tr8AggregateActivity, ShouldPlayTR8(),
+                 ImVec4(0.2f, 0.8f, 0.8f, 1.0f));
+    ImGui::PopID();
+
     // Stop notes when effective playing state changes from true to false
     if (wasChordsPlaying && !ShouldPlayChords()) {
         themis_audio::g_audioEngine.StopAllChordNotes();
@@ -131,6 +148,7 @@ void ThemisUI::RenderMixer()
         chordMute = false;
         rhythmMute = false;
         bassMute = false;
+        tr8Mute = false;
     }
     ImGui::SameLine();
     if (ImGui::SmallButton("Clear Solos")) {
@@ -139,6 +157,7 @@ void ThemisUI::RenderMixer()
         chordSolo = false;
         rhythmSolo = false;
         bassSolo = false;
+        tr8Solo = false;
     }
     ImGui::SameLine();
     if (ImGui::SmallButton("Solo Drums")) {
@@ -147,6 +166,7 @@ void ThemisUI::RenderMixer()
         chordSolo = false;
         rhythmSolo = false;
         bassSolo = false;
+        tr8Solo = false;
         // Stop melodic voices immediately
         themis_audio::g_audioEngine.StopAllChordNotes();
         themis_audio::g_audioEngine.StopAllRhythmNotes();
@@ -159,6 +179,7 @@ void ThemisUI::RenderMixer()
         chordSolo = false;
         rhythmSolo = false;
         bassSolo = false;
+        tr8Solo = false;
         // Stop polyphonic melodic voices immediately
         themis_audio::g_audioEngine.StopAllChordNotes();
         themis_audio::g_audioEngine.StopAllRhythmNotes();
@@ -235,6 +256,13 @@ void ThemisUI::TriggerRhythmActivity()
 void ThemisUI::TriggerBassActivity()
 {
     bassActivity = 1.0f;
+}
+
+void ThemisUI::TriggerTR8Activity(uint8_t voiceIndex)
+{
+    if (voiceIndex < themis::NUM_TR8_VOICES) {
+        tr8Activity[voiceIndex] = 1.0f;
+    }
 }
 
 } // namespace themis_ui

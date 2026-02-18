@@ -20,6 +20,7 @@
 #include "themis_sequencer.h"
 #include "themis_chords.h"
 #include "themis_rhythm.h"
+#include "themis_tr8.h"
 #include "themis_data.h"
 #include "platform_desktop.h"
 #include "audio.h"
@@ -247,6 +248,30 @@ static void SetupCallbacks()
         }
     };
 
+    // TR-8 voice callback (MIDI only, no internal synth)
+    g_sequencer.onTR8Trigger = [](uint8_t midiNote, uint8_t velocity) {
+        // Find voice index for activity indicator
+        for (int v = 0; v < themis::NUM_TR8_VOICES; v++) {
+            if (themis::tr8MidiNotes[v] == midiNote) {
+                themis_ui::g_ui.TriggerTR8Activity(v);
+                break;
+            }
+        }
+
+        // Check mixer solo/mute state
+        if (!themis_ui::g_ui.ShouldPlayTR8()) {
+            return;
+        }
+
+        // No internal synth - MIDI only
+        if (themis::g_platform) {
+            themis::g_platform->SendMidiNoteOn(
+                g_sequencer.tr8Voice.midiChannel,
+                midiNote,
+                velocity);
+        }
+    };
+
 #ifdef THEMIS_ENABLE_MIDI
     // Connect MIDI callbacks
     g_platform.midiNoteOnCallback = [](uint8_t ch, uint8_t note, uint8_t vel) {
@@ -412,6 +437,18 @@ int main(int argc, char* argv[])
         g_sequencer.bassVoice.pitchVariation.mode = (themis::VariationMode)(g_settings.bassPitchVariationMode < themis::NUM_VARIATION_MODES ? g_settings.bassPitchVariationMode : 0);
         g_sequencer.bassVoice.pitchVariation.sequence = (themis::VariationSequence)(g_settings.bassPitchVariationSequence < themis::NUM_VARIATION_SEQUENCES ? g_settings.bassPitchVariationSequence : 0);
 
+        // Apply TR-8 voice settings
+        g_sequencer.tr8Voice.active = g_settings.tr8Active;
+        themis_ui::g_ui.tr8Mute = g_settings.tr8Mute;
+        themis_ui::g_ui.tr8Solo = g_settings.tr8Solo;
+        g_sequencer.tr8Voice.midiChannel = g_settings.tr8MidiChannel;
+        g_sequencer.tr8Voice.kitIndex = g_settings.tr8KitIndex;
+        g_sequencer.tr8State.currentKitA = g_settings.tr8KitIndex;
+        g_sequencer.tr8Voice.freezeKit = g_settings.tr8FreezeKit;
+        g_sequencer.tr8Voice.fillsEnabled = g_settings.tr8FillsEnabled;
+        g_sequencer.tr8Voice.variation.mode = (themis::VariationMode)(g_settings.tr8VarMode < themis::NUM_VARIATION_MODES ? g_settings.tr8VarMode : 0);
+        g_sequencer.tr8Voice.variation.sequence = (themis::VariationSequence)(g_settings.tr8VarSequence < themis::NUM_VARIATION_SEQUENCES ? g_settings.tr8VarSequence : 0);
+
         // Apply chord randomizer settings
         g_sequencer.chordRandomizer.freezeEnabled = g_settings.chordFreezeEnabled;
         g_sequencer.chordRandomizer.enabledVibes = g_settings.chordEnabledVibes;
@@ -568,6 +605,17 @@ int main(int argc, char* argv[])
     g_settings.bassRhythmVariationSequence = g_sequencer.bassVoice.rhythmVariation.sequence;
     g_settings.bassPitchVariationMode = g_sequencer.bassVoice.pitchVariation.mode;
     g_settings.bassPitchVariationSequence = g_sequencer.bassVoice.pitchVariation.sequence;
+
+    // Save TR-8 voice settings
+    g_settings.tr8Active = g_sequencer.tr8Voice.active;
+    g_settings.tr8Mute = themis_ui::g_ui.tr8Mute;
+    g_settings.tr8Solo = themis_ui::g_ui.tr8Solo;
+    g_settings.tr8MidiChannel = g_sequencer.tr8Voice.midiChannel;
+    g_settings.tr8KitIndex = g_sequencer.tr8State.currentKitA;
+    g_settings.tr8FreezeKit = g_sequencer.tr8Voice.freezeKit;
+    g_settings.tr8FillsEnabled = g_sequencer.tr8Voice.fillsEnabled;
+    g_settings.tr8VarMode = g_sequencer.tr8Voice.variation.mode;
+    g_settings.tr8VarSequence = g_sequencer.tr8Voice.variation.sequence;
 
     // Save chord randomizer settings
     g_settings.chordFreezeEnabled = g_sequencer.chordRandomizer.freezeEnabled;

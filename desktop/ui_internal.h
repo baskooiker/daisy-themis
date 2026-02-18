@@ -15,6 +15,7 @@
 #include "themis_chords.h"
 #include "themis_bass.h"
 #include "themis_rhythm.h"
+#include "themis_tr8.h"
 #include "audio.h"
 #include <imgui.h>
 #include <cstdio>

@@ -42,6 +42,8 @@ public:
     bool rhythmSolo = false;
     bool bassMute = false;
     bool bassSolo = false;
+    bool tr8Mute = false;
+    bool tr8Solo = false;
 
     // Check if any solo is active
     bool IsAnySoloActive() const;
@@ -61,12 +63,16 @@ public:
     // Check if bass voice should sound
     bool ShouldPlayBass() const;
 
+    // Check if TR-8 voice should sound
+    bool ShouldPlayTR8() const;
+
     // Activity triggers (call from audio callbacks)
     void TriggerDrumActivity(themis::DrumVoice voice);
     void TriggerMelodyActivity();
     void TriggerChordActivity();
     void TriggerRhythmActivity();
     void TriggerBassActivity();
+    void TriggerTR8Activity(uint8_t voiceIndex);
 
 private:
     themis::Sequencer* sequencer = nullptr;
@@ -81,6 +87,7 @@ private:
     float chordActivity = 0.0f;
     float rhythmActivity = 0.0f;
     float bassActivity = 0.0f;
+    float tr8Activity[themis::NUM_TR8_VOICES] = {0.0f};
 
     // UI sections
     void RenderTransportControls();
