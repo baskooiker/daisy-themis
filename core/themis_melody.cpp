@@ -82,6 +82,40 @@ float MelodyNoteToCV(int8_t semitone)
 // RHYTHM GENERATION
 // ============================================================================
 
+/**
+ * @brief Ensure melody pattern has at least one quarter-beat anchor when sparse
+ *
+ * Sparse melody patterns (<=8 hits) that have no hits on any quarter-note
+ * position (steps 0,4,8,...) sound disconnected from the groove. This adds
+ * a single anchor hit on beat 1 of a bar to ground the rhythm.
+ */
+static uint32_t EnsureMelodyGrounding(uint32_t pattern, uint8_t length, uint32_t seed)
+{
+    int activeSteps = 0;
+    bool hasQuarterBeat = false;
+
+    for(int i = 0; i < length; i++)
+    {
+        if(pattern & (1U << (31 - i)))
+        {
+            activeSteps++;
+            if(i % 4 == 0) hasQuarterBeat = true;
+        }
+    }
+
+    if(activeSteps > 0 && activeSteps <= 8 && !hasQuarterBeat)
+    {
+        // Add a hit on beat 1 of bar 1 or bar 2
+        uint8_t anchorStep = ((seed >> 2) % 2 == 0) ? 0 : 16;
+        if(anchorStep < length)
+        {
+            pattern |= (1U << (31 - anchorStep));
+        }
+    }
+
+    return pattern;
+}
+
 uint32_t GenerateMelodyRhythmWithParams(uint32_t seed, MelodyConfig* voice,
                                          RhythmStyle style, DensityLevel density,
                                          uint8_t currentKickPattern)
@@ -93,7 +127,8 @@ uint32_t GenerateMelodyRhythmWithParams(uint32_t seed, MelodyConfig* voice,
     }
 
     // Generate pattern using the same algorithms as drums
-    return GeneratePatternForStyle(seed, style, density, voice->patternLength, currentKickPattern);
+    uint32_t pattern = GeneratePatternForStyle(seed, style, density, voice->patternLength, currentKickPattern);
+    return EnsureMelodyGrounding(pattern, voice->patternLength, seed);
 }
 
 void GenerateMelodyRhythmFor(uint32_t seed, MelodyConfig* voice, uint8_t currentKickPattern)
@@ -128,6 +163,7 @@ void GenerateMelodyRhythmFor(uint32_t seed, MelodyConfig* voice, uint8_t current
     // Generate pattern
     voice->rhythmPattern = GeneratePatternForStyle(seed, voice->rhythmStyle, voice->density,
                                                     voice->patternLength, currentKickPattern);
+    voice->rhythmPattern = EnsureMelodyGrounding(voice->rhythmPattern, voice->patternLength, seed);
 }
 
 // ============================================================================

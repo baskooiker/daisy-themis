@@ -19,6 +19,7 @@
 #include "themis_platform.h"
 #include "themis_sequencer.h"
 #include "themis_chords.h"
+#include "themis_rhythm.h"
 #include "themis_data.h"
 #include "platform_desktop.h"
 #include "audio.h"
@@ -392,6 +393,10 @@ int main(int argc, char* argv[])
         g_sequencer.rhythmVoice.playStyle = (themis::RhythmPlayStyle)(g_settings.rhythmPlayStyle < themis::NUM_RHYTHM_PLAY_STYLES ? g_settings.rhythmPlayStyle : 0);
         g_sequencer.rhythmVoice.midiChannel = g_settings.rhythmMidiChannel;
         g_sequencer.rhythmVoice.octaveOffset = g_settings.rhythmOctaveOffset;
+        g_sequencer.rhythmState.padPatternA = g_settings.rhythmPadPatternA < themis::NUM_PAD_PATTERNS ? g_settings.rhythmPadPatternA : 0;
+        g_sequencer.rhythmState.padPatternB = g_settings.rhythmPadPatternB < themis::NUM_PAD_PATTERNS ? g_settings.rhythmPadPatternB : 1;
+        g_sequencer.rhythmVoice.padVariation.mode = (themis::VariationMode)(g_settings.rhythmPadVarMode < themis::NUM_VARIATION_MODES ? g_settings.rhythmPadVarMode : 0);
+        g_sequencer.rhythmVoice.padVariation.sequence = (themis::VariationSequence)(g_settings.rhythmPadVarSequence < themis::NUM_VARIATION_SEQUENCES ? g_settings.rhythmPadVarSequence : 0);
 
         // Apply bass voice settings
         g_sequencer.bassVoice.active = g_settings.bassActive;
@@ -545,6 +550,10 @@ int main(int argc, char* argv[])
     g_settings.rhythmPlayStyle = g_sequencer.rhythmVoice.playStyle;
     g_settings.rhythmMidiChannel = g_sequencer.rhythmVoice.midiChannel;
     g_settings.rhythmOctaveOffset = g_sequencer.rhythmVoice.octaveOffset;
+    g_settings.rhythmPadPatternA = g_sequencer.rhythmState.padPatternA;
+    g_settings.rhythmPadPatternB = g_sequencer.rhythmState.padPatternB;
+    g_settings.rhythmPadVarMode = g_sequencer.rhythmVoice.padVariation.mode;
+    g_settings.rhythmPadVarSequence = g_sequencer.rhythmVoice.padVariation.sequence;
 
     // Save bass voice settings
     g_settings.bassActive = g_sequencer.bassVoice.active;

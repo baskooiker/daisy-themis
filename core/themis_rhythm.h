@@ -44,6 +44,20 @@ struct RhythmPatterns
 };
 
 // ============================================================================
+// PAD PATTERN TABLE
+// ============================================================================
+
+constexpr uint8_t NUM_PAD_PATTERNS = 16;
+
+struct PadPattern
+{
+    uint16_t triggers;            ///< 16-bit pattern (MSB = step 0)
+    const char* name;
+};
+
+extern const PadPattern padPatterns[NUM_PAD_PATTERNS];
+
+// ============================================================================
 // RHYTHM PLAYER FUNCTIONS
 // ============================================================================
 

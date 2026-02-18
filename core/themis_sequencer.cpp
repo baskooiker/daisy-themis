@@ -1026,6 +1026,16 @@ void Sequencer::ProcessRhythmVoice()
     // Morph mode randomization is now triggered by NotifyRhythmOfChordCycle()
     // at chord progression cycle boundaries, not by step-based timers
 
+    // Pad AB variation: swap padPatternA before processing, restore after
+    uint8_t savedPadPattern = rhythmState.padPatternA;
+    if (rhythmVoice.padVariation.mode != VAR_MODE_OFF &&
+        rhythmState.currentStyle == RHYTHM_PLAY_PAD) {
+        uint8_t var = GetCurrentVariation(&rhythmVoice.padVariation, currentStep, barCounter);
+        if (var >= 1) {
+            rhythmState.padPatternA = rhythmState.padPatternB;
+        }
+    }
+
     // Process rhythm step
     int8_t notes[6];
     uint8_t numNotes = 0;
@@ -1040,6 +1050,9 @@ void Sequencer::ProcessRhythmVoice()
         notes,
         numNotes
     );
+
+    // Restore A pattern
+    rhythmState.padPatternA = savedPadPattern;
 
     // Trigger notes if any were generated
     if (triggered && numNotes > 0 && onRhythmTrigger) {
@@ -1075,8 +1088,22 @@ void Sequencer::RandomizeRhythmVoice()
         rhythmVoice.followKick = ((seed >> 12) & 0x01) == 0;
     }
 
-    // Reset state
+    // Randomize pad patterns (ensure different)
+    uint32_t padSeed = seed ^ 0xBADCAFE0;
+    rhythmState.padPatternA = padSeed % NUM_PAD_PATTERNS;
+    rhythmState.padPatternB = ((padSeed >> 8) % (NUM_PAD_PATTERNS - 1));
+    if (rhythmState.padPatternB >= rhythmState.padPatternA) rhythmState.padPatternB++;
+
+    // Randomize pad variation
+    rhythmVoice.padVariation.mode = ((padSeed >> 16) % 2 == 0) ? VAR_MODE_OFF : VAR_MODE_AB;
+    rhythmVoice.padVariation.sequence = (VariationSequence)((padSeed >> 18) % 4);
+
+    // Reset state (preserving pad patterns we just set)
+    uint8_t savedPadA = rhythmState.padPatternA;
+    uint8_t savedPadB = rhythmState.padPatternB;
     rhythmState.Init();
+    rhythmState.padPatternA = savedPadA;
+    rhythmState.padPatternB = savedPadB;
 
     // Set initial style
     rhythmState.currentStyle = rhythmVoice.playStyle;

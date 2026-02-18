@@ -13,6 +13,26 @@ namespace themis {
 // RHYTHM PATTERN TABLES
 // ============================================================================
 
+// Pad patterns - sparse, long-held chord sustains (16 steps each, MSB = step 0)
+const PadPattern padPatterns[NUM_PAD_PATTERNS] = {
+    {0x8000, "Whole"},      //  0: Hit on 1 only
+    {0x8080, "Half 1-3"},   //  1: Hits on 1 and 3
+    {0x8800, "Half 1-2"},   //  2: Hits on 1 and 2
+    {0x0880, "Half 2-3"},   //  3: Hits on 2 and 3
+    {0x4000, "Push 1"},     //  4: Just after beat 1
+    {0x4040, "Push 1-3"},   //  5: After beats 1 and 3
+    {0x0440, "Push 2-3"},   //  6: After beats 2 and 3
+    {0x0040, "Late 3"},     //  7: Only after beat 3
+    {0x8008, "Tie"},        //  8: Beat 1 + anticipated next bar
+    {0x0808, "Backbeat"},   //  9: After beats 2 and 4
+    {0x0088, "Late Half"},  // 10: Beat 3 + anticipated
+    {0x0008, "Antic"},      // 11: Anticipated only (before next bar)
+    {0x8040, "Open"},       // 12: Beat 1, then after 3
+    {0x4080, "Close"},      // 13: After 1, then on 3
+    {0x8808, "Drive"},      // 14: Beats 1, 2 + anticipated
+    {0x4048, "Float"},      // 15: After 1, after 3, anticipated
+};
+
 // Chord patterns - sparse, medium, busy (16 steps each, MSB = step 0)
 static const uint16_t chordPatternsSparse[] = {
     0x8000,  // On the 1
@@ -132,6 +152,10 @@ uint16_t GetRhythmPattern(
 
         case RHYTHM_PLAY_POLYRHYTHM:
             return chordPatternsMedium[patternIndex];
+
+        case RHYTHM_PLAY_PAD:
+            // Pad patterns handled separately via padPatterns table
+            return chordPatternsSparse[patternIndex];
 
         default:
             return chordPatternsMedium[0];
@@ -306,6 +330,14 @@ bool ShouldRhythmPlay(
         return true;  // Always process, let ProcessPolyrhythm decide
     }
 
+    if (state.currentStyle == RHYTHM_PLAY_PAD) {
+        // Pad uses its own stored pattern, not the chord patterns
+        uint8_t padIdx = state.padPatternA;
+        if (padIdx >= NUM_PAD_PATTERNS) padIdx = 0;
+        uint8_t patternStep = step % 16;
+        return IsStepActive16(padPatterns[padIdx].triggers, patternStep);
+    }
+
     return patternActive;
 }
 
@@ -337,6 +369,8 @@ uint8_t CalculateRhythmVelocity(
     // Style-specific adjustments
     if (state.currentStyle == RHYTHM_PLAY_POLYRHYTHM) {
         baseVel -= 10;  // Poly a bit softer
+    } else if (state.currentStyle == RHYTHM_PLAY_PAD) {
+        baseVel -= 5;   // Pad slightly softer
     }
 
     // Random variation
@@ -369,6 +403,9 @@ uint8_t CalculateRhythmDuration(
         case RHYTHM_PLAY_POLYRHYTHM:
             baseDuration = 3;  // Poly varies
             break;
+        case RHYTHM_PLAY_PAD:
+            baseDuration = 8;  // Pads sustain longest (half a bar)
+            break;
         default:
             baseDuration = 3;
     }
@@ -376,7 +413,11 @@ uint8_t CalculateRhythmDuration(
     // Articulation setting
     switch (config.articulation) {
         case ARTICULATION_STACCATO:
-            baseDuration = (baseDuration + 1) / 2;
+            if (state.currentStyle == RHYTHM_PLAY_PAD) {
+                baseDuration = 4;  // Pad staccato still longer than chord staccato
+            } else {
+                baseDuration = (baseDuration + 1) / 2;
+            }
             break;
         case ARTICULATION_LEGATO:
             baseDuration += 2;
@@ -392,9 +433,10 @@ uint8_t CalculateRhythmDuration(
         baseDuration--;
     }
 
-    // Clamp
+    // Clamp - pad allows longer durations
+    uint8_t maxDuration = (state.currentStyle == RHYTHM_PLAY_PAD) ? 14 : 8;
     if (baseDuration < 1) baseDuration = 1;
-    if (baseDuration > 8) baseDuration = 8;
+    if (baseDuration > maxDuration) baseDuration = maxDuration;
 
     return baseDuration;
 }
@@ -432,6 +474,11 @@ void RandomizeRhythmParams(
 
     // Set inversion variation on state to match config
     state.inversionVariation = config.inversionVariation;
+
+    // Randomize pad patterns (ensure A and B are different)
+    state.padPatternA = (seed >> 18) % NUM_PAD_PATTERNS;
+    state.padPatternB = ((seed >> 22) % (NUM_PAD_PATTERNS - 1));
+    if (state.padPatternB >= state.padPatternA) state.padPatternB++;
 
     // Set intensity target based on activity
     switch (config.activity) {
@@ -516,6 +563,13 @@ bool ProcessRhythmStep(
                 return false;  // Poly pattern didn't trigger
             }
             break;
+
+        case RHYTHM_PLAY_PAD: {
+            // Pad uses chord voicing like chords, but with its own trigger pattern
+            uint8_t inversion = GetNextInversion(state, seed ^ 0x789ABC00);
+            GenerateChordVoicing(chordCtx, config.octaveOffset, inversion, outNotes, outNumNotes);
+            break;
+        }
 
         default:
             return false;

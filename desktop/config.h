@@ -78,6 +78,10 @@ struct Settings {
     int rhythmPlayStyle = 0;   // 0=Chords, 1=Poly
     int rhythmMidiChannel = 3; // 0-indexed
     int rhythmOctaveOffset = 0;
+    int rhythmPadPatternA = 0;
+    int rhythmPadPatternB = 1;
+    int rhythmPadVarMode = 0;      // 0=Off, 1=AB
+    int rhythmPadVarSequence = 1;  // VAR_SEQ_AAAB
 
     // Bass voice settings
     bool bassActive = true;

@@ -392,6 +392,7 @@ enum RhythmPlayStyle
 {
     RHYTHM_PLAY_CHORDS,         ///< Full chord stabs/pads
     RHYTHM_PLAY_POLYRHYTHM,     ///< Polyrhythmic moving patterns
+    RHYTHM_PLAY_PAD,            ///< Sparse, long-held chord sustains
     NUM_RHYTHM_PLAY_STYLES
 };
 
@@ -463,6 +464,7 @@ struct RhythmPlayerConfig
     InversionVariation inversionVariation; ///< Chord inversion weighting
     bool followKick;                ///< Lock rhythm to kick pattern
     bool freezeStyle;               ///< Prevent automatic style changes
+    VariationConfig padVariation;   ///< AB variation for pad patterns
 
     void Init()
     {
@@ -476,6 +478,9 @@ struct RhythmPlayerConfig
         inversionVariation = INV_VAR_LOW;
         followKick = false;
         freezeStyle = false;
+        padVariation.mode = VAR_MODE_OFF;
+        padVariation.sequence = VAR_SEQ_AAAB;
+        padVariation.granularity = VAR_GRAN_BAR;
     }
 };
 
@@ -517,6 +522,10 @@ struct RhythmPlayerState
     uint8_t currentInversion;       ///< 0=root, 1=first, 2=second
     InversionVariation inversionVariation; ///< How inversions are weighted
 
+    // Pad pattern state
+    uint8_t padPatternA;            ///< Pad pattern A index (0-15)
+    uint8_t padPatternB;            ///< Pad pattern B index (0-15)
+
     void Init()
     {
         currentStyle = RHYTHM_PLAY_CHORDS;
@@ -545,6 +554,9 @@ struct RhythmPlayerState
 
         currentInversion = 0;
         inversionVariation = INV_VAR_LOW;
+
+        padPatternA = 0;
+        padPatternB = 1;
     }
 };
 

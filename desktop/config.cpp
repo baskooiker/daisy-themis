@@ -153,6 +153,14 @@ bool LoadSettings(Settings& settings)
             settings.rhythmMidiChannel = std::stoi(value);
         } else if (key == "rhythm_octave_offset") {
             settings.rhythmOctaveOffset = std::stoi(value);
+        } else if (key == "rhythm_pad_pattern_a") {
+            settings.rhythmPadPatternA = std::stoi(value);
+        } else if (key == "rhythm_pad_pattern_b") {
+            settings.rhythmPadPatternB = std::stoi(value);
+        } else if (key == "rhythm_pad_var_mode") {
+            settings.rhythmPadVarMode = std::stoi(value);
+        } else if (key == "rhythm_pad_var_sequence") {
+            settings.rhythmPadVarSequence = std::stoi(value);
         } else if (key == "bass_active") {
             settings.bassActive = (value == "true" || value == "1");
         } else if (key == "bass_mute") {
@@ -278,7 +286,11 @@ bool SaveSettings(const Settings& settings)
     file << "rhythm_mode=" << settings.rhythmMode << "\n";
     file << "rhythm_play_style=" << settings.rhythmPlayStyle << "\n";
     file << "rhythm_midi_channel=" << settings.rhythmMidiChannel << "\n";
-    file << "rhythm_octave_offset=" << settings.rhythmOctaveOffset << "\n\n";
+    file << "rhythm_octave_offset=" << settings.rhythmOctaveOffset << "\n";
+    file << "rhythm_pad_pattern_a=" << settings.rhythmPadPatternA << "\n";
+    file << "rhythm_pad_pattern_b=" << settings.rhythmPadPatternB << "\n";
+    file << "rhythm_pad_var_mode=" << settings.rhythmPadVarMode << "\n";
+    file << "rhythm_pad_var_sequence=" << settings.rhythmPadVarSequence << "\n\n";
 
     file << "[bass]\n";
     file << "bass_active=" << (settings.bassActive ? "true" : "false") << "\n";

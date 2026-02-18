@@ -491,7 +491,7 @@ void ThemisUI::RenderVoicesAndPatterns()
     // Style
     ImGui::SameLine();
     ImGui::SetNextItemWidth(65);
-    const char* styleNames[] = {"Chords", "Poly"};
+    const char* styleNames[] = {"Chords", "Poly", "Pad"};
     if (ImGui::BeginCombo("##rstyle", styleNames[sequencer->rhythmVoice.playStyle])) {
         for (int s = 0; s < themis::NUM_RHYTHM_PLAY_STYLES; s++) {
             if (ImGui::Selectable(styleNames[s], sequencer->rhythmVoice.playStyle == s)) {
@@ -500,7 +500,7 @@ void ThemisUI::RenderVoicesAndPatterns()
         }
         ImGui::EndCombo();
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Play style: Chords, Arpeggios, Polyrhythm");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Play style: Chords, Polyrhythm, Pad");
 
     // Octave
     ImGui::SameLine();
@@ -569,6 +569,59 @@ void ThemisUI::RenderVoicesAndPatterns()
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Sync rhythm to kick pattern");
     }
 
+    // Pad-specific controls (show when pad style is active)
+    if (sequencer->rhythmVoice.playStyle == themis::RHYTHM_PLAY_PAD ||
+        sequencer->rhythmState.currentStyle == themis::RHYTHM_PLAY_PAD) {
+        ImGui::Text("  Pad:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(75);
+        uint8_t padIdx = sequencer->rhythmState.padPatternA;
+        if (padIdx >= themis::NUM_PAD_PATTERNS) padIdx = 0;
+        if (ImGui::BeginCombo("##rPadPat", themis::padPatterns[padIdx].name)) {
+            for (int p = 0; p < themis::NUM_PAD_PATTERNS; p++) {
+                if (ImGui::Selectable(themis::padPatterns[p].name, padIdx == p)) {
+                    sequencer->rhythmState.padPatternA = p;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pad rhythm pattern");
+
+        // Pad variation mode
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(45);
+        const char* padVarNames[] = {"Off", "AB"};
+        int padVarMode = (sequencer->rhythmVoice.padVariation.mode == themis::VAR_MODE_OFF) ? 0 : 1;
+        if (ImGui::BeginCombo("##rPadVar", padVarNames[padVarMode])) {
+            if (ImGui::Selectable("Off", padVarMode == 0)) {
+                sequencer->rhythmVoice.padVariation.mode = themis::VAR_MODE_OFF;
+            }
+            if (ImGui::Selectable("AB", padVarMode == 1)) {
+                sequencer->rhythmVoice.padVariation.mode = themis::VAR_MODE_AB;
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pad AB variation");
+
+        // Pad variation sequence
+        if (sequencer->rhythmVoice.padVariation.mode != themis::VAR_MODE_OFF) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(65);
+            const char* seqNames[] = {"AAAA", "AAAB", "AABB", "ABAB", "ABAC", "AAABAAAC"};
+            int seqIdx = sequencer->rhythmVoice.padVariation.sequence;
+            if (seqIdx >= themis::NUM_VARIATION_SEQUENCES) seqIdx = 0;
+            if (ImGui::BeginCombo("##rPadSeq", seqNames[seqIdx])) {
+                for (int s = 0; s < themis::NUM_VARIATION_SEQUENCES; s++) {
+                    if (ImGui::Selectable(seqNames[s], seqIdx == s)) {
+                        sequencer->rhythmVoice.padVariation.sequence = (themis::VariationSequence)s;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pad variation sequence");
+        }
+    }
+
     // Freeze checkbox - prevent automatic style changes
     ImGui::SameLine();
     ImGui::Checkbox("Freeze##rstyle", &sequencer->rhythmVoice.freezeStyle);
@@ -577,7 +630,7 @@ void ThemisUI::RenderVoicesAndPatterns()
     // Show current state if active
     if (sequencer->rhythmVoice.active) {
         ImGui::SameLine();
-        const char* styleDisplayNames[] = {"Chords", "Poly"};
+        const char* styleDisplayNames[] = {"Chords", "Poly", "Pad"};
         ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.6f, 1.0f), "[%s I:%.0f%%]",
                           styleDisplayNames[sequencer->rhythmState.currentStyle],
                           sequencer->rhythmState.intensity * 100.0f);
