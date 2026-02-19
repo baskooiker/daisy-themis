@@ -118,6 +118,14 @@ void Sequencer::Init()
     }
     melodyGrooveAmount = 0.5f;
 
+    // Initialize trigger queue
+    triggerQueueHead = 0;
+    triggerQueueTail = 0;
+    lastStepTimeUs = 0;
+    for(int i = 0; i < SEQUENCER_TRIGGER_QUEUE_SIZE; i++) {
+        triggerQueue[i].active = false;
+    }
+
     // Initialize state
     currentStep = 0;
     barCounter = 0;
@@ -195,6 +203,13 @@ void Sequencer::Stop()
         bassState.currentNote = -1;
         bassState.gateStepsRemaining = 0;
     }
+
+    // Clear trigger queue
+    triggerQueueHead = 0;
+    triggerQueueTail = 0;
+    for(int i = 0; i < SEQUENCER_TRIGGER_QUEUE_SIZE; i++) {
+        triggerQueue[i].active = false;
+    }
 }
 
 // ============================================================================
@@ -231,6 +246,65 @@ int32_t Sequencer::CalculateMelodyGrooveOffset(uint8_t step, float sampleRate)
     float scaledOffsetPercent = (float)baseOffsetPercent * melodyGrooveAmount;
     float samplesPerSixteenth = sampleRate * 15.0f / bpm;
     return (int32_t)((scaledOffsetPercent / 100.0f) * samplesPerSixteenth);
+}
+
+// ============================================================================
+// GROOVE TRIGGER QUEUE
+// ============================================================================
+
+void Sequencer::ScheduleGroovedTrigger(DrumVoice voice, uint8_t baseVelocity, uint8_t step, float sampleRate)
+{
+    uint8_t velocity = CalculateGrooveVelocity(voice, baseVelocity, step);
+    int32_t offsetSamples = CalculateGrooveOffset(voice, step, sampleRate);
+
+    // Convert sample offset to microseconds
+    int64_t offsetUs = (sampleRate > 0) ? (int64_t)((float)offsetSamples / sampleRate * 1000000.0f) : 0;
+    uint64_t fireTimeUs = lastStepTimeUs + (offsetUs > 0 ? (uint64_t)offsetUs : 0);
+
+    // If offset is zero or negative, fire immediately
+    if(offsetUs <= 0 || lastStepTimeUs == 0) {
+        if(onDrumTrigger) onDrumTrigger(voice, velocity);
+        return;
+    }
+
+    // Queue the trigger
+    uint8_t nextHead = (triggerQueueHead + 1) % SEQUENCER_TRIGGER_QUEUE_SIZE;
+    if(nextHead == triggerQueueTail) {
+        // Queue full — fire immediately
+        if(onDrumTrigger) onDrumTrigger(voice, velocity);
+        return;
+    }
+
+    triggerQueue[triggerQueueHead].voice = voice;
+    triggerQueue[triggerQueueHead].velocity = velocity;
+    triggerQueue[triggerQueueHead].fireTimeUs = fireTimeUs;
+    triggerQueue[triggerQueueHead].active = true;
+    triggerQueueHead = nextHead;
+}
+
+void Sequencer::ProcessTriggerQueue(uint64_t currentTimeUs)
+{
+    uint8_t idx = triggerQueueTail;
+    uint8_t checked = 0;
+
+    while(idx != triggerQueueHead && checked < SEQUENCER_TRIGGER_QUEUE_SIZE)
+    {
+        PendingTrigger& t = triggerQueue[idx];
+        if(t.active && currentTimeUs >= t.fireTimeUs)
+        {
+            if(onDrumTrigger) onDrumTrigger(t.voice, t.velocity);
+            t.active = false;
+
+            // Advance tail past inactive entries
+            if(idx == triggerQueueTail) {
+                while(triggerQueueTail != triggerQueueHead && !triggerQueue[triggerQueueTail].active) {
+                    triggerQueueTail = (triggerQueueTail + 1) % SEQUENCER_TRIGGER_QUEUE_SIZE;
+                }
+            }
+        }
+        idx = (idx + 1) % SEQUENCER_TRIGGER_QUEUE_SIZE;
+        checked++;
+    }
 }
 
 // ============================================================================
@@ -485,11 +559,11 @@ void Sequencer::RandomizeGroove()
 
         if(i == KICK)
         {
-            grooveAmount[i] = (float)(seed % 36) / 100.0f;
+            grooveAmount[i] = (float)(seed % 21) / 100.0f; // 0-20% timing for kick
         }
         else
         {
-            grooveAmount[i] = (float)(seed % 76) / 100.0f;
+            grooveAmount[i] = (float)(seed % 51) / 100.0f; // 0-50% timing for others
         }
 
         seed = g_platform ? g_platform->GetRandomSeed() ^ (i * 98765) : seed ^ (i * 98765);
@@ -497,7 +571,7 @@ void Sequencer::RandomizeGroove()
     }
 
     uint32_t melSeed = g_platform ? g_platform->GetRandomSeed() : seed;
-    melodyGrooveAmount = 0.25f + (float)(melSeed % 51) / 100.0f;
+    melodyGrooveAmount = 0.15f + (float)(melSeed % 36) / 100.0f; // 15-50%
 }
 
 void Sequencer::RandomizeAll()
@@ -588,8 +662,6 @@ void Sequencer::ProcessFillPatterns(uint8_t totalStep)
 
 void Sequencer::ProcessDrumPatterns(float sampleRate)
 {
-    (void)sampleRate; // Will be used for groove timing in full implementation
-
     uint8_t totalStep = (barCounter * 32) + currentStep;
     bool inFill = fillActive && (totalStep >= fillStartStep);
 
@@ -599,29 +671,25 @@ void Sequencer::ProcessDrumPatterns(float sampleRate)
     }
     else
     {
-        // Normal patterns
-        if(IsStepActive(kickPatterns[currentKickPattern], currentStep) && onDrumTrigger)
+        // Normal patterns — schedule with groove timing offsets
+        if(IsStepActive(kickPatterns[currentKickPattern], currentStep))
         {
-            uint8_t vel = CalculateGrooveVelocity(KICK, 110, currentStep);
-            onDrumTrigger(KICK, vel);
+            ScheduleGroovedTrigger(KICK, 110, currentStep, sampleRate);
         }
 
-        if(IsStepActive(clapPatterns[currentClapPattern], currentStep) && onDrumTrigger)
+        if(IsStepActive(clapPatterns[currentClapPattern], currentStep))
         {
-            uint8_t vel = CalculateGrooveVelocity(fundamentalBeatVoice, 100, currentStep);
-            onDrumTrigger(fundamentalBeatVoice, vel);
+            ScheduleGroovedTrigger(fundamentalBeatVoice, 100, currentStep, sampleRate);
         }
 
-        if(IsStepActive(hatClosedPatterns[currentHatPattern], currentStep) && onDrumTrigger)
+        if(IsStepActive(hatClosedPatterns[currentHatPattern], currentStep))
         {
-            uint8_t vel = CalculateGrooveVelocity(HIHAT1_CLOSED, 70, currentStep);
-            onDrumTrigger(HIHAT1_CLOSED, vel);
+            ScheduleGroovedTrigger(HIHAT1_CLOSED, 70, currentStep, sampleRate);
         }
 
-        if(IsStepActive(hatOpenPatterns[currentHatPattern], currentStep) && onDrumTrigger)
+        if(IsStepActive(hatOpenPatterns[currentHatPattern], currentStep))
         {
-            uint8_t vel = CalculateGrooveVelocity(HIHAT1_OPEN, 100, currentStep);
-            onDrumTrigger(HIHAT1_OPEN, vel);
+            ScheduleGroovedTrigger(HIHAT1_OPEN, 100, currentStep, sampleRate);
         }
     }
 
@@ -642,10 +710,9 @@ void Sequencer::ProcessDrumPatterns(float sampleRate)
                 activePattern = voice->pattern;
 
             uint8_t voiceStep = currentStep % voice->patternLength;
-            if(IsStepActive(activePattern, voiceStep) && onDrumTrigger)
+            if(IsStepActive(activePattern, voiceStep))
             {
-                uint8_t vel = CalculateGrooveVelocity(voice->voice, 95, currentStep);
-                onDrumTrigger(voice->voice, vel);
+                ScheduleGroovedTrigger(voice->voice, 95, currentStep, sampleRate);
             }
         }
     }
@@ -704,6 +771,9 @@ void Sequencer::ProcessStep(float sampleRate)
 {
     if(!isRunning)
         return;
+
+    // Record step time for groove offset scheduling
+    if(g_platform) lastStepTimeUs = g_platform->GetMicroseconds();
 
     // Randomize groove at start of new 8-bar cycle (25% probability)
     if(barCounter == 0 && currentStep == 0)

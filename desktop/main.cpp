@@ -514,6 +514,9 @@ int main(int argc, char* argv[])
                 g_sequencer.ProcessStep(g_platform.GetSampleRate());
                 g_lastStepTime = now;
             }
+
+            // Process groove-timed trigger queue
+            g_sequencer.ProcessTriggerQueue(now);
         } else {
             g_lastStepTime = g_platform.GetMicroseconds();
         }

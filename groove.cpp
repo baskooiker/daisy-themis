@@ -52,20 +52,20 @@ void RandomizeGroove()
         // Kick drum gets lower max groove to avoid excessive timing variation
         if(i == KICK)
         {
-            grooveAmount[i] = (float)(seed % 36) / 100.0f; // 0-35% timing for kick
+            grooveAmount[i] = (float)(seed % 21) / 100.0f; // 0-20% timing for kick
         }
         else
         {
-            grooveAmount[i] = (float)(seed % 76) / 100.0f; // 0-75% timing for others
+            grooveAmount[i] = (float)(seed % 51) / 100.0f; // 0-50% timing for others
         }
 
         seed = System::GetUs() ^ (i * 98765); // Different seed for velocity
         grooveVelocityAmount[i] = (float)(seed % 101) / 100.0f; // 0-100% velocity
     }
 
-    // Randomize melody groove amount (25-75%)
+    // Randomize melody groove amount (15-50%)
     uint32_t melSeed = System::GetUs();
-    melodyGrooveAmount = 0.25f + (float)(melSeed % 51) / 100.0f;
+    melodyGrooveAmount = 0.15f + (float)(melSeed % 36) / 100.0f;
 }
 
 // ============================================================================

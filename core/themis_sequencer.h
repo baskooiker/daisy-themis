@@ -13,6 +13,18 @@
 namespace themis {
 
 /**
+ * @brief Pending trigger in the groove timing queue
+ */
+struct PendingTrigger {
+    DrumVoice voice;
+    uint8_t velocity;
+    uint64_t fireTimeUs;    ///< Microsecond timestamp to fire
+    bool active;
+};
+
+constexpr int SEQUENCER_TRIGGER_QUEUE_SIZE = 32;
+
+/**
  * @class Sequencer
  * @brief Main sequencer state machine
  *
@@ -87,6 +99,12 @@ public:
     uint8_t currentFillSnareIndex = 0;
     uint8_t currentFillHatClosedIndex = 0;
     uint8_t currentFillHatOpenIndex = 0;
+
+    // Groove timing queue (for sample-accurate trigger scheduling)
+    PendingTrigger triggerQueue[SEQUENCER_TRIGGER_QUEUE_SIZE];
+    uint8_t triggerQueueHead = 0;
+    uint8_t triggerQueueTail = 0;
+    uint64_t lastStepTimeUs = 0;  ///< Microsecond timestamp of last step
 
     // Configuration
     uint32_t patternChangeInterval = 4;
@@ -163,6 +181,14 @@ public:
      * variation switching, and triggering via callbacks.
      */
     void ProcessStep(float sampleRate);
+
+    /**
+     * @brief Process pending groove-timed triggers
+     * @param currentTimeUs Current time in microseconds
+     *
+     * Call this frequently (e.g. every frame) to fire groove-delayed triggers.
+     */
+    void ProcessTriggerQueue(uint64_t currentTimeUs);
 
     /**
      * @brief Start the sequencer
@@ -300,6 +326,11 @@ private:
      * @brief Release currently held chord voice notes
      */
     void ReleaseChord();
+    /**
+     * @brief Schedule a drum trigger with groove timing offset
+     */
+    void ScheduleGroovedTrigger(DrumVoice voice, uint8_t baseVelocity, uint8_t step, float sampleRate);
+
     /**
      * @brief Calculate groove offset in samples for a voice/step
      */
